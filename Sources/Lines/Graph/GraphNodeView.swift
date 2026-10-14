@@ -324,6 +324,11 @@ struct GraphNodeView: View {
 				}
 				.disabled(!controller.hasElementSelection)
 			}
+			if data.kind == .clip || data.kind == .mask {
+				Menu("Add Shape") {
+					MaskShapeMenu(definition: data.order, controller: controller)
+				}
+			}
 			Button("Edit in Inspector", systemImage: "slider.horizontal.3") {
 				controller.select(order: data.order)
 				controller.showsInspector = true

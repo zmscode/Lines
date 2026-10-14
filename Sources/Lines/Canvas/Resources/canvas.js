@@ -2334,8 +2334,10 @@ function addStop(order) {
   commit("Add Stop");
 }
 
-// Adds a shape to a mask or clip path, covering what its other shapes cover
-// (or the drawing). Masks get white, which shows what's under it.
+// Adds a shape to a mask or clip path, centred on what its other shapes
+// cover (or the drawing). Kinds are the drawing tools' shapes, "text", or
+// "selection" for a copy of the selected element. Masks get white, which
+// shows what's under it.
 function addDefinitionShape(order, kind) {
   const def = byOrder(order);
   if (!def || !root) return;
@@ -2349,20 +2351,47 @@ function addDefinitionShape(order, kind) {
     const { w, h } = intrinsicSize();
     b = vb && vb.width ? vb : { x: 0, y: 0, width: w, height: h };
   }
-  const el = document.createElementNS(NS, kind === "circle" ? "circle" : "rect");
-  if (kind === "circle") {
-    el.setAttribute("cx", round(b.x + b.width / 2));
-    el.setAttribute("cy", round(b.y + b.height / 2));
-    el.setAttribute("r", round(Math.min(b.width, b.height) / 3));
+  const isMask = def.localName === "mask";
+  let el;
+  if (kind === "selection") {
+    if (!selected || selected === def || def.contains(selected)) return;
+    el = selected.cloneNode(true);
+    el.removeAttribute("id");
+    for (const a of ["clip-path", "mask", "filter"]) el.removeAttribute(a);
+  } else if (kind === "text") {
+    el = document.createElementNS(NS, "text");
+    el.setAttribute("x", round(b.x + b.width / 2));
+    el.setAttribute("y", round(b.y + b.height / 2));
+    el.setAttribute("text-anchor", "middle");
+    el.setAttribute("dominant-baseline", "middle");
+    el.setAttribute("font-family", "-apple-system, Helvetica, sans-serif");
+    el.setAttribute("font-weight", "800");
+    el.setAttribute("font-size", round(Math.min(b.width, b.height) / 3));
+    el.textContent = "Text";
   } else {
-    el.setAttribute("x", round(b.x + b.width / 4));
-    el.setAttribute("y", round(b.y + b.height / 4));
-    el.setAttribute("width", round(b.width / 2));
-    el.setAttribute("height", round(b.height / 2));
+    const x0 = b.x + b.width / 4,
+      y0 = b.y + b.height / 4,
+      x1 = b.x + (b.width * 3) / 4,
+      y1 = b.y + (b.height * 3) / 4;
+    if (kind === "circle") {
+      el = document.createElementNS(NS, "circle");
+      el.setAttribute("cx", round(b.x + b.width / 2));
+      el.setAttribute("cy", round(b.y + b.height / 2));
+      el.setAttribute("r", round(Math.min(b.width, b.height) / 3));
+    } else {
+      const tag =
+        { rect: "rect", roundedRect: "rect", ellipse: "ellipse", line: "line", arrow: "path" }[kind] ||
+        "polygon";
+      el = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(shapeGeometry(kind, x0, y0, x1, y1))) el.setAttribute(k, v);
+    }
   }
-  if (def.localName === "mask") el.setAttribute("fill", "white");
+  if (isMask) {
+    el.setAttribute("fill", "white");
+    el.removeAttribute("stroke");
+  }
   insert(el, def);
-  commit(def.localName === "mask" ? "Add Shape to Mask" : "Add Shape to Clip Path");
+  commit(isMask ? "Add Shape to Mask" : "Add Shape to Clip Path");
 }
 
 // Swaps white and black in a mask, so what it showed it hides.

@@ -269,12 +269,7 @@ struct MaskEditor: View {
 			}
 			HStack {
 				Menu {
-					Button("Rectangle", systemImage: "rectangle") {
-						controller.addShape("rect", toDefinition: definition.order)
-					}
-					Button("Circle", systemImage: "circle") {
-						controller.addShape("circle", toDefinition: definition.order)
-					}
+					MaskShapeMenu(definition: definition.order, controller: controller)
 				} label: {
 					Label("Add Shape", systemImage: "plus")
 				}
@@ -327,5 +322,59 @@ struct DefinitionCard: View {
 
 	static func handles(_ tag: String) -> Bool {
 		["linearGradient", "radialGradient", "mask", "clipPath"].contains(tag)
+	}
+}
+
+/// Shapes a clip path or mask can be made of.
+enum MaskShape: String, CaseIterable, Identifiable {
+	case rect, roundedRect, circle, ellipse, triangle, hexagon, star, text, selection
+	var id: String { rawValue }
+
+	var title: String {
+		switch self {
+		case .rect: "Rectangle"
+		case .roundedRect: "Rounded Rectangle"
+		case .circle: "Circle"
+		case .ellipse: "Ellipse"
+		case .triangle: "Triangle"
+		case .hexagon: "Hexagon"
+		case .star: "Star"
+		case .text: "Text"
+		case .selection: "Copy of Selection"
+		}
+	}
+
+	var symbol: String {
+		switch self {
+		case .rect: "rectangle"
+		case .roundedRect: "app"
+		case .circle: "circle"
+		case .ellipse: "oval"
+		case .triangle: "triangle"
+		case .hexagon: "hexagon"
+		case .star: "star"
+		case .text: "textformat"
+		case .selection: "square.on.square"
+		}
+	}
+}
+
+/// The Add Shape items for a clip path or mask.
+struct MaskShapeMenu: View {
+	var definition: Int
+	var controller: CanvasController
+
+	var body: some View {
+		ForEach(MaskShape.allCases.filter { $0 != .selection }) { shape in
+			Button(shape.title, systemImage: shape.symbol) {
+				controller.addShape(shape.rawValue, toDefinition: definition)
+			}
+		}
+		Divider()
+		Button(MaskShape.selection.title, systemImage: MaskShape.selection.symbol) {
+			controller.addShape(MaskShape.selection.rawValue, toDefinition: definition)
+		}
+		.disabled(!controller.hasElementSelection || controller.selection?.order == definition)
+		.help("Use a copy of the selected element's shape")
 	}
 }
