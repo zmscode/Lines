@@ -14,6 +14,9 @@ final class SVGDocument: Document {
 	/// contents once they've been read (which happens after the window opens).
 	private(set) var openedText: String
 
+	/// The file was gzipped (.svgz) when opened, so it's saved that way too.
+	private(set) var isCompressed = false
+
 	/// The open file's location, used for sharing and export names.
 	@ObservationIgnored weak var configuration: URLDocumentConfiguration?
 
@@ -27,36 +30,60 @@ final class SVGDocument: Document {
 
 	// MARK: Reading and writing
 
+	/// The file's text, and whether it's stored gzipped (.svgz).
+	struct File: Sendable {
+		var text: String
+		var isCompressed = false
+	}
+
 	func reader(configuration: sending ReadConfiguration)
-		-> sending FileWrapperDocumentReader<String>
+		-> sending FileWrapperDocumentReader<File>
 	{
 		FileWrapperDocumentReader(configuration) { fileWrapper in
-			guard let data = fileWrapper.regularFileContents else {
+			guard var data = fileWrapper.regularFileContents else {
 				throw CocoaError(.fileReadCorruptFile)
 			}
-			if let text = String(data: data, encoding: .utf8) { return text }
-			if let text = String(data: data, encoding: .isoLatin1) { return text }
+			// .svgz files share the SVG type; they're told apart by their bytes.
+			let isCompressed = Gzip.isCompressed(data)
+			if isCompressed { data = try Gzip.decompress(data) }
+			if let text = String(data: data, encoding: .utf8) {
+				return File(text: text, isCompressed: isCompressed)
+			}
+			if let text = String(data: data, encoding: .isoLatin1) {
+				return File(text: text, isCompressed: isCompressed)
+			}
 			throw CocoaError(.fileReadInapplicableStringEncoding)
 		}
 	}
 
 	@MainActor
-	func apply(snapshot: sending String, previous: sending String?) async throws {
+	func apply(snapshot: sending File, previous: sending File?) async throws {
 		// The first read is the file as opened, not an edit of the template.
-		if previous == nil { openedText = snapshot }
-		text = snapshot
+		if previous == nil { openedText = snapshot.text }
+		isCompressed = snapshot.isCompressed
+		text = snapshot.text
 	}
 
-	func writer(configuration: sending WriteConfiguration)
-		-> sending FileWrapperDocumentWriter<String>
-	{
-		FileWrapperDocumentWriter(configuration) { snapshot, _ in
-			FileWrapper(regularFileWithContents: Data(snapshot.utf8))
-		}
-	}
+	func writer(configuration: sending WriteConfiguration) -> sending Writer { Writer() }
 
 	@MainActor
-	func snapshot(contentType: UTType) async throws -> sending String { text }
+	func snapshot(contentType: UTType) async throws -> sending File {
+		File(text: text, isCompressed: isCompressed)
+	}
+
+	/// Writes the text, gzipped when the file was opened that way or is saved
+	/// with an .svgz name.
+	struct Writer: DocumentWriter {
+		@concurrent func write(
+			snapshot: sending File, to destination: sending URL, previous: sending File?,
+			progress: consuming Subprogress
+		) async throws {
+			let data = Data(snapshot.text.utf8)
+			let compress =
+				snapshot.isCompressed || destination.pathExtension.lowercased() == "svgz"
+			try (compress ? Gzip.compress(data) : data).write(to: destination, options: .atomic)
+		}
+	}
 
 	// MARK: Undoable edits
 

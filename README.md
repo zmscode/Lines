@@ -17,6 +17,7 @@ just strings          # refresh the String Catalog (Support/Localizable.xcstring
 
 - **Preview mode.** Files open locked, to look at: zoom, pan, play animations and ⌘-click links, with nothing changing until you unlock (the toolbar lock or ⇧⌘L). New drawings open ready to edit; Settings › Toolbar can open files unlocked.
 - **Scripts.** A drawing's `<script>`s and event handlers never run in the canvas, and the canvas loads nothing from the network, so opening a file can't run its code. In preview mode, a drawing with scripts shows a banner with **Run Scripts**: it then runs in a separate web view, as a browser would show it, with no access to the rest of Lines, no network, no navigation and nothing kept between runs. Restart starts it over and Stop (or unlocking) goes back to the drawing as saved; nothing the scripts change is saved.
+- **Compressed SVG (.svgz).** Gzipped SVGs open like any other, and save gzipped again; saving a drawing with an `.svgz` name compresses it.
 - **Welcome window.** When nothing's open, a quiet drop target with Open File… and New Drawing (⇧⌘1 brings it back; recents are in File › Open Recent).
 - **Clean canvas.** A Photoshop-style tools palette on the left: Select (V), Hand (H), shape tools you drag to draw (R, O, L, P; Shift keeps them even, Option draws from the centre), Text (T), Image, and the background swatch (checkerboard, white, grey, black or a custom colour). Zoom buttons float at the bottom right and the minimap (with a zoom badge) at the bottom left.
 - **Navigation.** Documents open fitted to the window and stay fitted as you resize until you zoom. The mouse wheel zooms around the cursor (⌘-scroll on a trackpad), pinch zooms, and a two-finger double-tap toggles Fit and Actual Size. Pan at any zoom with a middle-button drag, Space-drag, or two-finger scrolling. A tap of Space (without dragging) plays or pauses the drawing's animations. When the drawing doesn't fit, a minimap in the corner shows the visible region; click or drag in it to move around.
@@ -38,14 +39,14 @@ just strings          # refresh the String Catalog (Support/Localizable.xcstring
 
 ## How it fits together
 
-| File                       | Role                                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SVGDocument.swift`        | The document (new SwiftUI `Document` protocol). The source text is the single source of truth; `replaceText` registers named, coalesced undo.    |
-| `CanvasHTML.swift`         | The WebKit canvas: rendering, hit testing, dragging, and DOM edits, which are serialized back to text.                                           |
-| `CanvasController.swift`   | The per-window bridge between SwiftUI, the canvas and the source editor.                                                                         |
-| `SyntaxTheme.swift`        | Code colour themes, taken from each theme's Zed extension.                                                                                       |
-| `SourceEditor.swift`       | The NSTextView editor, highlighter, and start-tag scanner used for selection sync.                                                               |
-| `InspectorView.swift`      | The inspector form.                                                                                                                              |
-| `LayersPanel.swift`        | The layers tree, with search and filters (`LayerFilter.swift`), attachments (`LayerRowParts.swift`) and the Resources tab (`ResourcesList.swift`, `Resources.swift`).                                     |
-| `ColourPicker.swift`       | The colour popover, built from ColourPickerMaker's canvas and sliders.                                                                           |
-| `Vendor/ColourPickerMaker` | [ColourPickerMaker](https://github.com/sturdysturge/SwiftUIColourPickerMaker) (MIT), vendored with fixes listed in `VENDORED.md`.                |
+| File                       | Role                                                                                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SVGDocument.swift`        | The document (new SwiftUI `Document` protocol). The source text is the single source of truth; `replaceText` registers named, coalesced undo.                         |
+| `CanvasHTML.swift`         | The WebKit canvas: rendering, hit testing, dragging, and DOM edits, which are serialized back to text.                                                                |
+| `CanvasController.swift`   | The per-window bridge between SwiftUI, the canvas and the source editor.                                                                                              |
+| `SyntaxTheme.swift`        | Code colour themes, taken from each theme's Zed extension.                                                                                                            |
+| `SourceEditor.swift`       | The NSTextView editor, highlighter, and start-tag scanner used for selection sync.                                                                                    |
+| `InspectorView.swift`      | The inspector form.                                                                                                                                                   |
+| `LayersPanel.swift`        | The layers tree, with search and filters (`LayerFilter.swift`), attachments (`LayerRowParts.swift`) and the Resources tab (`ResourcesList.swift`, `Resources.swift`). |
+| `ColourPicker.swift`       | The colour popover, built from ColourPickerMaker's canvas and sliders.                                                                                                |
+| `Vendor/ColourPickerMaker` | [ColourPickerMaker](https://github.com/sturdysturge/SwiftUIColourPickerMaker) (MIT), vendored with fixes listed in `VENDORED.md`.                                     |
