@@ -1,0 +1,40 @@
+//  SliderThumbView.swift
+//  ColourPickerMaker
+//
+//  Created by Rob Sturgeon on 09/06/2020.
+//  Copyright © 2020 Rob Sturgeon. All rights reserved.
+//
+//  Released under the MIT license
+//  https://sturdysturge.com/mit/
+
+import SwiftUI
+
+public struct SliderThumbView {
+    let width: CGFloat
+    let height: CGFloat
+    let containerWidth: CGFloat
+    let containerHeight: CGFloat
+    let containerAlignment: Alignment
+
+    public init(orientation: Axis, length: CGFloat, thickness: CGFloat) {
+        let isHorizontal = orientation == .horizontal
+        width = isHorizontal ? thickness : length
+        height = isHorizontal ? length : thickness
+        containerWidth = isHorizontal ? .infinity : length
+        containerHeight = isHorizontal ? length : .infinity
+        containerAlignment = isHorizontal ? .leading : .top
+    }
+}
+
+extension SliderThumbView: View {
+    public var body: some View {
+        ZStack {
+            // Lines patch: a thin white ring with a soft shadow.
+            Capsule()
+                .strokeBorder(.white, lineWidth: 3)
+                .shadow(color: .black.opacity(0.35), radius: 2, y: 0.5)
+                .frame(width: self.width, height: self.height)
+        }
+        .frame(maxWidth: self.containerWidth, maxHeight: self.containerHeight, alignment: self.containerAlignment)
+    }
+}

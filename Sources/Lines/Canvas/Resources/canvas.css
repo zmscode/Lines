@@ -1,0 +1,166 @@
+:root {
+	--accent: rgb(0, 122, 255);
+	--checker-a: #ffffff;
+	--checker-b: #e8e8ed;
+	--window: #ececec;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--checker-a: #2a2a2c;
+		--checker-b: #232325;
+		--window: #1e1e1e;
+	}
+}
+html,
+body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+}
+body {
+	font:
+		12px -apple-system,
+		system-ui;
+	-webkit-user-select: none;
+	user-select: none;
+	cursor: default;
+}
+body.checkerboard {
+	background-color: var(--checker-a);
+	background-image: conic-gradient(var(--checker-b) 25%, transparent 0 50%, var(--checker-b) 0 75%, transparent 0);
+	background-size: 16px 16px;
+}
+body.white {
+	background: #fff;
+}
+body.black {
+	background: #000;
+}
+body.grey {
+	background: #8e8e93;
+}
+body.window {
+	background: var(--window);
+}
+body.transparent {
+	background: transparent;
+}
+body.panning,
+body.panning * {
+	cursor: grabbing !important;
+}
+body.space,
+body.space * {
+	cursor: grab;
+}
+/* The drawing is positioned by a composited transform (the "camera"), so
+   panning never relayouts or repaints the SVG. */
+#host {
+	position: absolute;
+	left: 0;
+	top: 0;
+	line-height: 0;
+	will-change: transform;
+}
+#host > svg {
+	display: block;
+	overflow: visible;
+}
+.box {
+	position: fixed;
+	pointer-events: none;
+	display: none;
+	box-sizing: border-box;
+}
+#sel {
+	border: 1.5px solid var(--accent);
+	border-radius: 1px;
+	box-shadow:
+		0 0 0 0.5px rgba(255, 255, 255, 0.8),
+		inset 0 0 0 0.5px rgba(255, 255, 255, 0.6);
+}
+#hover {
+	border: 1px solid var(--accent);
+	opacity: 0.55;
+}
+.knob {
+	position: absolute;
+	width: 7px;
+	height: 7px;
+	margin: -4px 0 0 -4px;
+	background: #fff;
+	border: 1px solid var(--accent);
+	border-radius: 50%;
+	box-sizing: border-box;
+}
+#minimap {
+	position: fixed;
+	/* Bottom-left, clear of the floating zoom controls on the right. */
+	left: 12px;
+	bottom: 12px;
+	padding: 6px;
+	border-radius: 14px;
+	background: rgba(246, 246, 248, 0.72);
+	border: 0.5px solid rgba(0, 0, 0, 0.12);
+	-webkit-backdrop-filter: blur(24px) saturate(180%);
+	backdrop-filter: blur(24px) saturate(180%);
+	box-shadow:
+		0 6px 24px rgba(0, 0, 0, 0.16),
+		0 1px 3px rgba(0, 0, 0, 0.1);
+	opacity: 0;
+	transform: scale(0.96);
+	transform-origin: 0 100%;
+	pointer-events: none;
+	transition:
+		opacity 0.18s ease,
+		transform 0.18s ease;
+	cursor: default;
+}
+#minimap.shown {
+	opacity: 1;
+	transform: none;
+	pointer-events: auto;
+}
+#mini-frame {
+	position: relative;
+	line-height: 0;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #fff;
+	background-image: conic-gradient(#e8e8ed 25%, transparent 0 50%, #e8e8ed 0 75%, transparent 0);
+	background-size: 8px 8px;
+}
+#mini-zoom {
+	position: absolute;
+	right: 4px;
+	bottom: 4px;
+	padding: 1px 5px;
+	border-radius: 5px;
+	font: 600 10px/14px -apple-system, system-ui;
+	font-variant-numeric: tabular-nums;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.55);
+	pointer-events: none;
+}
+#mini-img {
+	display: block;
+	-webkit-user-drag: none;
+}
+#mini-view {
+	position: absolute;
+	box-sizing: border-box;
+	border: 1.5px solid var(--accent);
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+	#minimap {
+		background: rgba(40, 40, 44, 0.7);
+		border-color: rgba(255, 255, 255, 0.12);
+	}
+	#mini-frame {
+		background-color: #2a2a2c;
+		background-image: conic-gradient(#232325 25%, transparent 0 50%, #232325 0 75%, transparent 0);
+	}
+}
