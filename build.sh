@@ -56,4 +56,8 @@ cp build/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 [ -f build/icon/Assets.car ] && cp build/icon/Assets.car "$APP/Contents/Resources/Assets.car"
 
 codesign --force --sign - "$APP"
+# Finder and the Dock cache icons by bundle; touching the bundle and
+# re-registering it makes them pick up a changed icon.
+touch "$APP"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" >/dev/null 2>&1 || true
 echo "Built $APP"

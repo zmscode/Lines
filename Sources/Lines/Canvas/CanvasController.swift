@@ -135,7 +135,9 @@ final class CanvasController {
 		}
 	}
 
-	func addDefinition(_ kind: Definition) { call("addDefinition(\(js(kind.rawValue)))") }
+	func addDefinition(_ kind: Definition, applyingTo order: Int? = nil) {
+		call("addDefinition(\(js(kind.rawValue)), \(order.map(String.init) ?? "null"))")
+	}
 	func removeAllReferences(order: Int) { call("removeAllReferences(\(order))") }
 
 	// MARK: Animation

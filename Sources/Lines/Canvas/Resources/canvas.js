@@ -435,6 +435,19 @@ function setPaint(name, color, opacity, coalesce) {
   const el = selected || root;
   if (!el) return;
   el.setAttribute(name, color);
+  // An inline style wins over the attribute; drop it so the change shows.
+  if (el.style) {
+    el.style.removeProperty(name);
+    el.style.removeProperty(name + "-opacity");
+    if (!el.getAttribute("style")) el.removeAttribute("style");
+  }
+  // A new stroke gets a width that shows at the drawing's scale.
+  if (name === "stroke" && color !== "none" && !el.hasAttribute("stroke-width") && el.getBBox) {
+    try {
+      const b = el.getBBox();
+      el.setAttribute("stroke-width", round(Math.max(1, Math.hypot(b.width, b.height) / 80)));
+    } catch (e) {}
+  }
   const opacityAttr = name + "-opacity";
   if (opacity == null || opacity >= 0.999) el.removeAttribute(opacityAttr);
   else el.setAttribute(opacityAttr, Math.round(opacity * 100) / 100);
@@ -1434,7 +1447,12 @@ function animatedBBox() {
     const b = box();
     if (!b) continue;
     u = u
-      ? { x: Math.min(u.x, b.x), y: Math.min(u.y, b.y), r: Math.max(u.r, b.r), b: Math.max(u.b, b.b) }
+      ? {
+          x: Math.min(u.x, b.x),
+          y: Math.min(u.y, b.y),
+          r: Math.max(u.r, b.r),
+          b: Math.max(u.b, b.b),
+        }
       : b;
   }
   root.setCurrentTime(now);
@@ -1686,8 +1704,11 @@ document.addEventListener(
 
 // Adds a reusable definition (gradient, clip path, mask or filter) to <defs>,
 // ready to connect to shapes in the graph.
-function addDefinition(kind) {
+// With `applyOrder`, the new definition is sized to that element and applied
+// to it (fill, clip-path, mask or filter), which stays selected.
+function addDefinition(kind, applyOrder) {
   if (!root) return;
+  const target = applyOrder != null ? byOrder(applyOrder) : null;
   let defs = Array.from(root.children).find((c) => c.localName === "defs");
   if (!defs) {
     defs = document.createElementNS(NS, "defs");
@@ -1695,8 +1716,13 @@ function addDefinition(kind) {
   }
   const { w, h } = intrinsicSize();
   const vb = root.viewBox && root.viewBox.baseVal;
-  const box =
-    vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
+  let box = vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
+  if (target && target.getBBox) {
+    try {
+      const b = target.getBBox();
+      if (b.width || b.height) box = { x: b.x, y: b.y, w: b.width || 1, h: b.height || 1 };
+    } catch (e) {}
+  }
   const make = (tag, attrs, children) => {
     const el = document.createElementNS(NS, tag);
     for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
@@ -1769,7 +1795,14 @@ function addDefinition(kind) {
   const [tag, base, attrs, children] = spec;
   const el = make(tag, { id: uniqueID(base), ...attrs }, children());
   insert(el, defs);
-  select(el);
+  if (target && target !== root) {
+    const attr =
+      { linearGradient: "fill", radialGradient: "fill", clipPath: "clip-path", mask: "mask" }[
+        kind
+      ] || "filter";
+    target.setAttribute(attr, `url(#${el.id})`);
+    select(target);
+  } else select(el);
   const names = {
     linearGradient: "Linear Gradient",
     radialGradient: "Radial Gradient",

@@ -51,6 +51,7 @@ private struct ElementInspector: View {
 			if let bounds = selection.bounds { geometry(bounds) }
 			appearance
 			if tag == "text" { TextCard(selection: selection, controller: controller) }
+			EffectsCard(selection: selection, controller: controller)
 			ElementAnimationsCard(selection: selection, controller: controller)
 		}
 	}
@@ -234,11 +235,8 @@ private struct PaintRow: View {
 			if value == "none" {
 				Button("Add \(title)", systemImage: "plus.circle") {
 					controller.setPaint(
-						attribute, color: attribute == "fill" ? "#0a84ff" : "#1c1c1e", opacity: 1,
+						attribute, color: attribute == "fill" ? "#0a84ff" : "#d9753f", opacity: 1,
 						coalesce: false)
-					if attribute == "stroke", selection.value("stroke-width") == nil {
-						controller.setAttribute("stroke-width", "2")
-					}
 				}
 				.help("Add \(title.lowercased())")
 			} else {
