@@ -127,22 +127,81 @@ struct SettingsEntry: Identifiable, Hashable {
 	}
 }
 
-/// Settings, as the HIG describes for macOS: a noncustomizable toolbar of
-/// panes that always shows the active one, the window titled after the
-/// pane and sized to it, and the last pane restored. A search field finds
-/// any setting and opens its pane.
+/// Settings: sections listed down the left with their icons, the chosen one
+/// on the right. Following the HIG where it applies, the window is titled
+/// after the section and reopens on the last one used. It resizes, opening
+/// at about 4:3, and the search field waits to be clicked.
 struct SettingsView: View {
 	@AppStorage("settings.pane") private var pane: SettingsPane = .general
+	@State private var query = ""
+	@State private var searchFocused = false
+
+	private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+	private var results: [SettingsEntry] { SettingsEntry.search(query) }
 
 	var body: some View {
-		TabView(selection: $pane) {
-			ForEach(SettingsPane.allCases) { pane in
-				Tab(pane.title, systemImage: pane.symbol, value: pane) {
-					PaneContainer(pane: pane, current: $pane) { detail(for: pane) }
+		NavigationSplitView {
+			VStack(spacing: 0) {
+				SearchBar(text: $query, prompt: "Search")
+					.searchBarIsFocused($searchFocused)
+					.searchBarScale(.small)
+					.padding(.horizontal, 10)
+					.padding(.top, 8)
+					.padding(.bottom, 6)
+				List(selection: selection) {
+					if isSearching {
+						Section("Results") {
+							ForEach(results) { entry in
+								Label {
+									VStack(alignment: .leading, spacing: 1) {
+										Text(entry.title)
+										Text(entry.pane.title).font(.caption).foregroundStyle(
+											.secondary)
+									}
+								} icon: {
+									PaneIcon(pane: entry.pane, size: 20)
+								}
+								.tag(entry.pane)
+							}
+						}
+					} else {
+						ForEach(SettingsPane.allCases) { pane in
+							Label {
+								Text(pane.title)
+							} icon: {
+								PaneIcon(pane: pane, size: 20)
+							}
+							.tag(pane)
+						}
+					}
+				}
+				.overlay {
+					if isSearching && results.isEmpty {
+						ContentUnavailableView.search(text: query)
+					}
 				}
 			}
+			.navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+			.toolbar(removing: .sidebarToggle)
+		} detail: {
+			detail(for: pane)
+				.navigationTitle(pane.title)
 		}
+		.frame(minWidth: 680, idealWidth: 800, minHeight: 460, idealHeight: 600)
 		.tint(Brand.accent)
+		.onChange(of: query) { _, _ in
+			if let first = results.first { pane = first.pane }
+		}
+		.task {
+			// Opening Settings shouldn't drop you into the search field.
+			try? await Task.sleep(for: .milliseconds(80))
+			searchFocused = false
+			NSApp.keyWindow?.makeFirstResponder(nil)
+		}
+	}
+
+	private var selection: Binding<SettingsPane?> {
+		Binding(get: { pane }, set: { if let new = $0 { pane = new } })
 	}
 
 	@ViewBuilder
@@ -157,56 +216,18 @@ struct SettingsView: View {
 	}
 }
 
-/// One pane: the search field, then the pane's form at a fixed width and
-/// its natural height, so the window fits it.
-private struct PaneContainer<Content: View>: View {
+/// A section's icon: its symbol, white on the accent colour.
+private struct PaneIcon: View {
 	var pane: SettingsPane
-	@Binding var current: SettingsPane
-	@ViewBuilder var content: Content
+	var size: CGFloat
 
 	var body: some View {
-		VStack(spacing: 0) {
-			SettingsSearch(current: $current)
-				.padding(.horizontal, 20)
-				.padding(.top, 14)
-			content
-				.scrollDisabled(!isTall)
-		}
-		.frame(width: 560, height: isTall ? 580 : nil)
-		.fixedSize(horizontal: false, vertical: !isTall)
-	}
-
-	/// Panes with more than fits comfortably scroll inside a fixed height.
-	private var isTall: Bool {
-		pane == .editor || pane == .toolbar
-	}
-}
-
-/// Finds a setting by name (fzf-style) and opens its pane.
-private struct SettingsSearch: View {
-	@Binding var current: SettingsPane
-	@State private var query = ""
-
-	var body: some View {
-		SearchBar(text: $query, prompt: "Search Settings")
-			.searchBarSuggestions(
-				SettingsEntry.search(query).prefix(8).map {
-					SearchBarSuggestion(
-						text: $0.title, description: $0.pane.title, systemName: $0.pane.symbol)
-				}
-			)
-			.searchBarChangeAction { text in
-				// Picking a suggestion fills in its exact name: go to its pane.
-				if let entry = SettingsEntry.all.first(where: { $0.title == text }) {
-					current = entry.pane
-				} else if let best = SettingsEntry.search(text).first,
-					!text.trimmingCharacters(in: .whitespaces).isEmpty
-				{
-					current = best.pane
-				}
-			}
-			.searchBarScale(.small)
-			.accessibilityLabel("Search Settings")
+		Image(systemName: pane.symbol)
+			.font(.system(size: size * 0.55, weight: .semibold))
+			.foregroundStyle(.white)
+			.frame(width: size, height: size)
+			.background(
+				Brand.accent.gradient, in: .rect(cornerRadius: size * 0.25, style: .continuous))
 	}
 }
 
@@ -221,7 +242,7 @@ private struct ToolbarSettings: View {
 				Text("Window Toolbar")
 			} footer: {
 				SettingsFootnote(
-					"Drag to reorder; separators split the buttons into groups. Hidden buttons stay in the View menu with their shortcuts (⌘1–⌘5)."
+					"Drag icons to reorder them, drag from the tray to add, or drag back to the tray to remove; right-click an icon to do the same without dragging. Separators draw a line between groups. Removed buttons stay in the View menu with their shortcuts (⌘1–⌘5)."
 				)
 			}
 			Section {

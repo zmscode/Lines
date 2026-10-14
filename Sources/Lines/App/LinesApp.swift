@@ -38,6 +38,9 @@ struct LinesApp: App {
 		Settings {
 			SettingsView()
 		}
+		// Resizable, opening at about 4:3.
+		.windowResizability(.contentMinSize)
+		.defaultSize(width: 800, height: 600)
 	}
 }
 

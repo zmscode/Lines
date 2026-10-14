@@ -389,23 +389,19 @@ struct ContentView: View {
 
 	@ToolbarContentBuilder
 	private var editingToolbar: some ToolbarContent {
-		// The groups and order chosen in Settings › Toolbar.
+		// The order chosen in Settings › Toolbar, in one group; separators show
+		// as lines (spacers between leading groups don't draw).
 		let groups = ToolbarLayout(toolbarLayout, defaults: ToolbarLayout.windowDefaults).groups
-		if groups.count > 0 {
-			ToolbarItemGroup(placement: .navigation) {
-				ForEach(groups[0], id: \.self) { toolbarButton($0) }
-			}
-		}
-		if groups.count > 1 {
-			ToolbarSpacer(.fixed, placement: .navigation)
-			ToolbarItemGroup(placement: .navigation) {
-				ForEach(groups[1], id: \.self) { toolbarButton($0) }
-			}
-		}
-		if groups.count > 2 {
-			ToolbarSpacer(.fixed, placement: .navigation)
-			ToolbarItemGroup(placement: .navigation) {
-				ForEach(groups[2...].flatMap { $0 }, id: \.self) { toolbarButton($0) }
+		ToolbarItemGroup(placement: .navigation) {
+			ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+				if index > 0 {
+					Rectangle()
+						.fill(.separator)
+						.frame(width: 1, height: 18)
+						.padding(.horizontal, 4)
+						.accessibilityHidden(true)
+				}
+				ForEach(group, id: \.self) { toolbarButton($0) }
 			}
 		}
 	}
