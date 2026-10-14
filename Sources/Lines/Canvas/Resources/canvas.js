@@ -126,7 +126,29 @@ function serialize() {
   return text;
 }
 
+// Inside a batch (one action applied to several elements), commits wait and
+// become a single undo step when the batch ends.
+let batching = 0;
+let batchedAction = null;
+function inBatch(fn) {
+  batching++;
+  try {
+    fn();
+  } finally {
+    batching--;
+  }
+  if (!batching && batchedAction) {
+    const action = batchedAction;
+    batchedAction = null;
+    commit(action);
+  }
+}
+
 function commit(action, coalesce) {
+  if (batching) {
+    batchedAction = batchedAction || action;
+    return;
+  }
   const svg = serialize();
   lastGood = svg;
   scheduleThumbnail();
@@ -623,10 +645,14 @@ function writeCorners(el, info) {
 
 // From the inspector: radii for the selected rectangle, corner by corner.
 function setCornerRadii(tl, tr, br, bl) {
-  const info = cornerInfo(selected);
-  if (!info) return;
-  info.radii = [tl, tr, br, bl].map((v) => Math.max(0, +v || 0));
-  writeCorners(selected, info);
+  const radii = [tl, tr, br, bl].map((v) => Math.max(0, +v || 0));
+  const targets = selection().filter((el) => cornerInfo(el));
+  if (!targets.length) return;
+  for (const el of targets) {
+    const info = cornerInfo(el);
+    info.radii = radii;
+    writeCorners(el, info);
+  }
   updateOverlay();
   commit("Change Corner Radius", "corners");
 }
@@ -1348,10 +1374,23 @@ function duplicateSelected() {
   commit("Duplicate");
 }
 
+// Restacks the selection; several move together, keeping their order (the
+// one nearest the destination goes first).
 function reorder(mode) {
   if (!selected) return;
-  const el = selected,
-    parent = el.parentNode;
+  const all = selection();
+  if (all.length === 1) return reorderOne(selected, mode);
+  const inDocument = Array.from(root.querySelectorAll("*")).filter((e) => all.includes(e));
+  const ordered = mode === "front" || mode === "forward" ? inDocument.reverse() : inDocument;
+  const keep = all;
+  inBatch(() => {
+    for (const el of mode === "front" || mode === "back" ? ordered.reverse() : ordered) reorderOne(el, mode);
+  });
+  selectMany(keep);
+}
+
+function reorderOne(el, mode) {
+  const parent = el.parentNode;
   const siblings = Array.from(parent.children);
   const i = siblings.indexOf(el);
   let ref;
@@ -2135,16 +2174,15 @@ function setBounds(x, y, w, h) {
   commit(w != null || h != null ? "Change Size" : "Move", "bounds");
 }
 
+// Sets the primary selection's rotation; others turn by the same amount,
+// each around its own centre.
 function setRotation(degrees) {
   if (!selected) return;
-  const r = selected.getBoundingClientRect();
-  rotateAround(
-    selected,
-    snapshotShape(selected),
-    degrees - rotationOf(selected),
-    r.left + r.width / 2,
-    r.top + r.height / 2,
-  );
+  const delta = degrees - rotationOf(selected);
+  for (const el of selection()) {
+    const r = el.getBoundingClientRect();
+    rotateAround(el, snapshotShape(el), delta, r.left + r.width / 2, r.top + r.height / 2);
+  }
   updateOverlay();
   commit("Rotate", "rotation");
 }
@@ -3877,6 +3915,42 @@ function exportPNG(scale) {
   img.onerror = () => post({ type: "pngFailed", scale });
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
+
+// MARK: Several selected — actions on one element apply to all of them.
+
+// The elements an action on `order` should reach: the whole selection when
+// that element is part of a multiple selection, else just it.
+function targetsFor(order) {
+  const el = order == null ? null : byOrder(order);
+  if (!el) return [];
+  const all = selection();
+  return all.length > 1 && all.includes(el) ? all : [el];
+}
+
+// Wraps a per-element function so it runs over the selection as one step.
+// `orderArg` is the position of its element argument.
+function overSelection(name, orderArg) {
+  const one = window[name];
+  if (typeof one !== "function") return;
+  window[name] = (...args) => {
+    const targets = targetsFor(args[orderArg]);
+    if (targets.length <= 1) return one(...args);
+    const keep = selection();
+    inBatch(() => {
+      for (const t of targets) {
+        if (!root.contains(t)) continue;
+        const a = args.slice();
+        a[orderArg] = orderOf(t); // orders shift as things are added
+        one(...a);
+      }
+    });
+    selectMany(keep.filter((e) => root.contains(e)));
+  };
+}
+overSelection("addAnimation", 0);
+overSelection("toggleHidden", 0);
+overSelection("setReference", 0);
+overSelection("addDefinition", 1); // each gets its own, fitted to it
 
 // MARK: Preview mode — locked: nothing changes, and ⌘-click follows links.
 

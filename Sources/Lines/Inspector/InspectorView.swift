@@ -94,7 +94,7 @@ private struct ElementInspector: View {
 
 	private var subtitle: String {
 		if selection.count > 1 {
-			return "\(selection.count) selected · fill and stroke apply to all"
+			return "\(selection.count) selected · styles, effects and animations apply to all"
 		}
 		var parts = [InspectorView.elementName(for: tag)]
 		if let b = selection.bounds {
