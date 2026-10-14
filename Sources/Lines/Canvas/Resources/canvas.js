@@ -22,7 +22,7 @@ const radiusKnobs = [0, 1, 2, 3].map((corner) => {
   const k = document.createElement("div");
   k.className = "radius-knob";
   k.dataset.corner = corner;
-  k.title = "Drag to round the corners (Option rounds just this one)";
+  k.title = "Drag to round all corners (⌘ rounds just this one)";
   document.body.appendChild(k);
   return k;
 });
@@ -688,7 +688,8 @@ for (const knob of radiusKnobs) {
     const dy = c === 0 || c === 1 ? p.y - y : y + h - p.y;
     let r = Math.max(0, Math.min((dx + dy) / 2, w / 2, h / 2));
     if (e.shiftKey) r = Math.round(r);
-    if (e.altKey) info.radii[c] = r;
+    // Corners move together unless Command is held.
+    if (e.metaKey) info.radii[c] = r;
     else info.radii = [r, r, r, r];
     radiusDrag.moved = true;
     radiusDrag.el = writeCorners(radiusDrag.el, info);

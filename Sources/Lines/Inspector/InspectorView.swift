@@ -664,7 +664,7 @@ private struct CornerRadiusRow: View {
 				.buttonStyle(.icon(size: 24, selected: !linked))
 				.help(
 					linked
-						? "Set each corner separately (or Option-drag a corner knob on the canvas)"
+						? "Set each corner separately (or ⌘-drag a corner knob on the canvas)"
 						: "Use one radius for every corner")
 			}
 			if !linked || !isUniform {
