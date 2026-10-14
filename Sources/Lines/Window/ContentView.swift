@@ -241,7 +241,7 @@ struct ContentView: View {
 		.overlay(alignment: .topLeading) {
 			if controller.showsLayers {
 				FloatingPanel(title: "Layers", close: { controller.showsLayers = false }) {
-					LayersPanel(controller: controller, width: .constant(Double(layersWidth)))
+					LayersPanel(controller: controller)
 				}
 				.frame(width: layersWidth)
 				.padding(Self.panelMargin)

@@ -7,33 +7,29 @@ extension UTType {
 	static let linesLayer = UTType(exportedAs: "com.zms.lines.layer")
 }
 
-/// The drawing's elements as stacked cards, topmost first, one level at a
-/// time: a group's card shows what's inside it, and opens to its own level,
-/// with a breadcrumb back out. Resources sit in a strip below.
+/// The drawing's elements, topmost first, with what applies to each attached
+/// beneath it — its clip, mask, filter, gradient or pattern paint, and its
+/// animations — the way Affinity and Illustrator show clips and masks under
+/// what they affect, rather than off in <defs>. The Resources tab holds the
+/// whole library, used or not.
 ///
-/// Drag a card to move it: a line above or below shows where it lands, a
-/// highlighted group means "inside", and a breadcrumb means "into that
-/// level". Dragging a card into another app copies it as SVG, and SVG files
-/// dropped from the Finder are imported.
+/// Drag a row to move it: a line above or below shows where it lands, and a
+/// highlighted group means "inside". Drag an attachment (or a resource) onto
+/// another row to apply it there too. Dragging a row into another app copies
+/// it as SVG, and SVG files dropped from the Finder are imported.
 struct LayersPanel: View {
 	var controller: CanvasController
-	/// The panel's width: wide enough, the details sit beside the layers.
-	@Binding var width: Double
 
-	static let narrowWidth: Double = 300
-	static let wideWidth: Double = 680
-	/// From this width the details column shows.
-	static let detailsWidth: Double = 520
-	private var isWide: Bool { width >= Self.detailsWidth }
+	enum Tab: String { case layers, resources }
 
-	/// The group whose contents are showing (its path); nil for the drawing.
-	@State private var level: String?
+	@AppStorage("layers.tab") private var tab: Tab = .layers
+	@State private var expanded: Set<String> = []
 	@State private var renaming: String?
 	@State private var dragging: String?
-	/// A resource being dragged onto a layer, to apply it.
+	/// A resource being dragged onto a layer, to apply it, and how.
 	@State private var draggingResource: ResourceInfo?
+	@State private var draggingAttribute: String?
 	@State private var dropTarget: DropTarget?
-	@State private var crumbTarget: String?
 	@State private var filesTargeted = false
 	@State private var filter = LayerFilter()
 
@@ -43,145 +39,55 @@ struct LayersPanel: View {
 		var zone: Zone
 	}
 
-	/// One card.
+	/// An element's row.
 	struct Row: Identifiable {
 		var node: LayerNode
-		/// Where it is, when the filter lists cards from every level.
+		var depth: Int
+		/// Where it is, when the filter lists matches from every level.
 		var location: String?
 		var id: String { node.id }
-		var isGroup: Bool { !node.children.isEmpty || node.item.tag == "g" }
-		var height: CGFloat {
-			(isGroup && !node.children.isEmpty) || location != nil
-				? LayersPanel.tallCardHeight : LayersPanel.cardHeight
+		var height: CGFloat { LayersPanel.rowHeight }
+	}
+
+	/// One line of the list: an element, or something applied to the one above.
+	enum Line: Identifiable {
+		case element(Row, attachments: [Attachment])
+		case attachment(Attachment, depth: Int)
+
+		var id: String {
+			switch self {
+			case .element(let row, _): row.id
+			case .attachment(let a, _): a.id
+			}
 		}
 	}
 
-	static let cardHeight: CGFloat = 60
-	static let tallCardHeight: CGFloat = 80
+	static let rowHeight: CGFloat = 30
+	static let attachmentHeight: CGFloat = 24
 
 	var body: some View {
-		if isWide {
-			HStack(spacing: 0) {
-				// Half and half: the layers, and what applies to the selected one.
-				layers.frame(maxWidth: .infinity)
-				Divider()
-				LayerDetails(controller: controller) { kind in filter.kinds = [kind] }
-					.frame(maxWidth: .infinity)
-			}
-		} else {
-			layers
-		}
-	}
-
-	/// Elements that animate, or that SMIL animations target.
-	static func animatedOrders(_ outline: [OutlineItem]) -> Set<Int> {
-		Set(
-			outline.filter { AnimationTag.contains($0.tag) }.map(\.parent)
-				+ outline.filter { !$0.cssAnimations.isEmpty }.map(\.order))
-	}
-
-	@ViewBuilder
-	private var layers: some View {
-		let tree = LayerNode.build(Self.layerItems(controller.outline))
-		let index = LayerIndex(tree)
-		let animated = Self.animatedOrders(controller.outline)
-		let current = level.flatMap { index.nodes[$0] }
-		let rows =
-			filter.isActive
-			? matching(tree, index: index, animated: animated)
-			: (current?.children ?? tree).map { Row(node: $0) }
+		let outline = controller.outline
+		let resources = ResourceInfo.all(in: outline)
 		VStack(spacing: 0) {
-			if !controller.outline.isEmpty {
-				HStack(spacing: 0) {
-					LayerFilterBar(
-						filter: $filter, resources: ResourceInfo.all(in: controller.outline),
-						matchCount: rows.count)
-					detailsToggle
-				}
-				if !filter.isActive && current != nil {
-					breadcrumb(current: current, index: index)
-				}
+			Picker("Show", selection: $tab) {
+				Text("Layers").tag(Tab.layers)
+				Text("Resources (\(resources.count))").tag(Tab.resources)
 			}
-			ScrollViewReader { proxy in
-				ScrollView {
-					LazyVStack(spacing: 6) {
-						ForEach(rows) { row in
-							LayerCard(
-								row: row, controller: controller, renaming: $renaming,
-								dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
-								isAnimated: animated.contains(row.node.item.order),
-								open: { open(row.node.id) },
-								showResourceUsers: { filter.resourceID = $0 }
-							)
-							.id(row.id)
-							.onDrag {
-								dragging = row.id
-								draggingResource = nil
-								return provider(for: row)
-							}
-							.onDrop(
-								of: [.linesLayer],
-								delegate: RowDropDelegate(
-									row: row, index: index, dragging: $dragging,
-									draggingResource: $draggingResource,
-									target: $dropTarget,
-									perform: perform,
-									apply: { resource in
-										guard let attribute = resource.kind.attribute else {
-											return
-										}
-										controller.setReference(
-											order: row.node.item.order, attribute: attribute,
-											targetOrder: resource.order)
-									})
-							)
-						}
-					}
-					.padding(.horizontal, 8)
-					.padding(.vertical, 6)
-				}
-				.onChange(of: controller.selection?.order) { _, order in
-					if let path = reveal(order, index: index) {
-						withAnimation { proxy.scrollTo(path, anchor: .center) }
-					}
-				}
-			}
-			.overlay {
-				if controller.outline.isEmpty {
-					ContentUnavailableView(
-						"No Elements", systemImage: "square.3.layers.3d",
-						description: Text("Elements in the drawing appear here."))
-				} else if filter.isActive && rows.isEmpty {
-					ContentUnavailableView {
-						Label("No Matches", systemImage: "magnifyingglass")
-					} actions: {
-						Button("Clear Filter") { filter.clear() }
-					}
-				} else if rows.isEmpty {
-					ContentUnavailableView(
-						"Empty Group", systemImage: "folder",
-						description: Text("Drag layers onto the breadcrumb to move them here."))
-				}
-			}
-			.overlay {
-				if filesTargeted {
-					RoundedRectangle(cornerRadius: 10, style: .continuous)
-						.strokeBorder(.tint, lineWidth: 2)
-						.padding(4)
-				}
-			}
-			.dropDestination(for: URL.self) { urls, _ in
-				importFiles(urls)
-				return true
-			} isTargeted: {
-				filesTargeted = $0
-			}
+			.pickerStyle(.segmented)
+			.labelsHidden()
+			.padding(.horizontal, 10)
+			.padding(.top, 2)
+			.padding(.bottom, 4)
 
-			if !controller.outline.isEmpty {
-				ResourceStrip(controller: controller, draggingResource: $draggingResource)
-			}
-			if !isWide {
-				bottomBar
+			switch tab {
+			case .layers: layers(resources: resources)
+			case .resources:
+				ResourcesList(
+					controller: controller, resources: resources,
+					showUser: { order in
+						tab = .layers
+						controller.select(order: order)
+					})
 			}
 		}
 		.onHover { inside in if !inside { controller.hover(order: nil) } }
@@ -190,123 +96,128 @@ struct LayersPanel: View {
 		}
 	}
 
-	private var detailsToggle: some View {
-		Button(isWide ? "Hide Details" : "Show Details", systemImage: "sidebar.right") {
-			withAnimation(.snappy(duration: 0.25)) {
-				width = isWide ? Self.narrowWidth : Self.wideWidth
-			}
-		}
-		.buttonStyle(.icon(size: 26, selected: isWide))
-		.padding(.trailing, 8)
-		.padding(.top, 4)
-		.help(
-			isWide
-				? "Hide the details column"
-				: "Show what applies to the selected layer, beside the layers")
-	}
+	// MARK: Layers
 
-	// MARK: Levels
-
-	/// "Drawing › Leaves › Stem": click to go back out, or drop a card on one
-	/// to move it into that level (on top).
-	private func breadcrumb(current: LayerNode?, index: LayerIndex) -> some View {
-		let components = current?.id.split(separator: ".") ?? []
-		let parts: [LayerNode] = components.indices.compactMap {
-			index.nodes[components.prefix($0 + 1).joined(separator: ".")]
+	@ViewBuilder
+	private func layers(resources: [ResourceInfo]) -> some View {
+		let outline = controller.outline
+		let tree = LayerNode.build(Self.layerItems(outline))
+		let index = LayerIndex(tree)
+		let attachments = Attachment.all(
+			in: outline, resources: resources, animations: controller.animations)
+		let lines =
+			filter.isActive
+			? matching(tree, attachments: attachments)
+			: flatten(tree, attachments: attachments)
+		if !outline.isEmpty {
+			LayerFilterBar(
+				filter: $filter, resources: resources,
+				matchCount: lines.count(where: { if case .element = $0 { true } else { false } }))
 		}
-		return ScrollView(.horizontal) {
-			HStack(spacing: 2) {
-				Button("Back", systemImage: "chevron.backward") {
-					withAnimation(.snappy(duration: 0.2)) {
-						level = parts.dropLast().last?.id
+		ScrollViewReader { proxy in
+			ScrollView {
+				LazyVStack(spacing: 0) {
+					ForEach(lines) { line in
+						switch line {
+						case .element(let row, let attached):
+							elementRow(row, attached: attached, index: index)
+						case .attachment(let attachment, let depth):
+							AttachmentRow(
+								attachment: attachment, depth: depth, controller: controller
+							)
+							.onDrag {
+								guard case .resource(let resource, let attribute) = attachment.kind
+								else { return NSItemProvider() }
+								dragging = nil
+								draggingResource = resource
+								draggingAttribute = attribute
+								return ResourcesList.provider(for: resource)
+							}
+						}
 					}
 				}
-				.buttonStyle(.icon(size: 22))
-				.help("Back out of \(current?.item.displayName ?? "this group")")
-				crumb(title: String(localized: "Drawing"), path: nil, order: 0, index: index)
-				ForEach(parts, id: \.id) { node in
-					Image(systemName: "chevron.forward")
-						.font(.caption2.weight(.semibold))
-						.foregroundStyle(.tertiary)
-					crumb(
-						title: node.item.displayName, path: node.id, order: node.item.order,
-						index: index)
+				.padding(.horizontal, 6)
+				.padding(.vertical, 4)
+			}
+			.onChange(of: controller.selection?.order) { _, order in
+				if let path = revealSelection(order) {
+					withAnimation { proxy.scrollTo(path, anchor: .center) }
 				}
 			}
-			.padding(.horizontal, 8)
 		}
-		.scrollIndicators(.never)
-		.frame(height: 30)
+		.overlay {
+			if outline.isEmpty {
+				ContentUnavailableView(
+					"No Elements", systemImage: "square.3.layers.3d",
+					description: Text("Elements in the drawing appear here."))
+			} else if filter.isActive && lines.isEmpty {
+				ContentUnavailableView {
+					Label("No Matches", systemImage: "magnifyingglass")
+				} actions: {
+					Button("Clear Filter") { filter.clear() }
+				}
+			}
+		}
+		.overlay {
+			if filesTargeted {
+				RoundedRectangle(cornerRadius: 10, style: .continuous)
+					.strokeBorder(.tint, lineWidth: 2)
+					.padding(4)
+			}
+		}
+		.dropDestination(for: URL.self) { urls, _ in
+			importFiles(urls)
+			return true
+		} isTargeted: {
+			filesTargeted = $0
+		}
 	}
 
-	private func crumb(title: String, path: String?, order: Int, index: LayerIndex) -> some View {
-		let key = path ?? ""
-		return Button(title) {
-			withAnimation(.snappy(duration: 0.2)) { level = path }
-		}
-		.buttonStyle(.plain)
-		.font(.callout.weight(path == level ? .semibold : .regular))
-		.foregroundStyle(path == level ? .primary : .secondary)
-		.lineLimit(1)
-		.padding(.horizontal, 6)
-		.padding(.vertical, 3)
-		.background(
-			crumbTarget == key ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear),
-			in: .capsule
+	private func elementRow(_ row: Row, attached: [Attachment], index: LayerIndex) -> some View {
+		let hasChildren = !row.node.children.isEmpty || !attached.isEmpty
+		return LayerRow(
+			row: row, attachments: attached, controller: controller,
+			hasChildren: hasChildren,
+			isExpanded: hasChildren && (filter.isActive ? false : expanded.contains(row.id)),
+			toggleExpanded: { toggle(row.id) }, renaming: $renaming,
+			dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
+			showResourceUsers: { filter.resourceID = $0 }
 		)
-		.help(path == level ? "Showing \(title)" : "Show \(title)")
+		.id(row.id)
+		.onDrag {
+			dragging = row.id
+			draggingResource = nil
+			return provider(for: row)
+		}
 		.onDrop(
 			of: [.linesLayer],
-			isTargeted: Binding(
-				get: { crumbTarget == key },
-				set: { crumbTarget = $0 ? key : (crumbTarget == key ? nil : crumbTarget) }
-			)
-		) { _ in
-			defer { dragging = nil }
-			guard let dragging, let source = index.nodes[dragging]?.item.order,
-				dragging != path, !(path ?? "").hasPrefix(dragging + ".")
-			else { return false }
-			// On top: after the level's last child.
-			let siblings = path.flatMap { index.nodes[$0]?.children } ?? []
-			let top =
-				path == nil
-				? controller.outline.last(where: { $0.parent == 0 })?.order
-				: siblings.first?.item.order
-			controller.move(orders: [source], intoParent: order, after: top)
-			return true
-		}
-	}
-
-	private func open(_ path: String) {
-		withAnimation(.snappy(duration: 0.2)) {
-			filter.clear()
-			level = path
-		}
-	}
-
-	/// Shows the level holding the selected element; returns its card.
-	private func reveal(_ order: Int?, index: LayerIndex) -> String? {
-		guard !filter.isActive, let order,
-			let item = controller.outline.first(where: { $0.order == order }),
-			index.nodes[item.path] != nil
-		else { return nil }
-		let parent = item.path.split(separator: ".").dropLast().joined(separator: ".")
-		let target = parent.isEmpty ? nil : parent
-		if target != level {
-			withAnimation(.snappy(duration: 0.2)) { level = target }
-		}
-		return item.path
+			delegate: RowDropDelegate(
+				row: row, index: index, dragging: $dragging,
+				draggingResource: $draggingResource,
+				target: $dropTarget,
+				perform: perform,
+				apply: { resource in
+					guard let attribute = draggingAttribute ?? resource.kind.attribute else {
+						return
+					}
+					draggingAttribute = nil
+					controller.setReference(
+						order: row.node.item.order, attribute: attribute,
+						targetOrder: resource.order)
+					expanded.insert(row.id)
+				})
+		)
 	}
 
 	// MARK: Tree
 
-	/// The drawing's elements without <defs>, resources (which have their own
-	/// strip) and what sits inside them.
+	/// The drawing's elements without <defs>, resources (in their own tab),
+	/// animations (attached to what they animate) and what sits inside them.
 	static func layerItems(_ outline: [OutlineItem]) -> [OutlineItem] {
 		var hidden = Set<Int>()
 		for item in outline {
 			if hidden.contains(item.parent) || item.tag == "defs"
-				|| ResourceInfo.isResource(item.tag)
+				|| ResourceInfo.isResource(item.tag) || AnimationTag.contains(item.tag)
 			{
 				hidden.insert(item.order)
 			}
@@ -314,24 +225,65 @@ struct LayersPanel: View {
 		return outline.filter { !hidden.contains($0.order) }
 	}
 
-	/// Every card the filter matches, from every level, with where each is.
-	private func matching(_ nodes: [LayerNode], index: LayerIndex, animated: Set<Int>) -> [Row] {
-		var rows: [Row] = []
+	/// Each element, then (when open) what applies to it, then its children.
+	private func flatten(
+		_ nodes: [LayerNode], depth: Int = 0, attachments: [Int: [Attachment]]
+	) -> [Line] {
+		nodes.flatMap { node -> [Line] in
+			let attached = attachments[node.item.order] ?? []
+			var lines: [Line] = [.element(Row(node: node, depth: depth), attachments: attached)]
+			guard expanded.contains(node.id) else { return lines }
+			lines += attached.map { .attachment($0, depth: depth + 1) }
+			lines += flatten(node.children, depth: depth + 1, attachments: attachments)
+			return lines
+		}
+	}
+
+	/// Every element the filter matches, from every level, with where it is.
+	private func matching(_ nodes: [LayerNode], attachments: [Int: [Attachment]]) -> [Line] {
+		let animated = Self.animatedOrders(controller.outline)
+		var lines: [Line] = []
 		func walk(_ nodes: [LayerNode], trail: [String]) {
 			for node in nodes {
 				if filter.matches(node.item, animated: animated) {
-					rows.append(
-						Row(
-							node: node,
-							location: trail.isEmpty
-								? String(localized: "Drawing")
-								: trail.joined(separator: " › ")))
+					lines.append(
+						.element(
+							Row(
+								node: node, depth: 0,
+								location: trail.isEmpty
+									? String(localized: "Drawing")
+									: trail.joined(separator: " › ")),
+							attachments: attachments[node.item.order] ?? []))
 				}
 				walk(node.children, trail: trail + [node.item.displayName])
 			}
 		}
 		walk(nodes, trail: [])
-		return rows
+		return lines
+	}
+
+	/// Elements that animate, or that SMIL animations target.
+	static func animatedOrders(_ outline: [OutlineItem]) -> Set<Int> {
+		Set(AnimationInfo.all(in: outline).compactMap { $0.target?.order })
+	}
+
+	private func toggle(_ path: String) {
+		withAnimation(.snappy(duration: 0.2)) {
+			if expanded.contains(path) { expanded.remove(path) } else { expanded.insert(path) }
+		}
+	}
+
+	/// Opens the groups containing the selected element; returns its row.
+	private func revealSelection(_ order: Int?) -> String? {
+		guard let order, let item = controller.outline.first(where: { $0.order == order }),
+			Self.layerItems(controller.outline).contains(where: { $0.order == order })
+		else { return nil }
+		if tab != .layers { return nil }
+		let parts = item.path.split(separator: ".")
+		for length in stride(from: 1, to: parts.count, by: 1) {
+			expanded.insert(parts.prefix(length).joined(separator: "."))
+		}
+		return item.path
 	}
 
 	// MARK: Drag and drop
@@ -386,28 +338,6 @@ struct LayersPanel: View {
 		}
 	}
 
-	// MARK: Bottom bar
-
-	/// Group, Duplicate and Delete, in the narrow panel; the wide one leaves
-	/// them to the context menu.
-	private var bottomBar: some View {
-		HStack(spacing: 2) {
-			Button("Group", systemImage: "square.on.square.dashed") { controller.groupSelection() }
-				.help("Group the selected element (⌥⌘G)")
-			Button("Duplicate", systemImage: "plus.square.on.square") {
-				controller.duplicateSelection()
-			}
-			.help("Duplicate (⌘D)")
-			Spacer()
-			Button("Delete", systemImage: "trash") { controller.deleteSelection() }
-				.help("Delete the selected element")
-		}
-		.disabled(!controller.isEditing || !controller.hasElementSelection)
-		.buttonStyle(.icon(size: 28))
-		.padding(.horizontal, 8)
-		.padding(.vertical, 8)
-		.overlay(alignment: .top) { Divider().opacity(0.6) }
-	}
 }
 
 /// Works out where a dragged layer would land as the pointer moves over a row.
@@ -488,16 +418,17 @@ private struct RowDropDelegate: DropDelegate {
 	}
 }
 
-// MARK: - Card
+// MARK: - Element row
 
-private struct LayerCard: View {
+private struct LayerRow: View {
 	var row: LayersPanel.Row
+	var attachments: [Attachment]
 	var controller: CanvasController
+	var hasChildren: Bool
+	var isExpanded: Bool
+	var toggleExpanded: () -> Void
 	@Binding var renaming: String?
 	var dropZone: LayersPanel.DropTarget.Zone?
-	var isAnimated = false
-	/// Shows the group's own level.
-	var open: () -> Void
 	/// Filters the panel to what uses a resource, by its id.
 	var showResourceUsers: (String) -> Void = { _ in }
 
@@ -506,48 +437,63 @@ private struct LayerCard: View {
 	@FocusState private var nameFocused: Bool
 
 	private var item: OutlineItem { row.node.item }
-	private var isGroup: Bool { row.isGroup }
+	private var isGroup: Bool { !row.node.children.isEmpty || item.tag == "g" }
 	private var isSelected: Bool {
 		controller.hasElementSelection && controller.selection?.order == item.order
 	}
 	private var isRenaming: Bool { renaming == item.id }
 
-	private var kind: String {
-		let name = InspectorView.elementName(for: item.tag)
-		let count = row.node.children.count
-		if isGroup { return count == 1 ? "\(name) · 1 item" : "\(name) · \(count) items" }
-		if let box = item.box {
-			return
-				"\(name) · \(Double(box.width).formatted(.number.precision(.fractionLength(0)))) × \(Double(box.height).formatted(.number.precision(.fractionLength(0))))"
-		}
-		return name
-	}
-
 	var body: some View {
-		HStack(spacing: 10) {
-			LayerThumbnail(item: item, controller: controller, size: 44)
+		HStack(spacing: 5) {
+			Color.clear.frame(width: CGFloat(row.depth) * 16)
 
-			VStack(alignment: .leading, spacing: 3) {
+			Button(action: toggleExpanded) {
+				Image(systemName: "chevron.right")
+					.font(.caption2.weight(.bold))
+					.rotationEffect(.degrees(isExpanded ? 90 : 0))
+					.foregroundStyle(.secondary)
+					.frame(width: 12, height: 20)
+					.contentShape(.rect)
+			}
+			.buttonStyle(.plain)
+			.opacity(hasChildren && row.location == nil ? 1 : 0)
+			.disabled(!hasChildren || row.location != nil)
+			.help(isExpanded ? "Collapse" : "Show what's inside and what applies to it")
+			.accessibilityLabel(isExpanded ? "Collapse" : "Expand")
+
+			LayerThumbnail(item: item, controller: controller, size: 22)
+
+			VStack(alignment: .leading, spacing: 0) {
 				name
-				HStack(spacing: 6) {
-					Text(kind)
-						.font(.caption)
-						.foregroundStyle(.secondary)
-						.lineLimit(1)
-					LayerBadges(item: item, isAnimated: isAnimated, controller: controller)
-				}
 				if let location = row.location {
-					Label(location, systemImage: "folder")
+					Text(location)
 						.font(.caption2)
 						.foregroundStyle(.tertiary)
 						.lineLimit(1)
 						.truncationMode(.head)
-				} else if !row.node.children.isEmpty {
-					childStrip
 				}
 			}
 
 			Spacer(minLength: 4)
+
+			// What applies, at a glance while closed; open the row for the details.
+			if !isExpanded {
+				HStack(spacing: 3) {
+					ForEach(Array(attachments.prefix(5).enumerated()), id: \.offset) { _, a in
+						Image(systemName: a.symbol)
+							.font(.system(size: 9, weight: .semibold))
+							.foregroundStyle(a.tint)
+							.help(a.summary)
+					}
+				}
+				.accessibilityHidden(true)
+			}
+			PaintDots(item: item)
+
+			Text(InspectorView.elementName(for: item.tag))
+				.font(.caption)
+				.foregroundStyle(.tertiary)
+				.lineLimit(1)
 
 			Button(
 				item.isHidden ? "Show" : "Hide", systemImage: item.isHidden ? "eye.slash" : "eye"
@@ -558,34 +504,24 @@ private struct LayerCard: View {
 			.opacity((isHovered && controller.isEditing) || item.isHidden ? 1 : 0)
 			.disabled(!controller.isEditing)
 			.help(item.isHidden ? "Show Element" : "Hide Element")
-
-			if !row.node.children.isEmpty {
-				Button("Open", systemImage: "chevron.forward", action: open)
-					.buttonStyle(.icon(size: 22))
-					.help("Show what's inside \(item.displayName)")
-			}
 		}
-		.padding(.horizontal, 8)
-		.frame(height: row.height)
+		.padding(.horizontal, 6)
+		.frame(height: row.location == nil ? LayersPanel.rowHeight : LayersPanel.rowHeight + 8)
 		.background {
-			RoundedRectangle(cornerRadius: 10, style: .continuous)
-				.fill(cardFill)
+			RoundedRectangle(cornerRadius: 6, style: .continuous)
+				.fill(rowFill)
 		}
 		.overlay {
-			RoundedRectangle(cornerRadius: 10, style: .continuous)
-				.strokeBorder(
-					dropZone == .inside
-						? AnyShapeStyle(.tint)
-						: isSelected
-							? AnyShapeStyle(.tint.opacity(0.7))
-							: AnyShapeStyle(.separator.opacity(0.5)),
-					lineWidth: dropZone == .inside ? 2 : 1)
+			if dropZone == .inside {
+				RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(
+					.tint, lineWidth: 2)
+			}
 		}
 		.overlay(alignment: dropZone == .below ? .bottom : .top) {
 			if dropZone == .above || dropZone == .below {
 				Capsule().fill(.tint).frame(height: 3)
-					.padding(.horizontal, 6)
-					.offset(y: dropZone == .above ? -4 : 4)
+					.padding(.leading, CGFloat(row.depth) * 16 + 20)
+					.offset(y: dropZone == .above ? -2 : 2)
 			}
 		}
 		.opacity(item.isHidden ? 0.6 : 1)
@@ -597,35 +533,17 @@ private struct LayerCard: View {
 		}
 		.contextMenu { menu.disabled(!controller.isEditing) }
 		.accessibilityElement(children: .combine)
-		.accessibilityLabel("\(item.displayName), \(kind)")
-		.accessibilityValue(item.isHidden ? "Hidden" : "")
+		.accessibilityLabel("\(item.displayName), \(InspectorView.elementName(for: item.tag))")
+		.accessibilityValue(
+			([item.isHidden ? String(localized: "Hidden") : nil] + attachments.map(\.summary))
+				.compactMap { $0 }.joined(separator: "; ")
+		)
 		.accessibilityAddTraits(isSelected ? .isSelected : [])
 		.accessibilityAction { controller.select(order: item.order) }
 		.accessibilityAction(named: item.isHidden ? "Show" : "Hide") {
 			controller.toggleHidden(order: item.order)
 		}
 		.accessibilityAction(named: "Rename") { renaming = item.id }
-		.accessibilityAction(named: "Open") { if !row.node.children.isEmpty { open() } }
-	}
-
-	/// The group's contents, small; click to open it.
-	private var childStrip: some View {
-		let shown = row.node.children.prefix(6)
-		return Button(action: open) {
-			HStack(spacing: 3) {
-				ForEach(Array(shown), id: \.id) { child in
-					LayerThumbnail(item: child.item, controller: controller, size: 18)
-				}
-				if row.node.children.count > shown.count {
-					Text("+\(row.node.children.count - shown.count)")
-						.font(.caption2.monospacedDigit())
-						.foregroundStyle(.secondary)
-				}
-			}
-			.contentShape(.rect)
-		}
-		.buttonStyle(.plain)
-		.help("Show what's inside \(item.displayName)")
 	}
 
 	@ViewBuilder
@@ -644,9 +562,9 @@ private struct LayerCard: View {
 				}
 		} else {
 			Text(item.displayName)
-				.font(.callout.weight(.medium))
 				.lineLimit(1)
 				.truncationMode(.middle)
+				.fontWeight(isGroup ? .medium : .regular)
 				.simultaneousGesture(
 					TapGesture(count: 2).onEnded {
 						if controller.isEditing { renaming = item.id }
@@ -656,10 +574,10 @@ private struct LayerCard: View {
 		}
 	}
 
-	private var cardFill: AnyShapeStyle {
-		if isSelected { return AnyShapeStyle(.tint.opacity(0.16)) }
+	private var rowFill: AnyShapeStyle {
+		if isSelected { return AnyShapeStyle(.tint.opacity(0.2)) }
 		if isHovered { return AnyShapeStyle(.quaternary) }
-		return AnyShapeStyle(.quaternary.opacity(0.45))
+		return AnyShapeStyle(.clear)
 	}
 
 	@ViewBuilder
@@ -727,5 +645,4 @@ private struct LayerCard: View {
 		if draft != (item.elementID ?? "") { controller.rename(order: item.order, to: draft) }
 		renaming = nil
 	}
-
 }

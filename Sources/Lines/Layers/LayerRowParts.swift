@@ -40,49 +40,25 @@ struct LayerThumbnail: View {
 	}
 }
 
-/// What a layer is made of, at a glance: its fill and stroke, chips for the
-/// resources it uses (click one to select it), and a badge if it animates.
-struct LayerBadges: View {
+/// An element's plain fill and stroke colours, as dots. Gradients and
+/// patterns are attachments instead.
+struct PaintDots: View {
 	var item: OutlineItem
-	var isAnimated: Bool
-	var controller: CanvasController
-
-	private var paintRefs: Set<String> {
-		Set(
-			item.references.filter { $0.attribute == "fill" || $0.attribute == "stroke" }.map(
-				\.attribute))
-	}
 
 	var body: some View {
-		HStack(spacing: 4) {
-			if let fill = item.fill, fill != "none", !paintRefs.contains("fill") {
+		HStack(spacing: 3) {
+			if let fill = item.fill, fill != "none", !fill.hasPrefix("url(") {
 				PaintDot(value: fill, isStroke: false)
 			}
-			if let stroke = item.prop("stroke"), stroke != "none", !paintRefs.contains("stroke") {
+			if let stroke = item.prop("stroke"), stroke != "none", !stroke.hasPrefix("url(") {
 				PaintDot(value: stroke, isStroke: true)
-			}
-			ForEach(item.references, id: \.self) { ref in
-				ReferenceChip(reference: ref, controller: controller)
-			}
-			if isAnimated {
-				Button {
-					controller.select(order: item.order)
-					controller.showsTimeline = true
-				} label: {
-					Image(systemName: "sparkles")
-						.font(.system(size: 10, weight: .semibold))
-						.foregroundStyle(.indigo)
-				}
-				.buttonStyle(.plain)
-				.help("Animated — show the timeline")
-				.accessibilityLabel("Animated")
 			}
 		}
 	}
 }
 
 /// A fill (solid dot) or stroke (ring) colour.
-private struct PaintDot: View {
+struct PaintDot: View {
 	var value: String
 	var isStroke: Bool
 
@@ -101,265 +77,252 @@ private struct PaintDot: View {
 	}
 }
 
-/// A resource this layer uses: its kind's icon in its colour. Click to select
-/// the resource (in the Resources section).
-private struct ReferenceChip: View {
-	var reference: OutlineItem.Reference
-	var controller: CanvasController
+// MARK: - Attachments
 
-	private var symbol: String {
-		switch reference.attribute {
-		case "fill", "stroke": "circle.lefthalf.filled"
-		case "clip-path": "scissors"
-		case "mask": "theatermasks"
-		case "filter": "camera.filters"
-		default: "link"
+/// Something applied to an element, listed under it: a gradient or pattern
+/// paint, a clip, mask, filter or marker it points at, or an animation.
+struct Attachment: Identifiable {
+	enum Kind {
+		case resource(ResourceInfo, attribute: String)
+		/// Points at an id nothing defines.
+		case missing(id: String, attribute: String)
+		case animation(AnimationInfo)
+	}
+
+	var owner: OutlineItem
+	var kind: Kind
+
+	var id: String {
+		switch kind {
+		case .resource(_, let attribute), .missing(_, let attribute): "\(owner.path)/\(attribute)"
+		case .animation(let a): "\(owner.path)/anim-\(a.id)"
 		}
 	}
 
-	private var tint: Color {
-		switch reference.attribute {
-		case "fill", "stroke": .orange
-		case "clip-path": .teal
-		case "mask": .purple
-		case "filter": .pink
-		default: .indigo
+	/// What it does: "clip", "fill", "animates".
+	var label: String {
+		switch kind {
+		case .resource(_, let attribute), .missing(_, let attribute): Self.label(attribute)
+		case .animation: String(localized: "animates")
 		}
 	}
 
-	var body: some View {
-		Button {
-			if let target = controller.outline.first(where: { $0.elementID == reference.targetID })
-			{
-				controller.select(order: target.order)
+	var title: String {
+		switch kind {
+		case .resource(let r, _): "“\(r.name)”"
+		case .missing(let id, _): "“\(id)”"
+		case .animation(let a): a.property
+		}
+	}
+
+	var detail: String {
+		switch kind {
+		case .resource(let r, _): r.what
+		case .missing: String(localized: "isn't defined, so it does nothing")
+		case .animation(let a):
+			[a.isCSS ? nil : a.change, Self.timing(a)].compactMap { $0 }.filter { !$0.isEmpty }
+				.joined(separator: " · ")
+		}
+	}
+
+	var summary: String { "\(label) \(title): \(detail)" }
+
+	var symbol: String {
+		switch kind {
+		case .resource(let r, let attribute):
+			switch attribute {
+			case "clip-path": "scissors"
+			case "mask": "theatermasks"
+			case "filter": "camera.filters"
+			case "href", "xlink:href": "square.on.square"
+			default: r.kind == .pattern ? "square.grid.3x3.fill" : "circle.lefthalf.filled"
 			}
-		} label: {
-			Image(systemName: symbol)
-				.font(.system(size: 9, weight: .semibold))
-				.foregroundStyle(tint)
-				.frame(width: 16, height: 16)
-				.background(tint.opacity(0.15), in: .rect(cornerRadius: 4, style: .continuous))
+		case .missing: "exclamationmark.triangle.fill"
+		case .animation: "sparkles"
 		}
-		.buttonStyle(.plain)
-		.help("\(reference.attribute): \(reference.targetID) — click to select it")
-		.accessibilityLabel("\(reference.attribute) \(reference.targetID)")
+	}
+
+	var tint: Color {
+		switch kind {
+		case .resource(let r, _): r.kind.tint
+		case .missing: .orange
+		case .animation: .indigo
+		}
+	}
+
+	/// How many elements share it, for resources used more than once.
+	var sharedBy: Int? {
+		if case .resource(let r, _) = kind, r.users.count > 1 { return r.users.count }
+		return nil
+	}
+
+	/// What applies to each element, by order.
+	static func all(
+		in outline: [OutlineItem], resources: [ResourceInfo], animations: [AnimationInfo]
+	) -> [Int: [Attachment]] {
+		let byID = Dictionary(
+			resources.compactMap { r in r.item.elementID.map { ($0, r) } },
+			uniquingKeysWith: { first, _ in first })
+		var result: [Int: [Attachment]] = [:]
+		for item in outline where !ResourceInfo.isResource(item.tag) {
+			var seen = Set<String>()
+			for ref in item.references where seen.insert(ref.attribute).inserted {
+				let isLink = ref.attribute == "href" || ref.attribute == "xlink:href"
+				// A <use> shows the symbol it places; other links aren't applied.
+				if isLink && byID[ref.targetID] == nil { continue }
+				let kind: Kind =
+					byID[ref.targetID].map { .resource($0, attribute: ref.attribute) }
+					?? .missing(id: ref.targetID, attribute: ref.attribute)
+				result[item.order, default: []].append(Attachment(owner: item, kind: kind))
+			}
+		}
+		for animation in animations {
+			guard let target = animation.target else { continue }
+			result[target.order, default: []].append(
+				Attachment(owner: target, kind: .animation(animation)))
+		}
+		return result
+	}
+
+	static func label(_ attribute: String) -> String {
+		switch attribute {
+		case "clip-path": String(localized: "clip")
+		case "mask": String(localized: "mask")
+		case "filter": String(localized: "filter")
+		case "fill": String(localized: "fill")
+		case "stroke": String(localized: "stroke")
+		case let a where a.hasPrefix("marker"): String(localized: "marker")
+		case "href", "xlink:href": String(localized: "places")
+		default: attribute
+		}
+	}
+
+	/// "4s · after 1s · forever".
+	static func timing(_ a: AnimationInfo) -> String {
+		var parts: [String] = []
+		if let d = a.duration { parts.append(AnimationInfo.format(seconds: d)) }
+		if a.begin > 0 {
+			parts.append(String(localized: "after \(AnimationInfo.format(seconds: a.begin))"))
+		}
+		if a.repeatsForever {
+			parts.append("∞")
+		} else if let count = a.repeatCount, count != 1 {
+			parts.append("\(count.formatted())×")
+		}
+		return parts.joined(separator: " · ")
 	}
 }
 
-// MARK: - Resources
-
-/// The resources strip under the layer cards: everything defined once and
-/// used by reference, as tiles. Drag one onto a card to apply it; rest on one
-/// to preview how it changes the drawing; click to select it.
-struct ResourceStrip: View {
-	var controller: CanvasController
-	@Binding var draggingResource: ResourceInfo?
-
-	@AppStorage("layers.showsResources") private var isOpen = true
-
-	var body: some View {
-		let resources = ResourceInfo.all(in: controller.outline)
-		VStack(alignment: .leading, spacing: 4) {
-			header(resources)
-			if isOpen {
-				if resources.isEmpty {
-					Text("Gradients, masks, filters and other reusable pieces appear here.")
-						.font(.caption)
-						.foregroundStyle(.secondary)
-						.padding(.horizontal, 12)
-						.padding(.bottom, 8)
-				} else {
-					ScrollView(.horizontal) {
-						HStack(spacing: 6) {
-							ForEach(resources) { resource in
-								ResourceTile(resource: resource, controller: controller)
-									.onDrag {
-										draggingResource = resource
-										let provider = NSItemProvider()
-										provider.registerDataRepresentation(
-											forTypeIdentifier: UTType.linesLayer.identifier,
-											visibility: .ownProcess
-										) { completion in
-											completion(Data("resource:\(resource.id)".utf8), nil)
-											return nil
-										}
-										return provider
-									} preview: {
-										Label(
-											resource.name,
-											systemImage: InspectorView.symbol(
-												for: resource.item.tag, isRoot: false)
-										)
-										.padding(6)
-										.background(.regularMaterial, in: .capsule)
-									}
-							}
-						}
-						.padding(.horizontal, 8)
-						.padding(.bottom, 8)
-					}
-					.scrollIndicators(.never)
-				}
-			}
-		}
-		.overlay(alignment: .top) { Divider().opacity(0.6) }
-	}
-
-	private func header(_ resources: [ResourceInfo]) -> some View {
-		HStack(spacing: 4) {
-			Button {
-				withAnimation(.snappy(duration: 0.2)) { isOpen.toggle() }
-			} label: {
-				HStack(spacing: 6) {
-					Image(systemName: "chevron.right")
-						.font(.caption2.weight(.bold))
-						.rotationEffect(.degrees(isOpen ? 90 : 0))
-					Text("Resources")
-					Text("\(resources.count)").foregroundStyle(.tertiary)
-				}
-				.font(.caption.weight(.semibold))
-				.foregroundStyle(.secondary)
-				.contentShape(.rect)
-			}
-			.buttonStyle(.plain)
-			.help(isOpen ? "Hide resources" : "Show resources")
-			Spacer()
-			Group {
-				Menu {
-					ForEach(CanvasController.Definition.allCases) { kind in
-						Button(kind.title, systemImage: kind.symbol) {
-							if let s = controller.selection, !s.isRoot {
-								controller.addDefinition(kind, applyingTo: s.order)
-							} else {
-								controller.addDefinition(kind)
-							}
-						}
-					}
-				} label: {
-					Label("Add Resource", systemImage: "plus")
-				}
-				.menuIndicator(.hidden)
-				.buttonStyle(.icon(size: 22))
-				.fixedSize()
-				.help(
-					"Add a gradient, pattern, clip, mask or filter (applied to the selection, if any)"
-				)
-				Button("Remove Unused", systemImage: "trash.slash") {
-					controller.removeUnusedDefinitions()
-				}
-				.buttonStyle(.icon(size: 22))
-				.disabled(!resources.contains(where: \.isUnused))
-				.help("Remove resources nothing uses")
-			}
-			.disabled(!controller.isEditing)
-		}
-		.padding(.horizontal, 10)
-		.padding(.top, 6)
-	}
-}
-
-/// One resource: a swatch in its kind's colour, its name, and how many use it.
-private struct ResourceTile: View {
-	var resource: ResourceInfo
+/// One attachment, indented under its element. Click to select what it is
+/// (the resource, to edit in the inspector, or the animation, on the
+/// timeline); drag it onto another layer to apply it there too.
+struct AttachmentRow: View {
+	var attachment: Attachment
+	var depth: Int
 	var controller: CanvasController
 
 	@State private var isHovered = false
-	@State private var showsPreview = false
-	@State private var previewTask: Task<Void, Never>?
 
-	private var isSelected: Bool { controller.selection?.order == resource.order }
+	private var isSelected: Bool {
+		switch attachment.kind {
+		case .resource(let r, _): controller.selection?.order == r.order
+		case .animation(let a): controller.selection?.order == a.order
+		case .missing: false
+		}
+	}
 
 	var body: some View {
-		VStack(spacing: 4) {
-			swatch
-			Text(resource.name)
-				.font(.caption2)
+		HStack(spacing: 6) {
+			// Lines up under the element's thumbnail.
+			Color.clear.frame(width: CGFloat(depth) * 16 + 2)
+			Image(systemName: attachment.symbol)
+				.font(.system(size: 10, weight: .semibold))
+				.foregroundStyle(attachment.tint)
+				.frame(width: 18, height: 18)
+				.background(attachment.tint.opacity(0.14), in: .rect(cornerRadius: 4))
+			Text(attachment.label)
+				.font(.caption)
+				.foregroundStyle(.secondary)
+			Text(attachment.title)
+				.font(.callout.weight(.medium))
 				.lineLimit(1)
-				.truncationMode(.middle)
-			Text(resource.isUnused ? "unused" : "\(resource.users.count)×")
-				.font(.caption2.monospacedDigit())
-				.foregroundStyle(
-					resource.isUnused ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+			Text(attachment.detail)
+				.font(.caption)
+				.foregroundStyle(.secondary)
+				.lineLimit(1)
+				.truncationMode(.tail)
+			Spacer(minLength: 4)
+			if let shared = attachment.sharedBy {
+				Text("\(shared)×")
+					.font(.caption2.monospacedDigit())
+					.foregroundStyle(.secondary)
+					.padding(.horizontal, 5)
+					.padding(.vertical, 1)
+					.background(.quaternary.opacity(0.7), in: .capsule)
+					.help("Shared by \(shared) elements: changing it changes them all")
+			}
 		}
-		.frame(width: 64)
-		.padding(.vertical, 6)
+		.padding(.horizontal, 6)
+		.frame(height: LayersPanel.attachmentHeight)
 		.background(
 			isSelected
-				? AnyShapeStyle(.tint.opacity(0.16))
-				: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quaternary.opacity(0.45)),
-			in: .rect(cornerRadius: 10, style: .continuous)
+				? AnyShapeStyle(.tint.opacity(0.14))
+				: isHovered ? AnyShapeStyle(.quaternary.opacity(0.7)) : AnyShapeStyle(.clear),
+			in: .rect(cornerRadius: 6, style: .continuous)
 		)
-		.overlay {
-			RoundedRectangle(cornerRadius: 10, style: .continuous)
-				.strokeBorder(
-					isSelected
-						? AnyShapeStyle(.tint.opacity(0.7))
-						: AnyShapeStyle(.separator.opacity(0.5)),
-					lineWidth: 1)
-		}
-		.opacity(resource.isUnused ? 0.7 : 1)
 		.contentShape(.rect)
-		.onTapGesture { controller.select(order: resource.order) }
-		.onHover(perform: hover)
-		.popover(isPresented: $showsPreview, arrowEdge: .top) {
-			ImpactPreviewCard(
-				order: resource.order, title: resource.name,
-				symbol: InspectorView.symbol(for: resource.item.tag, isRoot: false),
-				summary: resource.summary, controller: controller)
-		}
-		.help(
-			resource.isUnused
-				? "Nothing uses \(resource.name) — drag it onto a layer"
-				: "Used by \(ResourceInfo.list(resource.users.map(\.displayName))) — drag onto a layer to apply"
-		)
+		.onTapGesture(perform: open)
+		.onHover { isHovered = $0 }
+		.help(attachment.summary)
+		.contextMenu { menu }
 		.accessibilityElement(children: .combine)
-		.accessibilityHint(resource.summary)
-		.accessibilityAddTraits(isSelected ? .isSelected : [])
+		.accessibilityLabel(attachment.summary)
+		.accessibilityAddTraits(.isButton)
+		.accessibilityAction { open() }
 	}
 
-	/// The gradient itself, or the kind's icon in its colour.
-	@ViewBuilder
-	private var swatch: some View {
-		let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-		if resource.kind == .gradient, !resource.parts.isEmpty {
-			let colours = resource.parts.map {
-				CSSColor.parse(ResourceInfo.stopColour($0)) ?? .black
-			}
-			shape
-				.fill(
-					resource.item.tag == "radialGradient"
-						? AnyShapeStyle(
-							RadialGradient(
-								colors: colours, center: .center, startRadius: 0, endRadius: 18))
-						: AnyShapeStyle(
-							LinearGradient(
-								colors: colours, startPoint: .leading, endPoint: .trailing))
-				)
-				.frame(width: 36, height: 36)
-				.overlay { shape.strokeBorder(.separator, lineWidth: 0.5) }
-		} else {
-			shape
-				.fill(resource.kind.tint.opacity(0.18))
-				.frame(width: 36, height: 36)
-				.overlay {
-					Image(systemName: InspectorView.symbol(for: resource.item.tag, isRoot: false))
-						.font(.system(size: 15, weight: .semibold))
-						.foregroundStyle(resource.kind.tint)
-				}
+	private func open() {
+		switch attachment.kind {
+		case .resource(let r, _): controller.select(order: r.order)
+		case .animation(let a):
+			controller.select(order: a.order)
+			controller.showsTimeline = true
+		case .missing: break
 		}
 	}
 
-	private func hover(_ inside: Bool) {
-		isHovered = inside
-		previewTask?.cancel()
-		if inside {
-			previewTask = Task { @MainActor in
-				try? await Task.sleep(for: .milliseconds(700))
-				guard !Task.isCancelled else { return }
-				showsPreview = true
+	@ViewBuilder
+	private var menu: some View {
+		switch attachment.kind {
+		case .resource(let r, let attribute):
+			Button("Select \(attachment.title)", systemImage: "cursorarrow.click") {
+				controller.select(order: r.order)
 			}
-		} else {
-			showsPreview = false
+			if r.kind == .clip || r.kind == .mask {
+				Button("Edit on Canvas", systemImage: "pencil.and.outline") {
+					controller.editOnCanvas(definition: r.order)
+				}
+				.disabled(!controller.isEditing)
+			}
+			Divider()
+			Button("Remove from \(attachment.owner.displayName)", systemImage: "minus.circle") {
+				controller.removeReference(order: attachment.owner.order, attribute: attribute)
+			}
+			.disabled(!controller.isEditing)
+		case .missing(_, let attribute):
+			Button("Remove from \(attachment.owner.displayName)", systemImage: "minus.circle") {
+				controller.removeReference(order: attachment.owner.order, attribute: attribute)
+			}
+			.disabled(!controller.isEditing)
+		case .animation(let a):
+			Button("Show on Timeline", systemImage: "timeline.selection") { open() }
+			if !a.isCSS {
+				Divider()
+				Button("Delete Animation", systemImage: "trash", role: .destructive) {
+					controller.delete(order: a.order)
+				}
+				.disabled(!controller.isEditing)
+			}
 		}
 	}
 }

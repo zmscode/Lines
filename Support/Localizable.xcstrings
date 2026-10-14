@@ -1,28 +1,12 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "" : {
-
-    },
-    "#%@" : {
-
-    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ %2$@"
-          }
-        }
-      }
-    },
-    "%@ %lld%% opacity" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ %2$lld%% opacity"
           }
         }
       }
@@ -39,42 +23,12 @@
     "%@ shadow" : {
 
     },
-    "%@ × %@, at %@, %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ × %2$@, at %3$@, %4$@"
-          }
-        }
-      }
-    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@, %2$@"
-          }
-        }
-      }
-    },
-    "%@, %@ wide" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, %2$@ wide"
-          }
-        }
-      }
-    },
-    "%@, %@, %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, %2$@, %3$@"
           }
         }
       }
@@ -89,88 +43,12 @@
         }
       }
     },
-    "%@, applied to %@, which contains it" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, applied to %2$@, which contains it"
-          }
-        }
-      }
-    },
-    "%@, from %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, from %2$@"
-          }
-        }
-      }
-    },
-    "%@, with %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, with %2$@"
-          }
-        }
-      }
-    },
     "%@: %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@: %2$@"
-          }
-        }
-      }
-    },
-    "%@: %@ %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@: %2$@ %3$@"
-          }
-        }
-      }
-    },
-    "%@: %@ — click to select it" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@: %2$@ — click to select it"
-          }
-        }
-      }
-    },
-    "%@: %@, %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@: %2$@, %3$@"
-          }
-        }
-      }
-    },
-    "%@: black, the default" : {
-
-    },
-    "%@: none" : {
-
-    },
-    "%@: “%@”, which isn't defined, so nothing is drawn" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@: “%2$@”, which isn't defined, so nothing is drawn"
           }
         }
       }
@@ -259,12 +137,6 @@
     "Animated" : {
 
     },
-    "Animated — show the timeline" : {
-
-    },
-    "Animates %@" : {
-
-    },
     "Animation" : {
 
     },
@@ -272,6 +144,9 @@
 
     },
     "Appearance" : {
+
+    },
+    "Apply to Selection" : {
 
     },
     "Arrange" : {
@@ -289,13 +164,7 @@
     "Attribute value" : {
 
     },
-    "Back" : {
-
-    },
     "Back 0.1s" : {
-
-    },
-    "Back out of %@" : {
 
     },
     "Back to Start" : {
@@ -367,7 +236,7 @@
     "Clip Path" : {
 
     },
-    "Clipped by %@" : {
+    "Clip Paths" : {
 
     },
     "Clipping Path" : {
@@ -386,6 +255,9 @@
 
     },
     "Code panel width" : {
+
+    },
+    "Collapse" : {
 
     },
     "Collapsed" : {
@@ -449,9 +321,6 @@
     "Delete the selected animation" : {
 
     },
-    "Delete the selected element" : {
-
-    },
     "Delete this animation" : {
 
     },
@@ -473,13 +342,7 @@
     "Drag into the toolbar above" : {
 
     },
-    "Drag it from Resources onto a layer to use it." : {
-
-    },
     "Drag items into the toolbar, or out of it to remove them." : {
-
-    },
-    "Drag layers onto the breadcrumb to move them here." : {
 
     },
     "Drag to adjust %@" : {
@@ -512,9 +375,6 @@
     "Duplicate" : {
 
     },
-    "Duplicate (⌘D)" : {
-
-    },
     "Duration" : {
 
     },
@@ -545,6 +405,9 @@
     "Edit Shapes on Canvas" : {
 
     },
+    "Edit on Canvas" : {
+
+    },
     "Editing %@ “%@”" : {
       "localizations" : {
         "en" : {
@@ -565,6 +428,9 @@
 
     },
     "Everything else is on the toolbar." : {
+
+    },
+    "Expand" : {
 
     },
     "Expanded" : {
@@ -594,16 +460,6 @@
     "Fade In" : {
 
     },
-    "Faded to %lld%% by %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Faded to %1$lld%% by %2$@"
-          }
-        }
-      }
-    },
     "Fills just the drawing's area, with the window colour around it." : {
 
     },
@@ -611,9 +467,6 @@
 
     },
     "Filter by kind, or by what uses a resource" : {
-
-    },
-    "Filtered by %@" : {
 
     },
     "Filters" : {
@@ -661,16 +514,16 @@
     "Gradient Stop" : {
 
     },
-    "Gradients, masks, filters and other reusable pieces appear here." : {
+    "Gradients" : {
+
+    },
+    "Gradients, clips, masks, filters and other pieces defined once and reused appear here." : {
 
     },
     "Grey" : {
 
     },
     "Group" : {
-
-    },
-    "Group the selected element (⌥⌘G)" : {
 
     },
     "Groups" : {
@@ -703,9 +556,6 @@
     "Hide Code (⌘2)" : {
 
     },
-    "Hide Details" : {
-
-    },
     "Hide Element" : {
 
     },
@@ -725,12 +575,6 @@
 
     },
     "Hide Timeline (⌘4)" : {
-
-    },
-    "Hide resources" : {
-
-    },
-    "Hide the details column" : {
 
     },
     "Hide the raw attributes" : {
@@ -757,9 +601,6 @@
     "Insert" : {
 
     },
-    "Inside It" : {
-
-    },
     "Inspector" : {
 
     },
@@ -776,9 +617,6 @@
 
     },
     "Layers" : {
-
-    },
-    "Layers panel width" : {
 
     },
     "Light" : {
@@ -811,7 +649,7 @@
     "Lock to preview without changing anything (⇧⌘L)" : {
 
     },
-    "Made Of" : {
+    "Made of" : {
 
     },
     "Make Lines the Default" : {
@@ -826,7 +664,7 @@
     "Mask" : {
 
     },
-    "Masked by %@" : {
+    "Masks" : {
 
     },
     "Matches" : {
@@ -854,9 +692,6 @@
 
     },
     "Move and resize its dashed shapes over the element." : {
-
-    },
-    "Movement" : {
 
     },
     "Name" : {
@@ -895,6 +730,9 @@
     "No Matches" : {
 
     },
+    "No Resources" : {
+
+    },
     "No app" : {
 
     },
@@ -904,16 +742,7 @@
     "None" : {
 
     },
-    "Not Used Yet" : {
-
-    },
-    "Nothing else changes how it's drawn." : {
-
-    },
     "Nothing to Inspect" : {
-
-    },
-    "Nothing uses %@ — drag it onto a layer" : {
 
     },
     "Now" : {
@@ -929,9 +758,6 @@
 
     },
     "Opacity" : {
-
-    },
-    "Open" : {
 
     },
     "Open File…" : {
@@ -955,13 +781,13 @@
     "Page size" : {
 
     },
-    "Paint" : {
-
-    },
     "Path" : {
 
     },
     "Pattern" : {
+
+    },
+    "Patterns" : {
 
     },
     "Pause" : {
@@ -1042,6 +868,9 @@
     "Remove Unused" : {
 
     },
+    "Remove from %@" : {
+
+    },
     "Remove resources nothing uses" : {
 
     },
@@ -1069,7 +898,7 @@
     "Repeats" : {
 
     },
-    "Resources" : {
+    "Resources (%lld)" : {
 
     },
     "Restore" : {
@@ -1120,9 +949,6 @@
     "Select Enclosing Group" : {
 
     },
-    "Select a layer to see what applies to it." : {
-
-    },
     "Select an element, then add an animation with the + menu." : {
 
     },
@@ -1162,10 +988,13 @@
     "Shapes" : {
 
     },
+    "Shared by %lld elements: changing it changes them all" : {
+
+    },
     "Show" : {
 
     },
-    "Show %@" : {
+    "Show %@ in Layers" : {
 
     },
     "Show All" : {
@@ -1181,9 +1010,6 @@
 
     },
     "Show Code (⌘2)" : {
-
-    },
-    "Show Details" : {
 
     },
     "Show Element" : {
@@ -1219,7 +1045,7 @@
     "Show code alongside" : {
 
     },
-    "Show resources" : {
+    "Show on Timeline" : {
 
     },
     "Show the shapes over the element, to move and resize them directly (Esc when done)" : {
@@ -1228,13 +1054,10 @@
     "Show this version on the canvas (⌘-click or ⇧-click to pick several)" : {
 
     },
-    "Show what applies to the selected layer, beside the layers" : {
+    "Show what uses it" : {
 
     },
-    "Show what's inside %@" : {
-
-    },
-    "Showing %@" : {
+    "Show what's inside and what applies to it" : {
 
     },
     "Showing “%@” on the canvas" : {
@@ -1297,6 +1120,9 @@
     "Symbol" : {
 
     },
+    "Symbols" : {
+
+    },
     "System" : {
 
     },
@@ -1310,9 +1136,6 @@
 
     },
     "The source matches that version." : {
-
-    },
-    "This Drawing" : {
 
     },
     "Timeline" : {
@@ -1375,10 +1198,7 @@
     "Use one radius for every corner" : {
 
     },
-    "Used By" : {
-
-    },
-    "Used by %@ — drag onto a layer to apply" : {
+    "Used by" : {
 
     },
     "Using" : {
@@ -1391,12 +1211,6 @@
 
     },
     "Welcome to Lines" : {
-
-    },
-    "What Applies to It" : {
-
-    },
-    "What It Does" : {
 
     },
     "Where this colour sits along the gradient" : {
@@ -1435,7 +1249,22 @@
     "Zoom to Fit" : {
 
     },
-    "and %lld more" : {
+    "after %@" : {
+
+    },
+    "animates" : {
+
+    },
+    "clip" : {
+
+    },
+    "fill" : {
+
+    },
+    "filter" : {
+
+    },
+    "isn't defined, so it does nothing" : {
 
     },
     "lines since opening" : {
@@ -1444,13 +1273,19 @@
     "lines since “%@”" : {
 
     },
+    "marker" : {
+
+    },
+    "mask" : {
+
+    },
+    "places" : {
+
+    },
+    "stroke" : {
+
+    },
     "unused" : {
-
-    },
-    "used by %lld" : {
-
-    },
-    "“%@”" : {
 
     },
     "−%lld" : {
