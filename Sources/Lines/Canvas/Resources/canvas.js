@@ -57,7 +57,9 @@ function setSVG(text) {
     renderNow();
   }
   scheduleThumbnail();
-  scheduleOutline();
+  // Behind the graph the page may be throttled; send the outline straight away.
+  if (canvasBehind) sendOutline();
+  else scheduleOutline();
   post({ type: "ok" });
   const restored = oldPath ? byPath(oldPath) : null;
   select(restored && restored !== root ? restored : null, true);
@@ -251,12 +253,57 @@ function reportSelection(afterEdit, fromSource) {
   });
 }
 
+// What an element covers on screen, stroke included: WebKit's boxes follow
+// the geometry (a path's centre line), so a thick stroke would spill out.
+function visualRect(el, depth = 0) {
+  if (!el.getBoundingClientRect) return null;
+  const name = el.localName;
+  if ((name === "g" || name === "a" || name === "switch") && depth < 8) {
+    let u = null,
+      count = 0;
+    for (const c of el.children) {
+      if (nonVisual.has(c.localName) || ANIM_TAGS.has(c.localName)) continue;
+      if (++count > 400) return el.getBoundingClientRect();
+      const r = visualRect(c, depth + 1);
+      if (!r || (!r.width && !r.height)) continue;
+      u = u
+        ? {
+            left: Math.min(u.left, r.left),
+            top: Math.min(u.top, r.top),
+            right: Math.max(u.right, r.right),
+            bottom: Math.max(u.bottom, r.bottom),
+          }
+        : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    }
+    return u ? new DOMRect(u.left, u.top, u.right - u.left, u.bottom - u.top) : el.getBoundingClientRect();
+  }
+  const r = el.getBoundingClientRect();
+  if (!r.width && !r.height && name !== "line" && name !== "path" && name !== "polyline") return r;
+  let cs;
+  try {
+    cs = getComputedStyle(el);
+  } catch (e) {
+    return r;
+  }
+  if (!cs || !cs.stroke || cs.stroke === "none" || isHidden(el)) return r;
+  const sw = parseFloat(cs.strokeWidth) || 0;
+  if (!sw) return r;
+  let scale = 1;
+  if (cs.vectorEffect !== "non-scaling-stroke") {
+    const m = el.getScreenCTM && el.getScreenCTM();
+    if (m) scale = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+  }
+  // Half the stroke sits outside the geometry (round and square caps too).
+  const e = (sw / 2) * scale;
+  return new DOMRect(r.left - e, r.top - e, r.width + e * 2, r.height + e * 2);
+}
+
 function place(box, el) {
   if (!el || !el.getBoundingClientRect) {
     box.style.display = "none";
     return;
   }
-  const r = el.getBoundingClientRect();
+  const r = visualRect(el) || el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) {
     box.style.display = "none";
     return;
@@ -303,7 +350,7 @@ function updateOverlay() {
     else multiBoxes[i].style.display = "none";
   }
   if (multi) {
-    const rs = all.map((e) => e.getBoundingClientRect()).filter((r) => r.width || r.height);
+    const rs = all.map((e) => visualRect(e)).filter((r) => r && (r.width || r.height));
     placeRect(
       selBox,
       rs.length
@@ -566,7 +613,7 @@ function updateMarquee(e) {
   placeRect(marqueeBox, r);
   const hits = marqueeScope().filter((el) => {
     if (isHidden(el) || ANIM_TAGS.has(el.localName)) return false;
-    const b = el.getBoundingClientRect();
+    const b = visualRect(el) || el.getBoundingClientRect();
     if (!b.width && !b.height) return false;
     return b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top;
   });
@@ -2643,6 +2690,13 @@ function labelOf(el) {
   return null;
 }
 
+// Set while the graph covers the canvas.
+let canvasBehind = false;
+function setCanvasBehind(on) {
+  canvasBehind = !!on;
+  if (canvasBehind) sendOutline();
+}
+
 function scheduleOutline() {
   clearTimeout(outlineTimer);
   outlineTimer = setTimeout(sendOutline, 60);
@@ -2651,10 +2705,25 @@ function scheduleOutline() {
 // Attribute values the graph and timeline show and edit. Stops, filter
 // primitives and animations report everything; other elements their paint.
 const SHOWN_PROPS = ["fill", "stroke", "stroke-width", "opacity", "fill-opacity", "stroke-opacity"];
+// Definitions report every attribute, for the graph's and inspector's editors.
+const DEFINITION_TAGS = new Set([
+  "linearGradient",
+  "radialGradient",
+  "pattern",
+  "clipPath",
+  "mask",
+  "filter",
+  "symbol",
+  "marker",
+]);
 function propsOf(el) {
   const name = el.localName;
   const all =
-    name === "stop" || name.startsWith("fe") || name.startsWith("animate") || name === "set";
+    name === "stop" ||
+    name.startsWith("fe") ||
+    name.startsWith("animate") ||
+    name === "set" ||
+    DEFINITION_TAGS.has(name);
   const props = {};
   for (const a of el.attributes) {
     if ((all || SHOWN_PROPS.includes(a.name)) && a.value.length <= 300) props[a.name] = a.value;
@@ -2912,6 +2981,117 @@ function deleteByOrder(order) {
 
 // Renders the drawing to a PNG or JPEG data URL at `scale`, on an optional
 // background colour (JPEG always gets one). Awaited by the export sheet.
+// A small picture of what an element or definition does, for the graph's
+// hover previews: the element alone (framed to its box), or a sample shape
+// using the definition. Resolves to a PNG data URL, or null.
+function previewImage(order, size) {
+  return new Promise((resolve) => {
+    const el = byOrder(order);
+    if (!root || !el) return resolve(null);
+    const name = el.localName;
+    const clone = root.cloneNode(true);
+    const vb = root.viewBox && root.viewBox.baseVal;
+    const { w, h } = intrinsicSize();
+    const area = vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
+    const defsOnly = () => {
+      // Keep the definitions (and styles); drop the artwork.
+      for (const c of Array.from(clone.children))
+        if (!["defs", "style"].includes(c.localName) && !DEFINITION_TAGS.has(c.localName)) c.remove();
+    };
+    const add = (tag, attrs) => {
+      const n = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      clone.appendChild(n);
+      return n;
+    };
+    let box = null;
+    const id = el.id;
+    if ((name === "linearGradient" || name === "radialGradient" || name === "pattern") && id) {
+      defsOnly();
+      clone.setAttribute("viewBox", "0 0 160 100");
+      add("rect", { x: 8, y: 8, width: 144, height: 84, rx: 14, fill: `url(#${id})` });
+    } else if (name === "filter" && id) {
+      defsOnly();
+      clone.setAttribute("viewBox", "0 0 160 100");
+      add("rect", { x: 40, y: 20, width: 80, height: 60, rx: 12, fill: "#f09157", filter: `url(#${id})` });
+    } else if ((name === "clipPath" || name === "mask") && id) {
+      defsOnly();
+      clone.setAttribute("viewBox", [area.x, area.y, area.w, area.h].join(" "));
+      // A striped sample, so what's kept and what's cut both read.
+      const attr = name === "mask" ? "mask" : "clip-path";
+      add("rect", { x: area.x, y: area.y, width: area.w, height: area.h, fill: "#f09157", [attr]: `url(#${id})` });
+    } else if ((name === "symbol" || name === "marker") && id) {
+      defsOnly();
+      clone.setAttribute("viewBox", "0 0 100 100");
+      add("use", { href: `#${id}`, width: 100, height: 100 });
+    } else {
+      // The element alone: everything outside it hidden, framed to its box.
+      const target = ANIM_TAGS.has(name) ? el.parentNode : el;
+      try {
+        const b = target.getBBox();
+        const m = root.getCTM && target.getCTM ? root.getCTM().inverse().multiply(target.getCTM()) : null;
+        const pts = [
+          [b.x, b.y],
+          [b.x + b.width, b.y],
+          [b.x, b.y + b.height],
+          [b.x + b.width, b.y + b.height],
+        ].map(([x, y]) => (m ? new DOMPoint(x, y).matrixTransform(m) : { x, y }));
+        const xs = pts.map((p) => p.x),
+          ys = pts.map((p) => p.y);
+        box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+      } catch (e) {}
+      if (!box || !(box.w || box.h)) box = area;
+      const pad = Math.max(box.w, box.h) * 0.08 || 1;
+      clone.setAttribute("viewBox", [box.x - pad, box.y - pad, box.w + pad * 2, box.h + pad * 2].join(" "));
+      // Hide everything not on the path to the target or inside it.
+      const path = pathOf(target);
+      let node = clone;
+      const keep = new Set([clone]);
+      for (const i of path) {
+        node = node.children[i];
+        if (!node) break;
+        keep.add(node);
+      }
+      const walk = (n) => {
+        for (const c of Array.from(n.children)) {
+          if (keep.has(c)) {
+            if (c !== node) walk(c);
+          } else if (!["defs", "style"].includes(c.localName) && !DEFINITION_TAGS.has(c.localName)) {
+            c.setAttribute("visibility", "hidden");
+          }
+        }
+      };
+      walk(clone);
+    }
+    const ratio = (() => {
+      const v = clone.getAttribute("viewBox").split(/[\s,]+/).map(Number);
+      return v[2] > 0 && v[3] > 0 ? v[2] / v[3] : 1;
+    })();
+    const W = ratio >= 1 ? size : Math.max(1, Math.round(size * ratio)),
+      H = ratio >= 1 ? Math.max(1, Math.round(size / ratio)) : size;
+    clone.setAttribute("width", W);
+    clone.setAttribute("height", H);
+    clone.removeAttribute("style");
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = W * scale;
+        canvas.height = H * scale;
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png"));
+      } catch (e) {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src =
+      "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  });
+}
+
 function rasterize(scale, background, type, quality) {
   return new Promise((resolve, reject) => {
     if (!root) {
