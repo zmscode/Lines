@@ -77,6 +77,8 @@ struct GraphView: View {
 				nodeBorderRadius: 2, width: 168, height: 112, position: .bottomLeft
 			)
 			.floating(accent: Brand.accent)
+			// Clear of the lock at the lower left.
+			.padding(.leading, ToolPalette.width + 12)
 		}
 		.background(GraphNavigation(flow: flow))
 		.overlay(alignment: .topLeading) {

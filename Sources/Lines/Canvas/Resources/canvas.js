@@ -1197,9 +1197,14 @@ function visibleArea() {
   const h = Math.max(1, window.innerHeight - insets.top - insets.bottom);
   return { x: insets.left, y: insets.top, w, h };
 }
+let minimapShift = 0;
+function setMinimapShift(px) {
+  minimapShift = px || 0;
+  minimap.style.left = insets.left + 12 + minimapShift + "px";
+}
 function setInsets(left, right, top, bottom) {
   insets = { left, right, top, bottom };
-  minimap.style.left = left + 12 + "px";
+  minimap.style.left = left + 12 + minimapShift + "px";
   minimap.style.bottom = bottom + 12 + "px";
   if (!root) return;
   if (autoFit) {

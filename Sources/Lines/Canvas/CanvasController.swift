@@ -201,6 +201,14 @@ final class CanvasController {
 	}
 
 	/// Space covered by floating panels, so fitting and centring use what's left.
+	@ObservationIgnored private var minimapShift: CGFloat = -1
+	/// Moves the canvas minimap right, clear of controls at the lower left.
+	func setMinimapShift(_ shift: CGFloat) {
+		guard shift != minimapShift else { return }
+		minimapShift = shift
+		call("setMinimapShift(\(shift))")
+	}
+
 	func setInsets(left: CGFloat, right: CGFloat, top: CGFloat, bottom: CGFloat) {
 		let key = "\(left), \(right), \(top), \(bottom)"
 		guard key != lastInsets else { return }
@@ -395,6 +403,7 @@ final class CanvasController {
 					.flatMap(CanvasBackground.init(rawValue:)) ?? .checkerboard)
 			setAccentColor(NSColor(Brand.accent))
 			if !lastInsets.isEmpty { call("setInsets(\(lastInsets))") }
+			if minimapShift > 0 { call("setMinimapShift(\(minimapShift))") }
 			if documentFrameShown { call("showDocumentFrame(true)") }
 			if !isEditing { call("setEditable(false)") }
 			if layout == .graph { call("setCanvasBehind(true)") }

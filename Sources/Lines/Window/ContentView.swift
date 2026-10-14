@@ -181,6 +181,8 @@ struct ContentView: View {
 			top: 0,
 			bottom: controller.showsTimeline && controller.layout == .canvas
 				? TimelinePanel.height + m * 2 : 0)
+		// The minimap starts beside the lock when the palette isn't above it.
+		controller.setMinimapShift(paletteSpace > 0 ? 0 : ToolPalette.width + m)
 	}
 
 	// MARK: Editor
@@ -300,6 +302,28 @@ struct ContentView: View {
 					.transition(.move(edge: .bottom).combined(with: .opacity))
 			}
 		}
+		.overlay(alignment: .bottomLeading) {
+			// The lock, at the canvas's lower left (the minimap sits beside it).
+			FloatingStrip {
+				Button(
+					controller.isEditing ? "Lock" : "Unlock",
+					systemImage: controller.isEditing ? "lock.open" : "lock.fill"
+				) {
+					controller.isEditing.toggle()
+				}
+				.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: !controller.isEditing))
+				.contentTransition(.symbolEffect(.replace))
+				.help(
+					controller.isEditing
+						? "Lock to preview without changing anything (⇧⌘L)"
+						: "Unlock to edit (⇧⌘L)")
+			}
+			.padding(Self.panelMargin)
+			.padding(.leading, leadingPanelsSpace)
+			.padding(
+				.bottom,
+				controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0)
+		}
 		.overlay(alignment: .top) {
 			if !controller.isEditing {
 				PreviewBadge { controller.isEditing = true }
@@ -387,18 +411,6 @@ struct ContentView: View {
 			}
 		}
 
-		ToolbarItem(placement: .primaryAction) {
-			Toggle(isOn: $controller.isEditing) {
-				Label(
-					controller.isEditing ? "Editing" : "Locked",
-					systemImage: controller.isEditing ? "lock.open" : "lock.fill")
-			}
-			.help(
-				controller.isEditing
-					? "Lock to preview without changing anything (⇧⌘L)"
-					: "Unlock to edit (⇧⌘L)")
-		}
-		ToolbarSpacer(.fixed, placement: .primaryAction)
 		ToolbarItem(placement: .primaryAction) {
 			ExportButton(controller: controller, document: document)
 		}
