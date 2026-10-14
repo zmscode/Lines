@@ -12,9 +12,6 @@ final class CanvasController {
 	var selection: SelectionInfo?
 	var parseError: String?
 	var zoom: CGFloat = 1
-	var layout: EditorLayout = .canvas {
-		didSet { if layout != oldValue { call("setCanvasBehind(\(layout == .outline))") } }
-	}
 	var showsCode = false
 	var showsLayers = false
 	var showsInspector = false {
@@ -296,7 +293,6 @@ final class CanvasController {
 	var definitionEdit: (kind: String, name: String)?
 	/// Shows a clip path's or mask's shapes over the element that uses it, to edit directly.
 	func editOnCanvas(definition order: Int) {
-		layout = .canvas
 		call("editDefinitionOnCanvas(\(order))")
 	}
 	func endDefinitionEdit() { call("endDefinitionEdit(true)") }
@@ -561,7 +557,6 @@ final class CanvasController {
 			if minimapShift > 0 { call("setMinimapShift(\(minimapShift))") }
 			if documentFrameShown { call("showDocumentFrame(true)") }
 			if !isEditing { call("setEditable(false)") }
-			if layout == .outline { call("setCanvasBehind(true)") }
 			if showsInspector { call("setInspectorOpen(true)") }
 
 		case "changed":

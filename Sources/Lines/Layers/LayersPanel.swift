@@ -22,6 +22,7 @@ struct LayersPanel: View {
 	@State private var draggingResource: ResourceInfo?
 	@State private var dropTarget: DropTarget?
 	@State private var filesTargeted = false
+	@State private var filter = LayerFilter()
 
 	struct DropTarget: Equatable {
 		enum Zone { case above, below, inside }
@@ -33,6 +34,8 @@ struct LayersPanel: View {
 	struct Row: Identifiable {
 		var node: LayerNode
 		var depth: Int
+		/// Shown only because something inside it matches the filter.
+		var isContext = false
 		var id: String { node.id }
 	}
 
@@ -41,51 +44,62 @@ struct LayersPanel: View {
 	var body: some View {
 		let tree = LayerNode.build(Self.layerItems(controller.outline))
 		let index = LayerIndex(tree)
-		let rows = flatten(tree)
 		let animated = Set(
 			controller.outline.filter { AnimationTag.contains($0.tag) }.map(\.parent)
 				+ controller.outline.filter { !$0.cssAnimations.isEmpty }.map(\.order))
+		let rows = filter.isActive ? filtered(tree, animated: animated) : flatten(tree)
 		VStack(spacing: 0) {
+			if !controller.outline.isEmpty {
+				LayerFilterBar(
+					filter: $filter, resources: ResourceInfo.all(in: controller.outline),
+					matchCount: rows.count(where: { !$0.isContext }))
+			}
 			ScrollViewReader { proxy in
 				ScrollView {
-					LazyVStack(spacing: 1) {
-						ForEach(rows) { row in
-							LayerRowView(
-								row: row, controller: controller,
-								isExpanded: expanded.contains(row.id),
-								toggleExpanded: { toggle(row.id) }, renaming: $renaming,
-								dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
-								isAnimated: animated.contains(row.node.item.order)
-							)
-							.id(row.id)
-							.onDrag {
-								dragging = row.id
-								draggingResource = nil
-								return provider(for: row)
+					// One column: the layers, then Resources below them.
+					VStack(spacing: 0) {
+						LazyVStack(spacing: 1) {
+							ForEach(rows) { row in
+								LayerRowView(
+									row: row, controller: controller,
+									isExpanded: filter.isActive || expanded.contains(row.id),
+									toggleExpanded: { toggle(row.id) }, renaming: $renaming,
+									dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
+									isAnimated: animated.contains(row.node.item.order),
+									showResourceUsers: { filter.resourceID = $0 }
+								)
+								.id(row.id)
+								.onDrag {
+									dragging = row.id
+									draggingResource = nil
+									return provider(for: row)
+								}
+								.onDrop(
+									of: [.linesLayer],
+									delegate: RowDropDelegate(
+										row: row, index: index, dragging: $dragging,
+										draggingResource: $draggingResource,
+										target: $dropTarget,
+										perform: perform,
+										apply: { resource in
+											guard let attribute = resource.kind.attribute else {
+												return
+											}
+											controller.setReference(
+												order: row.node.item.order, attribute: attribute,
+												targetOrder: resource.order)
+										})
+								)
 							}
-							.onDrop(
-								of: [.linesLayer],
-								delegate: RowDropDelegate(
-									row: row, index: index, dragging: $dragging,
-									draggingResource: $draggingResource,
-									target: $dropTarget,
-									perform: perform,
-									apply: { resource in
-										guard let attribute = resource.kind.attribute else {
-											return
-										}
-										controller.setReference(
-											order: row.node.item.order, attribute: attribute,
-											targetOrder: resource.order)
-									})
-							)
+						}
+						.padding(.horizontal, 6)
+						.padding(.vertical, 4)
+
+						if !filter.isActive {
+							ResourcesSection(
+								controller: controller, draggingResource: $draggingResource)
 						}
 					}
-					.padding(.horizontal, 6)
-					.padding(.vertical, 4)
-
-					ResourcesSection(
-						controller: controller, draggingResource: $draggingResource)
 				}
 				.onChange(of: controller.selection?.order) { _, order in
 					if let path = revealSelection(order) {
@@ -98,6 +112,12 @@ struct LayersPanel: View {
 					ContentUnavailableView(
 						"No Elements", systemImage: "square.3.layers.3d",
 						description: Text("Elements in the drawing appear here."))
+				} else if filter.isActive && rows.isEmpty {
+					ContentUnavailableView {
+						Label("No Matches", systemImage: "magnifyingglass")
+					} actions: {
+						Button("Clear Filter") { filter.clear() }
+					}
 				}
 			}
 			.overlay {
@@ -144,6 +164,17 @@ struct LayersPanel: View {
 			let row = Row(node: node, depth: depth)
 			guard expanded.contains(node.id) else { return [row] }
 			return [row] + flatten(node.children, depth: depth + 1)
+		}
+	}
+
+	/// The rows that match the filter, inside the groups that hold them
+	/// (shown dimmed, and opened, for context).
+	private func filtered(_ nodes: [LayerNode], depth: Int = 0, animated: Set<Int>) -> [Row] {
+		nodes.flatMap { node -> [Row] in
+			let inner = filtered(node.children, depth: depth + 1, animated: animated)
+			let matches = filter.matches(node.item, animated: animated)
+			guard matches || !inner.isEmpty else { return [] }
+			return [Row(node: node, depth: depth, isContext: !matches)] + inner
 		}
 	}
 
@@ -330,6 +361,8 @@ private struct LayerRowView: View {
 	@Binding var renaming: String?
 	var dropZone: LayersPanel.DropTarget.Zone?
 	var isAnimated = false
+	/// Filters the panel to what uses a resource, by its id.
+	var showResourceUsers: (String) -> Void = { _ in }
 
 	@State private var isHovered = false
 	@State private var draft = ""
@@ -397,7 +430,7 @@ private struct LayerRowView: View {
 					.offset(y: dropZone == .above ? -2 : 2)
 			}
 		}
-		.opacity(item.isHidden ? 0.6 : 1)
+		.opacity(row.isContext ? 0.45 : item.isHidden ? 0.6 : 1)
 		.contentShape(.rect)
 		.onTapGesture { controller.select(order: item.order) }
 		.onHover { hovering in
@@ -487,6 +520,15 @@ private struct LayerRowView: View {
 		Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") {
 			controller.select(order: item.order)
 			controller.reorder(.back)
+		}
+		let used = Array(Set(item.references.map(\.targetID))).sorted()
+		if !used.isEmpty {
+			Divider()
+			ForEach(used, id: \.self) { id in
+				Button("Show Everything Using \(id)", systemImage: "line.3.horizontal.decrease") {
+					showResourceUsers(id)
+				}
+			}
 		}
 		Divider()
 		Button("Copy", systemImage: "doc.on.doc") {

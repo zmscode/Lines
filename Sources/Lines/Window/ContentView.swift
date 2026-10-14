@@ -19,7 +19,6 @@ struct ContentView: View {
 	@AppStorage("canvasBackground") private var background: CanvasBackground = .checkerboard
 	@AppStorage(CanvasBackground.customColourKey) private var customColour = "#f2a65a"
 	@AppStorage(CanvasBackground.drawingOnlyKey) private var backgroundDrawingOnly = false
-	@AppStorage("defaultLayout") private var defaultLayout: EditorLayout = .canvas
 	@AppStorage("showsCodeByDefault") private var showsCodeByDefault = false
 	@AppStorage("opensFilesLocked") private var opensFilesLocked = true
 	@AppStorage("editorFontSize") private var fontSize: Double = 12
@@ -60,7 +59,6 @@ struct ContentView: View {
 				controller.resetHistory(to: document.openedText)
 				// Files open to look at; new drawings open ready to edit.
 				controller.isEditing = !(opensFilesLocked && document.configuration?.fileURL != nil)
-				controller.layout = defaultLayout
 				controller.showsCode = showsCodeByDefault
 				controller.showsInspector = savedShowsInspector
 				controller.undoManager = undoManager
@@ -109,10 +107,6 @@ struct ContentView: View {
 					controller.recordVersion(text, title: undoManager?.undoActionName)
 				}
 			}
-			.onChange(of: controller.layout) { _, layout in
-				if layout == .outline && isLoaded { closeSidePanels() }
-				updateInsets()
-			}
 			.onChange(of: controller.showsCode) { _, shows in
 				if shows && isLoaded { closeSidePanels() }
 				updateInsets()
@@ -150,14 +144,14 @@ struct ContentView: View {
 
 	/// Room taken by the tools palette on the canvas's leading edge.
 	private var paletteSpace: CGFloat {
-		controller.layout == .canvas && controller.isEditing
-			? ToolPalette.width + Self.panelMargin : 0
+		// Kept while locked too: the lock lives at the foot of this column.
+		ToolPalette.width + Self.panelMargin
 	}
 
 	/// The document's extents and resize handles show while the inspector is
 	/// showing the document (nothing selected).
 	private var documentFrameShown: Bool {
-		controller.showsInspector && controller.layout == .canvas
+		controller.showsInspector
 			&& (controller.selection?.isRoot ?? false)
 	}
 
@@ -177,7 +171,7 @@ struct ContentView: View {
 				+ (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
 			right: trailingPanelWidth > 0 ? trailingPanelWidth + m * 2 : 0,
 			top: 0,
-			bottom: controller.showsTimeline && controller.layout == .canvas
+			bottom: controller.showsTimeline
 				? TimelinePanel.height + m * 2 : 0)
 		// The minimap starts beside the lock when the palette isn't above it.
 		controller.setMinimapShift(paletteSpace > 0 ? 0 : ToolPalette.width + m)
@@ -212,36 +206,22 @@ struct ContentView: View {
 			.animation(panelMotion, value: controller.showsCode)
 	}
 
-	/// The canvas or graph fills the viewer; layers and the inspector float over it.
+	/// The canvas fills the viewer; layers and the inspector float over it.
 	private var viewer: some View {
 		ZStack {
 			canvas
-				.opacity(controller.layout == .outline ? 0 : 1)
-				.allowsHitTesting(controller.layout == .canvas)
-				.accessibilityHidden(controller.layout == .outline)
-			if controller.layout == .outline {
-				OutlineView(controller: controller, leadingInset: codeSpace)
-					.transition(.opacity)
-					.dropDestination(for: URL.self) { urls, _ in
-						controller.handleDroppedFiles(urls.filter(CanvasController.isSVG))
-					}
-			}
-			if controller.layout == .canvas {
-				CanvasControls(controller: controller)
-					.padding(
-						.bottom,
-						controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0
-					)
-					.padding(
-						.leading, leadingPanelsSpace
-					)
-					.padding(
-						.trailing,
-						trailingPanelWidth > 0 ? trailingPanelWidth + Self.panelMargin : 0)
-			}
+			CanvasControls(controller: controller)
+				.padding(
+					.bottom,
+					controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0
+				)
+				.padding(.leading, leadingPanelsSpace)
+				.padding(
+					.trailing,
+					trailingPanelWidth > 0 ? trailingPanelWidth + Self.panelMargin : 0)
 		}
 		.overlay(alignment: .topLeading) {
-			if controller.layout == .canvas && controller.isEditing {
+			if controller.isEditing {
 				ToolPalette(controller: controller)
 					.padding(Self.panelMargin)
 					.padding(.leading, codeSpace)
@@ -323,8 +303,9 @@ struct ContentView: View {
 							? "Lock to preview without changing anything (⇧⌘L)"
 							: "Unlock to edit (⇧⌘L)")
 				}
+				// It stays in the tools column, beside the panels, not under them.
 				.padding(Self.panelMargin)
-				.padding(.leading, leadingPanelsSpace)
+				.padding(.leading, codeSpace)
 			}
 		}
 		.overlay(alignment: .top) {
@@ -429,15 +410,6 @@ struct ContentView: View {
 				Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
 			}
 			.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
-		case "outline":
-			Toggle(
-				isOn: Binding(
-					get: { controller.layout == .outline },
-					set: { controller.layout = $0 ? .outline : .canvas })
-			) {
-				Label("Outline", systemImage: EditorLayout.outline.symbol)
-			}
-			.help(controller.layout == .outline ? "Show Canvas (⌘3)" : "Show Outline (⌘3)")
 		case "changes":
 			Toggle(isOn: $controller.showsChanges) {
 				Label("Changes", systemImage: "plusminus")

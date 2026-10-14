@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The order of a toolbar's items and which are shown, stored as a string
-/// ("layers,inspector,|1,code,!outline") so it fits in @AppStorage. Items
+/// ("layers,inspector,|1,code,!changes") so it fits in @AppStorage. Items
 /// starting with "|" are separators between groups; "!" hides an item.
 struct ToolbarLayout: Equatable {
 	struct Item: Identifiable, Hashable {
@@ -86,7 +86,7 @@ struct ToolbarLayout: Equatable {
 
 	static let windowKey = "toolbar.layout"
 	static let windowDefaults = [
-		"layers", "inspector", "|1", "code", "outline", "changes", "timeline",
+		"layers", "inspector", "|1", "code", "changes", "timeline",
 	]
 
 	static let paletteKey = "palette.layout"
@@ -109,7 +109,6 @@ struct ToolbarLayout: Equatable {
 		case "layers": return ("Layers", "square.3.layers.3d")
 		case "inspector": return ("Inspector", "slider.horizontal.3")
 		case "code": return ("Code", "chevron.left.forwardslash.chevron.right")
-		case "outline": return ("Outline", EditorLayout.outline.symbol)
 		case "changes": return ("Changes", "plusminus")
 		case "timeline": return ("Animations", "film.stack")
 		case "effects": return ("Shadow & Blur", "shadow")

@@ -73,9 +73,6 @@ struct SettingsEntry: Identifiable, Hashable {
 			title: "Default app for SVG files", pane: .general,
 			keywords: ["open with", "finder", "double-click"]),
 		SettingsEntry(
-			title: "Open new windows in", pane: .windows,
-			keywords: ["layout", "canvas", "outline", "table"]),
-		SettingsEntry(
 			title: "Show code alongside", pane: .windows, keywords: ["source", "editor", "panel"]),
 		SettingsEntry(
 			title: "Open files locked", pane: .windows,
@@ -92,7 +89,7 @@ struct SettingsEntry: Identifiable, Hashable {
 		SettingsEntry(
 			title: "Window toolbar buttons", pane: .toolbar,
 			keywords: [
-				"reorder", "layers", "inspector", "code", "outline", "changes", "animations",
+				"reorder", "layers", "inspector", "code", "changes", "animations",
 				"hide",
 			]),
 		SettingsEntry(
@@ -362,24 +359,18 @@ private struct DefaultAppSection: View {
 // MARK: - Windows
 
 private struct WindowSettings: View {
-	@AppStorage("defaultLayout") private var defaultLayout: EditorLayout = .canvas
 	@AppStorage("showsCodeByDefault") private var showsCodeByDefault = false
 	@AppStorage("opensFilesLocked") private var opensFilesLocked = true
 
 	var body: some View {
 		Form {
 			Section {
-				Picker("Open in", selection: $defaultLayout) {
-					ForEach(EditorLayout.allCases) { layout in
-						Label(layout.title, systemImage: layout.symbol).tag(layout)
-					}
-				}
 				Toggle("Show code alongside", isOn: $showsCodeByDefault)
 			} header: {
 				Text("New Windows")
 			} footer: {
 				SettingsFootnote(
-					"Canvas shows the drawing; Graph shows its elements as connected nodes. Showing code opens the source panel on the left of each new window. You can switch either at any time (⌘2, ⌘3)."
+					"Showing code opens the source panel on the left of each new window. You can switch it at any time (⌘2)."
 				)
 			}
 			Section {

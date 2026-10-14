@@ -131,15 +131,6 @@ private struct ViewCommands: Commands {
 			}
 			.keyboardShortcut("i", modifiers: [.command, .option])
 			Button(
-				controller?.layout == .outline ? "Show Canvas" : "Show Outline",
-				systemImage: controller?.layout == .outline
-					? EditorLayout.canvas.symbol : EditorLayout.outline.symbol
-			) {
-				controller?.layout = controller?.layout == .outline ? .canvas : .outline
-			}
-			.keyboardShortcut("3", modifiers: .command)
-			.disabled(controller == nil)
-			Button(
 				controller?.isEditing == false ? "Unlock Editing" : "Lock Editing",
 				systemImage: controller?.isEditing == false ? "lock.open" : "lock"
 			) {

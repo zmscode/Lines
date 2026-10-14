@@ -14,16 +14,6 @@
         }
       }
     },
-    "%@ %@%@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ %2$@%3$@"
-          }
-        }
-      }
-    },
     "%@ appearance" : {
 
     },
@@ -82,13 +72,13 @@
     "%lld fonts" : {
 
     },
+    "%lld matches" : {
+
+    },
     "%lld points" : {
 
     },
     "%lld pt" : {
-
-    },
-    "%lld shown" : {
 
     },
     "%lld%%" : {
@@ -154,9 +144,6 @@
     "All Attributes" : {
 
     },
-    "All Elements" : {
-
-    },
     "Animated" : {
 
     },
@@ -167,9 +154,6 @@
 
     },
     "Animations" : {
-
-    },
-    "Anything" : {
 
     },
     "Appearance" : {
@@ -194,9 +178,6 @@
 
     },
     "Back to Start" : {
-
-    },
-    "Back to the order elements appear in the file" : {
 
     },
     "Background" : {
@@ -251,6 +232,12 @@
 
     },
     "Circle" : {
+
+    },
+    "Clear Filter" : {
+
+    },
+    "Clear the search and filters" : {
 
     },
     "Click or drag to scrub" : {
@@ -322,6 +309,16 @@
     "Delete" : {
 
     },
+    "Delete %lld Version%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete %1$lld Version%2$@"
+          }
+        }
+      }
+    },
     "Delete Animation" : {
 
     },
@@ -341,9 +338,6 @@
 
     },
     "Direction" : {
-
-    },
-    "Document Order" : {
 
     },
     "Done" : {
@@ -428,9 +422,6 @@
         }
       }
     },
-    "Effects" : {
-
-    },
     "Elements in the drawing appear here." : {
 
     },
@@ -473,13 +464,19 @@
     "Fade In" : {
 
     },
-    "Fill" : {
-
-    },
     "Fills just the drawing's area, with the window colour around it." : {
 
     },
     "Filter" : {
+
+    },
+    "Filter by kind, or by what uses a resource" : {
+
+    },
+    "Filters" : {
+
+    },
+    "Find layers by name, type or colour" : {
 
     },
     "Finish editing (Esc)" : {
@@ -599,6 +596,9 @@
     "Image" : {
 
     },
+    "Images" : {
+
+    },
     "In This Drawing" : {
 
     },
@@ -653,7 +653,7 @@
     "Make Lines the Default" : {
 
     },
-    "Make this version current again (undoable)" : {
+    "Make this version current again; newer versions stay on a branch (undoable)" : {
 
     },
     "Marker" : {
@@ -722,6 +722,9 @@
     "No Elements" : {
 
     },
+    "No Matches" : {
+
+    },
     "No app" : {
 
     },
@@ -729,9 +732,6 @@
 
     },
     "None" : {
-
-    },
-    "Nothing Matches" : {
 
     },
     "Nothing to Inspect" : {
@@ -761,9 +761,6 @@
     "Open files locked, for preview" : {
 
     },
-    "Open in" : {
-
-    },
     "Opens SVG files" : {
 
     },
@@ -771,9 +768,6 @@
 
     },
     "Other Installed Font…" : {
-
-    },
-    "Outline" : {
 
     },
     "Pad" : {
@@ -867,6 +861,9 @@
 
     },
     "Remove resources nothing uses" : {
+
+    },
+    "Remove these versions from the history (the drawing goes back if Now is one of them)" : {
 
     },
     "Remove this shape" : {
@@ -977,10 +974,7 @@
     "Show" : {
 
     },
-    "Show Canvas" : {
-
-    },
-    "Show Canvas (⌘3)" : {
+    "Show All" : {
 
     },
     "Show Changes" : {
@@ -998,6 +992,9 @@
     "Show Element" : {
 
     },
+    "Show Everything Using %@" : {
+
+    },
     "Show Inspector" : {
 
     },
@@ -1013,12 +1010,6 @@
     "Show Layers (⌘1)" : {
 
     },
-    "Show Outline" : {
-
-    },
-    "Show Outline (⌘3)" : {
-
-    },
     "Show Timeline" : {
 
     },
@@ -1031,22 +1022,10 @@
     "Show code alongside" : {
 
     },
-    "Show in Inspector" : {
-
-    },
-    "Show on Canvas" : {
-
-    },
-    "Show only elements that use a particular gradient, clip, mask or filter" : {
-
-    },
-    "Show only some kinds of element" : {
-
-    },
     "Show the shapes over the element, to move and resize them directly (Esc when done)" : {
 
     },
-    "Show this version on the canvas" : {
+    "Show this version on the canvas (⌘-click or ⇧-click to pick several)" : {
 
     },
     "Show what uses it" : {
@@ -1095,9 +1074,6 @@
 
     },
     "Stop and return to the start" : {
-
-    },
-    "Stroke" : {
 
     },
     "Style" : {
@@ -1154,9 +1130,6 @@
     "Triangle" : {
 
     },
-    "Try another search or filter." : {
-
-    },
     "Type" : {
 
     },
@@ -1196,16 +1169,10 @@
     "Used by %@" : {
 
     },
-    "Uses %@" : {
-
-    },
-    "Uses Any Resource" : {
+    "Using" : {
 
     },
     "Value" : {
-
-    },
-    "View" : {
 
     },
     "Weight" : {
@@ -1257,9 +1224,6 @@
 
     },
     "unused" : {
-
-    },
-    "—" : {
 
     },
     "−%lld" : {

@@ -1,25 +1,5 @@
 import SwiftUI
 
-/// What fills the main area of the window. The code and layers panels are
-/// shown alongside either one.
-enum EditorLayout: String, CaseIterable, Identifiable {
-	// "outline" replaced the old node graph; a saved "graph" falls back to the canvas.
-	case canvas, outline
-	var id: String { rawValue }
-	var title: String {
-		switch self {
-		case .canvas: String(localized: "Canvas")
-		case .outline: String(localized: "Outline")
-		}
-	}
-	var symbol: String {
-		switch self {
-		case .canvas: "photo"
-		case .outline: "tablecells"
-		}
-	}
-}
-
 enum CanvasBackground: String, CaseIterable, Identifiable {
 	// A saved "transparent" (no longer offered) falls back to the default.
 	case checkerboard, white, grey, black, custom, window
