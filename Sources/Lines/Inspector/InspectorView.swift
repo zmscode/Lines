@@ -197,13 +197,8 @@ private struct ElementInspector: View {
 					}
 				}
 			}
-			if tag == "rect" {
-				labelled("Corner Radius") {
-					ScrubField(
-						label: "Radius", systemImage: "app",
-						value: selection.value("rx").flatMap(Double.init) ?? 0, range: 0...100_000
-					) { controller.setAttribute("rx", ScrubField.format($0), coalesce: true) }
-				}
+			if let radii = CornerRadiusRow.radii(of: selection) {
+				CornerRadiusRow(radii: radii, controller: controller)
 			}
 			OpacitySlider(
 				value: selection.value("opacity").flatMap(Double.init) ?? 1, controller: controller)
@@ -634,4 +629,85 @@ private struct AllAttributes: View {
 
 extension Array {
 	subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
+}
+
+/// Corner radius for rectangles: one value, or (unlinked) one per corner.
+private struct CornerRadiusRow: View {
+	var radii: [Double]
+	var controller: CanvasController
+
+	@AppStorage("inspector.linkCorners") private var linked = true
+
+	private var isUniform: Bool { radii.allSatisfy { abs($0 - radii[0]) < 0.01 } }
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 8) {
+			HStack {
+				Text("Corner Radius").foregroundStyle(.secondary)
+				Spacer()
+				if linked && isUniform {
+					ScrubField(
+						label: "Radius", systemImage: "app", value: radii[0], range: 0...100_000
+					) {
+						controller.setCornerRadii(Array(repeating: $0, count: 4))
+					}
+					.frame(width: 116)
+				}
+				Button(
+					linked ? "Set Each Corner" : "Same for All Corners",
+					systemImage: linked ? "link" : "square.dashed"
+				) {
+					linked.toggle()
+					// Linking makes all corners match the first.
+					if linked && !isUniform {
+						controller.setCornerRadii(Array(repeating: radii[0], count: 4))
+					}
+				}
+				.buttonStyle(.icon(size: 24, selected: !linked))
+				.help(
+					linked
+						? "Set each corner separately (or Option-drag a corner knob on the canvas)"
+						: "Use one radius for every corner")
+			}
+			if !linked || !isUniform {
+				Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+					GridRow {
+						field(0, "↖︎")
+						field(1, "↗︎")
+					}
+					GridRow {
+						field(3, "↙︎")
+						field(2, "↘︎")
+					}
+				}
+			}
+		}
+	}
+
+	private func field(_ corner: Int, _ symbol: String) -> some View {
+		let names = ["Top Left", "Top Right", "Bottom Right", "Bottom Left"]
+		return ScrubField(label: symbol, value: radii[corner], range: 0...100_000) { value in
+			var new = radii
+			new[corner] = value
+			controller.setCornerRadii(new)
+		}
+		.help("\(names[corner]) radius")
+	}
+
+	/// The selection's radii, if it's a rectangle (or a rectangle with its own corners).
+	static func radii(of selection: SelectionInfo) -> [Double]? {
+		switch selection.tag {
+		case "rect":
+			let r = (selection.value("rx") ?? selection.value("ry")).flatMap(Double.init) ?? 0
+			return Array(repeating: r, count: 4)
+		case "path":
+			guard let corners = selection.value("data-lines-corners") else { return nil }
+			let values = corners.split(whereSeparator: { $0 == " " || $0 == "," }).compactMap {
+				Double($0)
+			}
+			return values.count == 4 ? values : nil
+		default:
+			return nil
+		}
+	}
 }

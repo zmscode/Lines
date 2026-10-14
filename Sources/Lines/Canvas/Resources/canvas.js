@@ -4,10 +4,15 @@ const XLINK = "http://www.w3.org/1999/xlink";
 const host = document.getElementById("host");
 const selBox = document.getElementById("sel");
 // The corner-radius knob for a selected rectangle (see Corner radius below).
-const radiusKnob = document.createElement("div");
-radiusKnob.id = "radius-knob";
-radiusKnob.title = "Drag to change the corner radius";
-document.body.appendChild(radiusKnob);
+// Top left, top right, bottom right, bottom left.
+const radiusKnobs = [0, 1, 2, 3].map((corner) => {
+  const k = document.createElement("div");
+  k.className = "radius-knob";
+  k.dataset.corner = corner;
+  k.title = "Drag to round the corners (Option rounds just this one)";
+  document.body.appendChild(k);
+  return k;
+});
 const hoverBox = document.getElementById("hover");
 const post = (m) => window.webkit.messageHandlers.bridge.postMessage(m);
 
@@ -362,7 +367,7 @@ function updateOverlay() {
           )
         : null,
     );
-    radiusKnob.style.display = "none";
+    hideRadiusKnobs();
     return;
   }
   place(selBox, anim ? selected.parentNode : selected);
@@ -507,76 +512,168 @@ host.addEventListener("contextmenu", (e) => {
 
 let radiusDrag = null;
 
-function rectGeometry(el) {
-  const n = (a) => parseFloat(el.getAttribute(a)) || 0;
-  const w = n("width"),
-    h = n("height");
-  const rxAttr = el.getAttribute("rx"),
-    ryAttr = el.getAttribute("ry");
-  const rx = rxAttr != null ? n("rx") : ryAttr != null ? n("ry") : 0;
-  return { x: n("x"), y: n("y"), w, h, rx: Math.min(rx, w / 2, h / 2) };
+// Rectangles keep one radius (rx). Different radii per corner turn the
+// rectangle into a path that remembers its box and radii in data-lines-*
+// attributes, so it stays editable; equal radii turn it back into a <rect>.
+const CORNER_RECT = "data-lines-rect";
+const CORNER_RADII = "data-lines-corners";
+
+function cornerInfo(el) {
+  if (!el) return null;
+  if (el.localName === "rect") {
+    const n = (a) => parseFloat(el.getAttribute(a)) || 0;
+    const w = n("width"),
+      h = n("height");
+    const rxAttr = el.getAttribute("rx"),
+      ryAttr = el.getAttribute("ry");
+    const r = Math.min(rxAttr != null ? n("rx") : ryAttr != null ? n("ry") : 0, w / 2, h / 2);
+    return { x: n("x"), y: n("y"), w, h, radii: [r, r, r, r] };
+  }
+  if (el.localName === "path" && el.hasAttribute(CORNER_RECT)) {
+    const [x, y, w, h] = el.getAttribute(CORNER_RECT).split(/[\s,]+/).map(Number);
+    const radii = (el.getAttribute(CORNER_RADII) || "0 0 0 0").split(/[\s,]+/).map(Number);
+    if ([x, y, w, h].some((v) => !isFinite(v))) return null;
+    return { x, y, w, h, radii: [0, 1, 2, 3].map((i) => radii[i] || 0) };
+  }
+  return null;
+}
+
+function roundedRectPath({ x, y, w, h, radii }) {
+  const m = Math.min(w, h) / 2;
+  const [tl, tr, br, bl] = radii.map((r) => Math.max(0, Math.min(r, m)));
+  const R = round;
+  const arc = (r, ex, ey) => (r ? `A${R(r)} ${R(r)} 0 0 1 ${R(ex)} ${R(ey)}` : `L${R(ex)} ${R(ey)}`);
+  return [
+    `M${R(x + tl)} ${R(y)}`,
+    `H${R(x + w - tr)}`,
+    arc(tr, x + w, y + tr),
+    `V${R(y + h - br)}`,
+    arc(br, x + w - br, y + h),
+    `H${R(x + bl)}`,
+    arc(bl, x, y + h - bl),
+    `V${R(y + tl)}`,
+    arc(tl, x + tl, y),
+    "Z",
+  ].join(" ");
+}
+
+// Writes a box and radii back as a <rect> (all equal) or a corner path,
+// replacing the element if its kind changes. Returns the element now in place.
+function writeCorners(el, info) {
+  const equal = info.radii.every((r) => Math.abs(r - info.radii[0]) < 0.01);
+  const wantTag = equal ? "rect" : "path";
+  let target = el;
+  if (el.localName !== wantTag) {
+    target = document.createElementNS(NS, wantTag);
+    const skip = new Set(["x", "y", "width", "height", "rx", "ry", "d", CORNER_RECT, CORNER_RADII]);
+    for (const a of Array.from(el.attributes))
+      if (!skip.has(a.name)) target.setAttributeNS(a.namespaceURI, a.name, a.value);
+    while (el.firstChild) target.appendChild(el.firstChild); // titles, animations
+    el.parentNode.replaceChild(target, el);
+    if (selected === el) selected = target;
+    extras = extras.map((e) => (e === el ? target : e));
+  }
+  const { x, y, w, h } = info;
+  if (equal) {
+    target.setAttribute("x", round(x));
+    target.setAttribute("y", round(y));
+    target.setAttribute("width", round(w));
+    target.setAttribute("height", round(h));
+    const r = round(Math.min(info.radii[0], w / 2, h / 2));
+    if (r > 0) target.setAttribute("rx", r);
+    else target.removeAttribute("rx");
+    target.removeAttribute("ry");
+  } else {
+    target.setAttribute(CORNER_RECT, [x, y, w, h].map(round).join(" "));
+    target.setAttribute(CORNER_RADII, info.radii.map(round).join(" "));
+    target.setAttribute("d", roundedRectPath(info));
+  }
+  return target;
+}
+
+// From the inspector: radii for the selected rectangle, corner by corner.
+function setCornerRadii(tl, tr, br, bl) {
+  const info = cornerInfo(selected);
+  if (!info) return;
+  info.radii = [tl, tr, br, bl].map((v) => Math.max(0, +v || 0));
+  writeCorners(selected, info);
+  updateOverlay();
+  commit("Change Corner Radius", "corners");
+}
+
+function hideRadiusKnobs() {
+  for (const k of radiusKnobs) k.style.display = "none";
 }
 
 function updateRadiusKnob() {
   const el = selected;
-  const show = editable && el && el.localName === "rect" && extras.length === 0 && el.getScreenCTM;
-  if (!show) {
-    radiusKnob.style.display = "none";
+  const info = editable && el && extras.length === 0 ? cornerInfo(el) : null;
+  const m = info && el.getScreenCTM && el.getScreenCTM();
+  if (!info || !m || !info.w || !info.h) {
+    hideRadiusKnobs();
     return;
   }
-  const g = rectGeometry(el);
-  const m = el.getScreenCTM();
-  if (!m || !g.w || !g.h) {
-    radiusKnob.style.display = "none";
-    return;
-  }
-  // Inset at least 10 screen points so it can be grabbed at zero radius.
+  // Inset at least 10 screen points so they can be grabbed at zero radius.
   const scale = Math.hypot(m.a, m.b) || 1;
-  const inset = Math.min(Math.max(g.rx, 10 / scale), g.w / 2, g.h / 2);
-  const p = new DOMPoint(g.x + inset, g.y + inset).matrixTransform(m);
-  radiusKnob.style.display = "block";
-  radiusKnob.style.left = p.x + "px";
-  radiusKnob.style.top = p.y + "px";
+  const { x, y, w, h, radii } = info;
+  const inset = (r) => Math.min(Math.max(r, 10 / scale), w / 2, h / 2);
+  const points = [
+    [x + inset(radii[0]), y + inset(radii[0])],
+    [x + w - inset(radii[1]), y + inset(radii[1])],
+    [x + w - inset(radii[2]), y + h - inset(radii[2])],
+    [x + inset(radii[3]), y + h - inset(radii[3])],
+  ];
+  // Very small shapes keep one knob, so the box stays usable.
+  const tiny = w * scale < 60 || h * scale < 60;
+  radiusKnobs.forEach((k, i) => {
+    if (tiny && i > 0) {
+      k.style.display = "none";
+      return;
+    }
+    const p = new DOMPoint(points[i][0], points[i][1]).matrixTransform(m);
+    k.style.display = "block";
+    k.style.left = p.x + "px";
+    k.style.top = p.y + "px";
+  });
 }
 
-radiusKnob.addEventListener("pointerdown", (e) => {
-  if (!selected || e.button !== 0) return;
-  e.preventDefault();
-  e.stopPropagation();
-  radiusKnob.setPointerCapture(e.pointerId);
-  radiusDrag = { el: selected, id: e.pointerId, moved: false, hadRy: selected.hasAttribute("ry") };
-});
-radiusKnob.addEventListener("mousedown", (e) => e.stopPropagation());
-
-radiusKnob.addEventListener("pointermove", (e) => {
-  if (!radiusDrag || e.pointerId !== radiusDrag.id) return;
-  const el = radiusDrag.el;
-  const g = rectGeometry(el);
-  const p = toLocal(el, e.clientX, e.clientY);
-  // Along the corner's diagonal: the average of the two distances in.
-  let r = (p.x - g.x + (p.y - g.y)) / 2;
-  r = Math.max(0, Math.min(r, g.w / 2, g.h / 2));
-  if (e.shiftKey) r = Math.round(r);
-  radiusDrag.moved = true;
-  if (r < 0.01) {
-    el.removeAttribute("rx");
-    el.removeAttribute("ry");
-  } else {
-    el.setAttribute("rx", round(r));
-    if (radiusDrag.hadRy) el.setAttribute("ry", round(r));
-  }
-  updateOverlay();
-  reportSelection(true);
-});
-
-function endRadiusDrag(e) {
-  if (!radiusDrag || e.pointerId !== radiusDrag.id) return;
-  const moved = radiusDrag.moved;
-  radiusDrag = null;
-  if (moved) commit("Change Corner Radius");
+for (const knob of radiusKnobs) {
+  knob.addEventListener("pointerdown", (e) => {
+    if (!selected || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    knob.setPointerCapture(e.pointerId);
+    radiusDrag = { el: selected, id: e.pointerId, corner: +knob.dataset.corner, moved: false };
+  });
+  knob.addEventListener("mousedown", (e) => e.stopPropagation());
+  knob.addEventListener("pointermove", (e) => {
+    if (!radiusDrag || e.pointerId !== radiusDrag.id) return;
+    const info = cornerInfo(radiusDrag.el);
+    if (!info) return;
+    const { x, y, w, h } = info;
+    const p = toLocal(radiusDrag.el, e.clientX, e.clientY);
+    // Along the corner's diagonal: the average of the two distances in.
+    const c = radiusDrag.corner;
+    const dx = c === 0 || c === 3 ? p.x - x : x + w - p.x;
+    const dy = c === 0 || c === 1 ? p.y - y : y + h - p.y;
+    let r = Math.max(0, Math.min((dx + dy) / 2, w / 2, h / 2));
+    if (e.shiftKey) r = Math.round(r);
+    if (e.altKey) info.radii[c] = r;
+    else info.radii = [r, r, r, r];
+    radiusDrag.moved = true;
+    radiusDrag.el = writeCorners(radiusDrag.el, info);
+    updateOverlay();
+    reportSelection(true);
+  });
+  const end = (e) => {
+    if (!radiusDrag || e.pointerId !== radiusDrag.id) return;
+    const moved = radiusDrag.moved;
+    radiusDrag = null;
+    if (moved) commit("Change Corner Radius");
+  };
+  knob.addEventListener("pointerup", end);
+  knob.addEventListener("pointercancel", end);
 }
-radiusKnob.addEventListener("pointerup", endRadiusDrag);
-radiusKnob.addEventListener("pointercancel", endRadiusDrag);
 
 // MARK: Marquee — drag on empty canvas to select everything it touches.
 
@@ -1477,9 +1574,15 @@ const GEOMETRY = {
 };
 let xf = null;
 
+// The attributes that hold an element's geometry; corner paths keep their box.
+function geometryKeys(el) {
+  if (el.localName === "path" && el.hasAttribute(CORNER_RECT)) return ["d", CORNER_RECT, CORNER_RADII];
+  return GEOMETRY[el.localName];
+}
+
 function snapshotShape(el) {
   const attrs = {};
-  for (const a of GEOMETRY[el.localName] || []) attrs[a] = el.getAttribute(a);
+  for (const a of geometryKeys(el) || []) attrs[a] = el.getAttribute(a);
   return { attrs, transform: el.getAttribute("transform") };
 }
 function restoreShape(el, snap) {
@@ -1492,7 +1595,7 @@ function restoreShape(el, snap) {
 }
 // Attribute edits are only exact when the element isn't rotated or skewed.
 function editsAttributes(el, snap) {
-  if (!GEOMETRY[el.localName]) return false;
+  if (!geometryKeys(el)) return false;
   const t = snap.transform || "";
   return !t.trim() || /^\s*translate\([^)]*\)\s*$/i.test(t);
 }
@@ -1516,6 +1619,27 @@ function scaleAround(el, snap, sx, sy, ax, ay) {
     const mx = (v) => round(a.x + (parseFloat(v || 0) - a.x) * sx);
     const my = (v) => round(a.y + (parseFloat(v || 0) - a.y) * sy);
     const g = snap.attrs;
+    if (el.localName === "path") {
+      // A rectangle with its own corner radii: scale the box, keep it a rectangle.
+      const info = cornerInfo(el);
+      if (info) {
+        let x = mx(info.x),
+          y = my(info.y);
+        let w = info.w * sx,
+          h = info.h * sy;
+        if (w < 0) {
+          x += w;
+          w = -w;
+        }
+        if (h < 0) {
+          y += h;
+          h = -h;
+        }
+        const k = Math.min(Math.abs(sx), Math.abs(sy));
+        writeCorners(el, { x, y, w, h, radii: info.radii.map((r) => r * k) });
+      }
+      return;
+    }
     switch (el.localName) {
       case "rect":
       case "image":

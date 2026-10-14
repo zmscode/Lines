@@ -351,7 +351,7 @@ body.preview.over-link #host * {
 }
 
 /* The corner-radius knob inside a selected rectangle. */
-#radius-knob {
+.radius-knob {
 	position: fixed;
 	display: none;
 	width: 9px;
@@ -365,6 +365,6 @@ body.preview.over-link #host * {
 	cursor: default;
 	z-index: 4;
 }
-#radius-knob:hover {
+.radius-knob:hover {
 	background: var(--accent);
 }

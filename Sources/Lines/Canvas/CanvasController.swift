@@ -218,6 +218,11 @@ final class CanvasController {
 		call("addDefinitionShape(\(order), \(js(kind)))")
 	}
 	func invertMask(order: Int) { call("invertMask(\(order))") }
+	/// Corner radii for the selected rectangle: top left, top right, bottom right, bottom left.
+	func setCornerRadii(_ radii: [Double]) {
+		guard radii.count == 4 else { return }
+		call("setCornerRadii(\(radii.map { "\($0)" }.joined(separator: ", ")))")
+	}
 
 	// MARK: Animation
 
