@@ -16,7 +16,8 @@ struct ContentView: View {
 	@AppStorage("showsCodeByDefault") private var showsCodeByDefault = false
 	@AppStorage("editorFontSize") private var fontSize: Double = 12
 	@AppStorage("wrapsLines") private var wrapsLines = true
-	@AppStorage("syntaxTheme") private var themeName = SyntaxTheme.automaticName
+	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
+	@AppStorage(SyntaxTheme.lightKey) private var lightTheme = SyntaxTheme.defaultLight
 
 	private var isTransparent: Bool { background == .transparent && controller.layout == .canvas }
 
@@ -30,6 +31,7 @@ struct ContentView: View {
 			.background(WindowTransparency(isTransparent: isTransparent))
 			// A see-through window would otherwise take the toolbar with it.
 			.toolbarBackgroundVisibility(isTransparent ? .visible : .automatic, for: .windowToolbar)
+			.tint(Brand.accent)
 			.toolbar(id: "editor") { toolbar }
 			.toolbarRole(.editor)
 			.focusedSceneValue(controller)
@@ -87,7 +89,8 @@ struct ContentView: View {
 			if controller.showsCode {
 				CodePanel(
 					document: document, controller: controller, fontSize: fontSize,
-					wrapsLines: wrapsLines, theme: SyntaxTheme.named(themeName)
+					wrapsLines: wrapsLines,
+					theme: SyntaxTheme.pair(light: lightTheme, dark: darkTheme)
 				)
 				.frame(width: codeWidth)
 				SplitDivider(width: $codeWidth)

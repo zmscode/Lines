@@ -199,7 +199,9 @@ struct SourceEditor: NSViewRepresentable {
 		) {
 			guard editedMask.contains(.editedCharacters) else { return }
 			let size = fontSize
-			let theme = theme ?? .automatic
+			let theme =
+				theme
+				?? SyntaxTheme.pair(light: SyntaxTheme.defaultLight, dark: SyntaxTheme.defaultDark)
 			// Attribute changes must happen outside the editing transaction.
 			DispatchQueue.main.async {
 				Highlighter.highlight(textStorage, fontSize: size, theme: theme)

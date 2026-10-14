@@ -100,7 +100,7 @@ final class CanvasWebView: WKWebView {
 
 	override func viewDidChangeEffectiveAppearance() {
 		super.viewDidChangeEffectiveAppearance()
-		controller?.setAccentColor(.controlAccentColor)
+		controller?.setAccentColor(NSColor(Brand.accent))
 	}
 }
 

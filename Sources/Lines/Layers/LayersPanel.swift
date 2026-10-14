@@ -383,14 +383,14 @@ private struct LayerRowView: View {
 			Text(item.displayName)
 				.lineLimit(1)
 				.truncationMode(.middle)
-				.foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+				.foregroundStyle(.primary)
 				.simultaneousGesture(TapGesture(count: 2).onEnded { renaming = item.id })
 				.help(item.displayName)
 		}
 	}
 
 	private var rowFill: AnyShapeStyle {
-		if isSelected { return AnyShapeStyle(.tint) }
+		if isSelected { return AnyShapeStyle(.tint.opacity(0.2)) }
 		if isHovered { return AnyShapeStyle(.quaternary) }
 		return AnyShapeStyle(.clear)
 	}
@@ -454,7 +454,7 @@ private struct LayerRowView: View {
 
 	/// Tints the icon with the element's fill when it's a plain colour.
 	private var swatch: AnyShapeStyle {
-		if isSelected { return AnyShapeStyle(.white) }
+		if isSelected { return AnyShapeStyle(.tint) }
 		if let fill = item.fill, fill != "none", let colour = CSSColor.parse(fill) {
 			return AnyShapeStyle(colour)
 		}

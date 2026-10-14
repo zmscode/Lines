@@ -43,6 +43,7 @@ struct SettingsView: View {
 			}
 		}
 		.frame(width: 500)
+		.tint(Brand.accent)
 	}
 }
 
@@ -191,29 +192,23 @@ private struct EditorSettings: View {
 	@AppStorage("editorFontSize") private var fontSize: Double = 12
 	@AppStorage("wrapsLines") private var wrapsLines = true
 	@AppStorage("formatsAutomatically") private var formatsAutomatically = true
-	@AppStorage("syntaxTheme") private var themeName = SyntaxTheme.automaticName
+	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
+	@AppStorage(SyntaxTheme.lightKey) private var lightTheme = SyntaxTheme.defaultLight
 
 	var body: some View {
 		Form {
 			Section {
-				Picker("Theme", selection: $themeName) {
-					ForEach(SyntaxTheme.all) { theme in
-						Text(theme.name).tag(theme.name)
-					}
+				themePicker("Dark Theme", selection: $darkTheme, themes: SyntaxTheme.dark)
+				themePicker("Light Theme", selection: $lightTheme, themes: SyntaxTheme.light)
+				HStack(spacing: 10) {
+					preview(darkTheme, dark: true)
+					preview(lightTheme, dark: false)
 				}
-				ThemePreview(theme: SyntaxTheme.named(themeName), fontSize: fontSize)
-					.frame(height: 108)
-					.clipShape(.rect(cornerRadius: 8, style: .continuous))
-					.overlay {
-						RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(
-							.separator, lineWidth: 0.5)
-					}
-					.accessibilityHidden(true)
 			} header: {
-				Text("Colors")
+				Text("Colours")
 			} footer: {
 				Text(
-					"Themes match Xcode’s. When Xcode is installed, its themes and any custom ones you’ve made are listed too."
+					"The editor uses the dark theme in Dark Mode and the light theme in Light Mode. Themes come from their Zed extensions."
 				)
 				.font(.footnote)
 				.foregroundStyle(.secondary)
@@ -236,12 +231,48 @@ private struct EditorSettings: View {
 		.scrollDisabled(true)
 		.fixedSize(horizontal: false, vertical: true)
 	}
+
+	/// Themes grouped by family, like an editor's theme picker.
+	private func themePicker(
+		_ title: String, selection: Binding<String>, themes: [SyntaxTheme]
+	) -> some View {
+		Picker(title, selection: selection) {
+			let families = themes.reduce(into: [String]()) {
+				if !$0.contains($1.family) { $0.append($1.family) }
+			}
+			ForEach(families, id: \.self) { family in
+				Section(family) {
+					ForEach(themes.filter { $0.family == family }) { theme in
+						Text(theme.name).tag(theme.name)
+					}
+				}
+			}
+		}
+	}
+
+	private func preview(_ name: String, dark: Bool) -> some View {
+		VStack(alignment: .leading, spacing: 4) {
+			ThemePreview(
+				theme: SyntaxTheme.named(name) ?? SyntaxTheme.builtIn[0], fontSize: fontSize,
+				isDark: dark
+			)
+			.frame(height: 108)
+			.clipShape(.rect(cornerRadius: 8, style: .continuous))
+			.overlay {
+				RoundedRectangle(cornerRadius: 8, style: .continuous)
+					.strokeBorder(.separator, lineWidth: 0.5)
+			}
+			Text(dark ? "Dark" : "Light").font(.caption).foregroundStyle(.secondary)
+		}
+		.accessibilityHidden(true)
+	}
 }
 
 /// A read-only text view showing sample markup in the chosen theme.
 private struct ThemePreview: NSViewRepresentable {
 	var theme: SyntaxTheme
 	var fontSize: Double
+	var isDark: Bool
 
 	func makeNSView(context: Context) -> NSTextView {
 		let textView = NSTextView()
@@ -252,6 +283,7 @@ private struct ThemePreview: NSViewRepresentable {
 	}
 
 	func updateNSView(_ textView: NSTextView, context: Context) {
+		textView.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
 		textView.backgroundColor = theme.background
 		textView.textStorage?.setAttributedString(
 			Highlighter.sample(theme: theme, fontSize: fontSize))

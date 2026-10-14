@@ -271,7 +271,7 @@ final class CanvasController {
 			setBackground(
 				UserDefaults.standard.string(forKey: "canvasBackground")
 					.flatMap(CanvasBackground.init(rawValue:)) ?? .checkerboard)
-			setAccentColor(.controlAccentColor)
+			setAccentColor(NSColor(Brand.accent))
 			if !lastInsets.isEmpty { call("setInsets(\(lastInsets))") }
 
 		case "changed":

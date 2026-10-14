@@ -13,10 +13,10 @@ struct WelcomeView: View {
 
 	var body: some View {
 		VStack(spacing: 14) {
-			Image(systemName: isTargeted ? "arrow.down.doc" : "doc.richtext")
-				.font(.system(size: 52, weight: .light))
-				.foregroundStyle(isTargeted ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
-				.contentTransition(.symbolEffect(.replace))
+			Image(nsImage: NSApp.applicationIconImage)
+				.resizable()
+				.frame(width: 72, height: 72)
+				.scaleEffect(isTargeted ? 1.06 : 1)
 				.accessibilityHidden(true)
 
 			Text(message)
@@ -46,6 +46,7 @@ struct WelcomeView: View {
 		}
 		.animation(.smooth(duration: 0.15), value: isTargeted)
 		.containerBackground(.background, for: .window)
+		.tint(Brand.accent)
 		.dropDestination(for: URL.self) { urls, _ in
 			open(urls)
 		} isTargeted: {

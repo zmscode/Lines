@@ -29,11 +29,12 @@ done
 # can't run (Xcode's first-launch setup not done), render a static .icns with
 # Icon Composer's ictool instead.
 ICON=Support/AppIcon.icon
-if [ ! -f build/icon/AppIcon.icns ] || [ -n "$(find "$ICON" -newer build/icon/AppIcon.icns)" ]; then
+ASSETS=Support/Assets.xcassets   # AccentColor, matching the icon's orange
+if [ ! -f build/icon/AppIcon.icns ] || [ -n "$(find "$ICON" "$ASSETS" -newer build/icon/AppIcon.icns)" ]; then
   rm -rf build/icon
   mkdir -p build/icon
-  if ! xcrun actool "$ICON" --compile build/icon --platform macosx \
-      --minimum-deployment-target 27.0 --app-icon AppIcon \
+  if ! xcrun actool "$ICON" "$ASSETS" --compile build/icon --platform macosx \
+      --minimum-deployment-target 27.0 --app-icon AppIcon --accent-color AccentColor \
       --output-partial-info-plist build/icon/partial.plist >/dev/null 2>build/icon/actool.log; then
     echo "actool failed (see build/icon/actool.log); rendering a static icon with ictool" >&2
     rm -f build/icon/Assets.car

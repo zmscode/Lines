@@ -130,11 +130,11 @@ private struct PaletteButton: View {
 		Button(action: action) {
 			Image(systemName: symbol)
 				.font(.system(size: 15, weight: .medium))
-				.foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+				.foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
 				.frame(width: ToolPalette.buttonSize, height: ToolPalette.buttonSize)
 				.background(
 					isSelected
-						? AnyShapeStyle(.tint)
+						? AnyShapeStyle(.tint.opacity(0.18))
 						: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
 					in: .rect(cornerRadius: 8, style: .continuous)
 				)
