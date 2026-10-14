@@ -295,6 +295,7 @@ private struct LayerRowView: View {
 			.buttonStyle(.plain)
 			.opacity(row.node.children.isEmpty ? 0 : 1)
 			.disabled(row.node.children.isEmpty)
+			.help(isExpanded ? "Collapse" : "Expand")
 			.accessibilityLabel(isExpanded ? "Collapse" : "Expand")
 
 			Image(systemName: InspectorView.symbol(for: item.tag, isRoot: false))

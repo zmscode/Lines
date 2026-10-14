@@ -379,6 +379,7 @@ private struct TextCard: View {
 					}
 				}
 				.fixedSize()
+				.help("Font")
 				ScrubField(
 					label: "Size", systemImage: "textformat.size", value: fontSize,
 					range: 1...10_000
@@ -396,6 +397,7 @@ private struct TextCard: View {
 				}
 				.labelsHidden()
 				.fixedSize()
+				.help("Weight")
 
 				Picker(
 					"Alignment",
@@ -409,6 +411,7 @@ private struct TextCard: View {
 				}
 				.pickerStyle(.segmented)
 				.labelsHidden()
+				.help("Alignment: left, centre or right")
 			}
 		}
 	}
@@ -472,6 +475,7 @@ private struct DocumentInspector: View {
 					Label("Lock Aspect", systemImage: lockAspect ? "lock.fill" : "lock.open")
 				}
 				.toggleStyle(.button)
+				.help(lockAspect ? "Unlock Aspect Ratio" : "Lock Aspect Ratio")
 				Spacer()
 				Button("Fit to Content", systemImage: "arrow.down.right.and.arrow.up.left") {
 					controller.fitViewBoxToContent()
@@ -536,39 +540,67 @@ private struct AllAttributes: View {
 	@AppStorage("inspector.showsAttributes") private var expanded = false
 
 	var body: some View {
-		DisclosureGroup(isExpanded: $expanded) {
-			VStack(alignment: .leading, spacing: 8) {
-				ForEach(selection.attributes) { attribute in
-					HStack(spacing: 6) {
-						Text(attribute.name)
-							.font(.caption.monospaced())
-							.foregroundStyle(.secondary)
-							.frame(width: 84, alignment: .leading)
-							.lineLimit(1)
-							.truncationMode(.middle)
-							.help(attribute.name)
-						AttributeField(title: attribute.name, value: attribute.value) {
-							controller.setAttribute(attribute.name, $0)
-						}
-						.labelsHidden()
-						.textFieldStyle(.roundedBorder)
-						.font(.caption.monospaced())
-						Button("Remove \(attribute.name)", systemImage: "minus.circle") {
-							controller.removeAttribute(attribute.name)
-						}
-						.labelStyle(.iconOnly)
-						.buttonStyle(.borderless)
-						.foregroundStyle(.secondary)
-					}
+		VStack(alignment: .leading, spacing: 0) {
+			// A full-width header you can click anywhere on, not just the chevron.
+			Button {
+				withAnimation(.snappy(duration: 0.2)) { expanded.toggle() }
+			} label: {
+				HStack(spacing: 6) {
+					Image(systemName: "chevron.right")
+						.font(.caption2.weight(.bold))
+						.rotationEffect(.degrees(expanded ? 90 : 0))
+					Text("All Attributes")
+					Text("\(selection.attributes.count)")
+						.foregroundStyle(.tertiary)
+					Spacer()
 				}
-				NewAttributeRow(controller: controller)
-			}
-			.padding(.top, 8)
-		} label: {
-			Text("All Attributes")
 				.font(.caption.weight(.semibold))
 				.foregroundStyle(.secondary)
+				.padding(.horizontal, 4)
+				.padding(.vertical, 6)
+				.contentShape(.rect)
+			}
+			.buttonStyle(.plain)
+			.help(expanded ? "Hide the raw attributes" : "Show and edit the raw attributes")
+			.accessibilityLabel("All Attributes")
+			.accessibilityValue(expanded ? "Expanded" : "Collapsed")
+
+			if expanded {
+				attributeList
+					.transition(.opacity.combined(with: .move(edge: .top)))
+			}
 		}
+	}
+
+	private var attributeList: some View {
+		VStack(alignment: .leading, spacing: 8) {
+			ForEach(selection.attributes) { attribute in
+				HStack(spacing: 6) {
+					Text(attribute.name)
+						.font(.caption.monospaced())
+						.foregroundStyle(.secondary)
+						.frame(width: 84, alignment: .leading)
+						.lineLimit(1)
+						.truncationMode(.middle)
+						.help(attribute.name)
+					AttributeField(title: attribute.name, value: attribute.value) {
+						controller.setAttribute(attribute.name, $0)
+					}
+					.labelsHidden()
+					.textFieldStyle(.roundedBorder)
+					.font(.caption.monospaced())
+					Button("Remove \(attribute.name)", systemImage: "minus.circle") {
+						controller.removeAttribute(attribute.name)
+					}
+					.labelStyle(.iconOnly)
+					.buttonStyle(.borderless)
+					.foregroundStyle(.secondary)
+					.help("Remove \(attribute.name)")
+				}
+			}
+			NewAttributeRow(controller: controller)
+		}
+		.padding(.top, 8)
 	}
 }
 

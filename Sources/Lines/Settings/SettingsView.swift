@@ -128,6 +128,7 @@ private struct AppearanceTile: View {
 			}
 		}
 		.buttonStyle(.plain)
+		.help("\(option.title) appearance")
 		.accessibilityLabel(option.title)
 		.accessibilityAddTraits(isSelected ? .isSelected : [])
 	}

@@ -17,44 +17,55 @@ struct CodePanel: View {
 			wrapsLines: wrapsLines, theme: theme
 		)
 		.safeAreaInset(edge: .top, spacing: 0) {
-			HStack(spacing: 4) {
-				Label("Source", systemImage: "chevron.left.forwardslash.chevron.right")
-					.font(.callout.weight(.semibold))
+			// The same round glass buttons as the canvas, on the editor's own
+			// background, so the header reads as part of the editor.
+			HStack(spacing: 8) {
+				Text("Source")
+					.font(.headline)
 					.foregroundStyle(.secondary)
 				Spacer()
-				ControlGroup {
-					Button("Smaller Text", systemImage: "textformat.size.smaller") {
-						SourceEditor.adjustFontSize(by: -1)
-					}
-					Button("Larger Text", systemImage: "textformat.size.larger") {
-						SourceEditor.adjustFontSize(by: 1)
+				GlassEffectContainer(spacing: 6) {
+					HStack(spacing: 6) {
+						button("Smaller Text", "textformat.size.smaller", help: "Smaller text (⌘−)")
+						{
+							SourceEditor.adjustFontSize(by: -1)
+						}
+						button("Larger Text", "textformat.size.larger", help: "Larger text (⌘+)") {
+							SourceEditor.adjustFontSize(by: 1)
+						}
+						button("Format", "text.alignleft", help: "Re-indent the markup (⌃I)") {
+							controller.formatDocument()
+						}
+						button(
+							copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc",
+							help: copied ? "Copied" : "Copy all the source"
+						) {
+							NSPasteboard.general.clearContents()
+							NSPasteboard.general.setString(document.text, forType: .string)
+							withAnimation { copied = true }
+							Task {
+								try? await Task.sleep(for: .seconds(1.5))
+								withAnimation { copied = false }
+							}
+						}
+						.contentTransition(.symbolEffect(.replace))
 					}
 				}
-				.labelStyle(.iconOnly)
-				.fixedSize()
-				.help("Text size (pinch, or ⌘+ and ⌘− while editing)")
-				Button("Format", systemImage: "text.alignleft") { controller.formatDocument() }
-					.help("Re-indent the markup (⌃I)")
-				Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-				{
-					NSPasteboard.general.clearContents()
-					NSPasteboard.general.setString(document.text, forType: .string)
-					withAnimation { copied = true }
-					Task {
-						try? await Task.sleep(for: .seconds(1.5))
-						withAnimation { copied = false }
-					}
-				}
-				.help("Copy all the source")
-				.contentTransition(.symbolEffect(.replace))
 			}
-			.labelStyle(.titleAndIcon)
-			.buttonStyle(.borderless)
-			.controlSize(.small)
-			.padding(.horizontal, 10)
-			.padding(.vertical, 6)
-			.background(.bar)
-			.overlay(alignment: .bottom) { Divider() }
+			.padding(.leading, 14)
+			.padding(.trailing, 10)
+			.padding(.vertical, 8)
+			.background(Color(nsColor: theme.background))
 		}
+	}
+
+	private func button(
+		_ title: String, _ symbol: String, help: String, action: @escaping () -> Void
+	) -> some View {
+		Button(title, systemImage: symbol, action: action)
+			.labelStyle(.iconOnly)
+			.buttonStyle(.glass)
+			.buttonBorderShape(.circle)
+			.help(help)
 	}
 }

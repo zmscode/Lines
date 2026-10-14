@@ -112,6 +112,8 @@ struct OutlineItem: Identifiable, Equatable, Sendable {
 	var isHidden: Bool
 	var fill: String?
 	var references: [Reference]
+	/// Gradient stop colours, or a filter's effects, for the graph.
+	var preview: [String]? = nil
 
 	var id: String { path }
 
@@ -134,4 +136,62 @@ struct SelectionInfo: Equatable {
 	func value(_ name: String) -> String? {
 		attributes.first { $0.name == name }?.value
 	}
+}
+
+/// The canvas tools, as in the palette. Shape tools draw by dragging.
+enum CanvasTool: String, CaseIterable, Identifiable {
+	case select, hand, rect, roundedRect, ellipse, line, arrow, triangle, hexagon, star, text
+	var id: String { rawValue }
+
+	var title: String {
+		switch self {
+		case .select: "Select"
+		case .hand: "Hand"
+		case .rect: "Rectangle"
+		case .roundedRect: "Rounded Rectangle"
+		case .ellipse: "Ellipse"
+		case .line: "Line"
+		case .arrow: "Arrow"
+		case .triangle: "Triangle"
+		case .hexagon: "Hexagon"
+		case .star: "Star"
+		case .text: "Text"
+		}
+	}
+
+	var symbol: String {
+		switch self {
+		case .select: "cursorarrow"
+		case .hand: "hand.raised"
+		case .rect: "rectangle"
+		case .roundedRect: "app"
+		case .ellipse: "circle"
+		case .line: "line.diagonal"
+		case .arrow: "arrow.up.right"
+		case .triangle: "triangle"
+		case .hexagon: "hexagon"
+		case .star: "star"
+		case .text: "textformat"
+		}
+	}
+
+	/// The single-key shortcut while the canvas has focus.
+	var key: String? {
+		switch self {
+		case .select: "V"
+		case .hand: "H"
+		case .rect: "R"
+		case .ellipse: "O"
+		case .line: "L"
+		case .star: "P"
+		case .text: "T"
+		default: nil
+		}
+	}
+
+	/// Tools that share a palette slot: the slot shows the last one used.
+	static let groups: [[CanvasTool]] = [
+		[.select], [.hand], [.rect, .roundedRect], [.ellipse], [.line, .arrow],
+		[.star, .triangle, .hexagon], [.text],
+	]
 }

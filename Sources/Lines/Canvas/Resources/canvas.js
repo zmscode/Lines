@@ -306,7 +306,7 @@ function applyOffset(el, geo, dx, dy) {
 }
 
 host.addEventListener("mousedown", (e) => {
-  if (e.button !== 0 || !root) return;
+  if (e.button !== 0 || !root || tool !== "select") return;
   const t = pickTarget(e.target);
   let target = t;
   // Clicking inside an already-selected group moves the group; double-clicking drills in.
@@ -365,6 +365,16 @@ document.addEventListener("mouseleave", () => {
 
 document.addEventListener("keydown", (e) => {
   if (!root) return;
+  if (!e.metaKey && !e.ctrlKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) {
+    setTool(TOOL_KEYS[e.key.toLowerCase()], true);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === "Escape" && tool !== "select") {
+    setTool("select", true);
+    e.preventDefault();
+    return;
+  }
   if (e.key === "Escape") {
     selected ? selectParent() : select(null);
     e.preventDefault();
@@ -441,12 +451,16 @@ function setText(text) {
   commit("Change Text", "text");
 }
 
+// "stroke-width" → "Stroke Width", for undo names. Tolerates odd names like "data-".
 function label(name) {
-  return name
-    .replace(/^xlink:/, "")
-    .split("-")
-    .map((s) => s[0].toUpperCase() + s.slice(1))
-    .join(" ");
+  return (
+    name
+      .replace(/^xlink:/, "")
+      .split("-")
+      .filter((s) => s)
+      .map((s) => s[0].toUpperCase() + s.slice(1))
+      .join(" ") || "Attribute"
+  );
 }
 
 // Insert with indentation that matches the surrounding markup.
@@ -908,7 +922,7 @@ let pan = null,
 document.addEventListener(
   "pointerdown",
   (e) => {
-    if (!(e.button === 1 || (e.button === 0 && spaceDown))) return;
+    if (!(e.button === 1 || (e.button === 0 && (spaceDown || tool === "hand")))) return;
     // preventDefault on pointerdown also suppresses the compatibility mouse
     // events, so selection and dragging don't react to a pan.
     e.preventDefault();
@@ -1388,6 +1402,199 @@ function fitViewBoxToContent() {
   commit("Fit to Content");
 }
 
+// MARK: Tools — draw shapes by dragging, place text by clicking.
+
+let tool = "select";
+const TOOL_KEYS = { v: "select", h: "hand", r: "rect", o: "ellipse", l: "line", p: "star", t: "text" };
+const SHAPE_TOOLS = new Set(["rect", "roundedRect", "ellipse", "line", "arrow", "triangle", "hexagon", "star"]);
+let drawingShape = null;
+
+// `fromCanvas` tells the app when the change started here (a key or a finished drawing).
+function setTool(name, fromCanvas) {
+  tool = name;
+  document.body.dataset.tool = name;
+  if (name !== "select") hoverBox.style.display = "none";
+  if (fromCanvas) post({ type: "tool", tool: name });
+}
+
+// Points of a polygon tool inside the unit square.
+function unitPolygon(kind) {
+  if (kind === "triangle") return [[0.5, 0], [1, 1], [0, 1]];
+  if (kind === "hexagon")
+    return [...Array(6)].map((_, i) => {
+      const a = Math.PI / 6 + (i * Math.PI) / 3;
+      return [0.5 + 0.5 * Math.cos(a), 0.5 + 0.5 * Math.sin(a)];
+    });
+  return [...Array(10)].map((_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.2 : 0.5;
+    return [0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a)];
+  });
+}
+
+function shapeGeometry(kind, x0, y0, x1, y1) {
+  const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  switch (kind) {
+    case "rect": return { x: round(x), y: round(y), width: round(w), height: round(h) };
+    case "roundedRect": return { x: round(x), y: round(y), width: round(w), height: round(h), rx: round(Math.min(w, h) * 0.18) };
+    case "ellipse": return { cx: round(x + w / 2), cy: round(y + h / 2), rx: round(w / 2), ry: round(h / 2) };
+    case "line": return { x1: round(x0), y1: round(y0), x2: round(x1), y2: round(y1) };
+    case "arrow": {
+      const a = Math.atan2(y1 - y0, x1 - x0), len = Math.max(8, Math.hypot(x1 - x0, y1 - y0) * 0.18);
+      const hx = (d) => round(x1 - len * Math.cos(a + d)), hy = (d) => round(y1 - len * Math.sin(a + d));
+      return { d: `M${round(x0)} ${round(y0)} L${round(x1)} ${round(y1)} M${hx(0.5)} ${hy(0.5)} L${round(x1)} ${round(y1)} L${hx(-0.5)} ${hy(-0.5)}` };
+    }
+    default:
+      return { points: unitPolygon(kind).map(([u, v]) => `${round(x + u * w)},${round(y + v * h)}`).join(" ") };
+  }
+}
+
+function newShape(kind) {
+  const tag = { rect: "rect", roundedRect: "rect", ellipse: "ellipse", line: "line", arrow: "path" }[kind] || "polygon";
+  const el = document.createElementNS(NS, tag);
+  const colour = palette[paletteIndex++ % palette.length];
+  if (kind === "line" || kind === "arrow") {
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke", colour);
+    el.setAttribute("stroke-width", round(Math.max(2, intrinsicSize().w / 128)));
+    el.setAttribute("stroke-linecap", "round");
+    el.setAttribute("stroke-linejoin", "round");
+  } else {
+    el.setAttribute("fill", colour);
+  }
+  return el;
+}
+
+function applyGeometry(el, geo) {
+  for (const [k, v] of Object.entries(geo)) el.setAttribute(k, v);
+}
+
+document.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || !root || spaceDown) return;
+  if (!(SHAPE_TOOLS.has(tool) || tool === "text")) return;
+  if (minimap.contains(e.target) || selBox.contains(e.target) || e.target === textEditor) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const parent = selected && selected.localName === "g" ? selected : root;
+  const p = toLocal(parent, e.clientX, e.clientY);
+  if (tool === "text") {
+    const el = document.createElementNS(NS, "text");
+    el.setAttribute("x", round(p.x));
+    el.setAttribute("y", round(p.y));
+    el.setAttribute("font-family", "-apple-system, Helvetica, sans-serif");
+    el.setAttribute("font-size", round(Math.max(12, intrinsicSize().h / 12)));
+    el.setAttribute("fill", "#1c1c1e");
+    el.textContent = "Text";
+    insert(el, parent);
+    select(el);
+    commit("Add Text");
+    setTool("select", true);
+    beginTextEdit(el);
+    return;
+  }
+  const el = newShape(tool);
+  insert(el, parent);
+  drawingShape = { el, parent, kind: tool, x0: p.x, y0: p.y, cx: e.clientX, cy: e.clientY, id: e.pointerId };
+  applyGeometry(el, shapeGeometry(tool, p.x, p.y, p.x, p.y));
+  document.documentElement.setPointerCapture(e.pointerId);
+}, true);
+
+document.addEventListener("pointermove", (e) => {
+  if (!drawingShape || e.pointerId !== drawingShape.id) return;
+  e.stopImmediatePropagation();
+  const d = drawingShape;
+  let p = toLocal(d.parent, e.clientX, e.clientY);
+  let dx = p.x - d.x0, dy = p.y - d.y0;
+  if (e.shiftKey) {
+    if (d.kind === "line" || d.kind === "arrow") {
+      // Snap the angle to 45° steps.
+      const len = Math.hypot(dx, dy), a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+      dx = len * Math.cos(a); dy = len * Math.sin(a);
+    } else {
+      const m = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = m * Math.sign(dx || 1); dy = m * Math.sign(dy || 1);
+    }
+  }
+  let x0 = d.x0, y0 = d.y0;
+  if (e.altKey && d.kind !== "line" && d.kind !== "arrow") { x0 -= dx; y0 -= dy; }
+  applyGeometry(d.el, shapeGeometry(d.kind, x0, y0, d.x0 + dx, d.y0 + dy));
+  updateOverlay();
+}, true);
+
+document.addEventListener("pointerup", (e) => {
+  if (!drawingShape || e.pointerId !== drawingShape.id) return;
+  e.stopImmediatePropagation();
+  const d = drawingShape;
+  drawingShape = null;
+  // A click without a drag places a default-size shape centred on the click.
+  if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) {
+    const s = Math.min(intrinsicSize().w, intrinsicSize().h) / 4;
+    const geo = d.kind === "line" || d.kind === "arrow"
+      ? shapeGeometry(d.kind, d.x0 - s / 2, d.y0 + s / 4, d.x0 + s / 2, d.y0 - s / 4)
+      : shapeGeometry(d.kind, d.x0 - s / 2, d.y0 - s / 2, d.x0 + s / 2, d.y0 + s / 2);
+    applyGeometry(d.el, geo);
+  }
+  select(d.el);
+  const names = { rect: "Rectangle", roundedRect: "Rounded Rectangle", ellipse: "Ellipse", line: "Line", arrow: "Arrow", triangle: "Triangle", hexagon: "Hexagon", star: "Star" };
+  commit(`Add ${names[d.kind]}`);
+  setTool("select", true);
+}, true);
+
+// Adds a reusable definition (gradient, clip path, mask or filter) to <defs>,
+// ready to connect to shapes in the graph.
+function addDefinition(kind) {
+  if (!root) return;
+  let defs = Array.from(root.children).find((c) => c.localName === "defs");
+  if (!defs) {
+    defs = document.createElementNS(NS, "defs");
+    insert(defs, root, root.firstElementChild);
+  }
+  const { w, h } = intrinsicSize();
+  const vb = root.viewBox && root.viewBox.baseVal;
+  const box = vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
+  const make = (tag, attrs, children) => {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+    for (const c of children || []) insert(c, el);
+    return el;
+  };
+  const a = palette[paletteIndex++ % palette.length], b = palette[paletteIndex++ % palette.length];
+  const stops = () => [make("stop", { offset: "0", "stop-color": a }), make("stop", { offset: "1", "stop-color": b })];
+  const specs = {
+    linearGradient: ["linearGradient", "gradient", { x1: "0", y1: "0", x2: "1", y2: "1" }, stops],
+    radialGradient: ["radialGradient", "radial", { cx: "0.5", cy: "0.5", r: "0.5" }, stops],
+    clipPath: ["clipPath", "clip", {}, () => [make("circle", { cx: round(box.x + box.w / 2), cy: round(box.y + box.h / 2), r: round(Math.min(box.w, box.h) / 2.5) })]],
+    mask: ["mask", "mask", {}, () => [
+      make("rect", { x: round(box.x), y: round(box.y), width: round(box.w), height: round(box.h), fill: "white" }),
+      make("circle", { cx: round(box.x + box.w / 2), cy: round(box.y + box.h / 2), r: round(Math.min(box.w, box.h) / 5), fill: "black" }),
+    ]],
+    blur: ["filter", "blur", {}, () => [make("feGaussianBlur", { stdDeviation: round(Math.max(1, box.w / 128)) })]],
+    shadow: ["filter", "shadow", { x: "-20%", y: "-20%", width: "140%", height: "140%" }, () => [
+      make("feDropShadow", { dx: "0", dy: round(box.h / 96), stdDeviation: round(box.w / 96), "flood-opacity": "0.35" }),
+    ]],
+  };
+  const spec = specs[kind];
+  if (!spec) return;
+  const [tag, base, attrs, children] = spec;
+  const el = make(tag, { id: uniqueID(base), ...attrs }, children());
+  insert(el, defs);
+  select(el);
+  const names = { linearGradient: "Linear Gradient", radialGradient: "Radial Gradient", clipPath: "Clip Path", mask: "Mask", blur: "Blur", shadow: "Drop Shadow" };
+  commit(`Add ${names[kind]}`);
+}
+
+// Removes every reference this element makes (fill, clip-path, mask, …).
+function removeAllReferences(order) {
+  const el = byOrder(order);
+  if (!el) return;
+  const refs = refsOf(el);
+  if (!refs.length) return;
+  for (const [attr] of refs) {
+    if (attr === "href") { el.removeAttribute("href"); el.removeAttributeNS(XLINK, "href"); }
+    else el.removeAttribute(attr);
+  }
+  commit("Remove References");
+}
+
 // MARK: Inline text editing — double-click a text element to type in place.
 
 const textEditor = document.getElementById("text-editor");
@@ -1502,6 +1709,19 @@ function scheduleOutline() {
   outlineTimer = setTimeout(sendOutline, 60);
 }
 
+// What the graph shows inside definition nodes: a gradient's stop colours,
+// or the effects a filter applies.
+function previewOf(el) {
+  const name = el.localName;
+  if (name === "linearGradient" || name === "radialGradient") {
+    return Array.from(el.querySelectorAll("stop")).map(
+      (s) => s.getAttribute("stop-color") || (s.style && s.style.stopColor) || "#000",
+    );
+  }
+  if (name === "filter") return Array.from(el.children).map((c) => c.localName);
+  return null;
+}
+
 function sendOutline() {
   if (!root) return;
   const items = [];
@@ -1521,6 +1741,7 @@ function sendOutline() {
         hidden: isHidden(el),
         fill: el.getAttribute("fill"),
         refs: refsOf(el),
+        preview: previewOf(el),
       });
     }
     Array.from(el.children).forEach((c, i) => walk(c, order, depth + 1, path.concat(i)));

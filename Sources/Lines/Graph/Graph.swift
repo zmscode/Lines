@@ -15,8 +15,11 @@ struct GraphNodeData: Equatable, Sendable {
 	var connected: Set<String>
 	var isHidden: Bool
 
-	/// Elements other elements can point at get an output handle.
-	var hasOutput: Bool { ![.element, .group, .container].contains(kind) || elementID != nil }
+	/// Gradient stop colours, or a filter's effects.
+	var preview: [String]? = nil
+
+	/// Only things other elements can point at get an output pin.
+	var hasOutput: Bool { [.paint, .clip, .mask, .filter, .symbol].contains(kind) }
 }
 
 struct Graph {
@@ -46,7 +49,7 @@ struct Graph {
 				edges.append(
 					FlowEdge(
 						id: "h:\(item.path)", source: parent.path, target: item.path,
-						sourceHandle: "children", targetHandle: "parent", type: .default,
+						sourceHandle: "children", targetHandle: "parent", type: .straight,
 						deletable: false, focusable: false,
 						style: EdgeStyle(strokeColor: .secondary, strokeWidth: 1, opacity: 0.45)
 					))
@@ -73,7 +76,8 @@ struct Graph {
 		GraphNodeData(
 			order: item.order, tag: item.tag, name: item.displayName, elementID: item.elementID,
 			kind: Self.kind(for: item.tag), inputs: Self.inputs(for: item.tag),
-			connected: Set(item.references.map(\.attribute)), isHidden: item.isHidden
+			connected: Set(item.references.map(\.attribute)), isHidden: item.isHidden,
+			preview: item.preview
 		)
 	}
 

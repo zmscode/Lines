@@ -15,6 +15,8 @@ final class CanvasController {
 	var layout: EditorLayout = .canvas
 	var showsCode = false
 	var showsLayers = false
+	var showsInspector = false
+	var tool: CanvasTool = .select
 	var isExporting = false
 	/// Set when someone double-clicks an element that has no in-place editing.
 	var wantsInspector = false
@@ -98,6 +100,39 @@ final class CanvasController {
 		call("setBounds(\(arg(x)), \(arg(y)), \(arg(width)), \(arg(height)))")
 	}
 	func setRotation(_ degrees: Double) { call("setRotation(\(degrees))") }
+
+	enum Definition: String, CaseIterable, Identifiable {
+		case linearGradient, radialGradient, clipPath, mask, blur, shadow
+		var id: String { rawValue }
+		var title: String {
+			switch self {
+			case .linearGradient: "Linear Gradient"
+			case .radialGradient: "Radial Gradient"
+			case .clipPath: "Clip Path"
+			case .mask: "Mask"
+			case .blur: "Blur"
+			case .shadow: "Drop Shadow"
+			}
+		}
+		var symbol: String {
+			switch self {
+			case .linearGradient: "circle.lefthalf.filled"
+			case .radialGradient: "circle.circle"
+			case .clipPath: "scissors"
+			case .mask: "theatermasks"
+			case .blur: "drop"
+			case .shadow: "shadow"
+			}
+		}
+	}
+
+	func addDefinition(_ kind: Definition) { call("addDefinition(\(js(kind.rawValue)))") }
+	func removeAllReferences(order: Int) { call("removeAllReferences(\(order))") }
+
+	func setTool(_ newTool: CanvasTool) {
+		tool = newTool
+		call("setTool(\(js(newTool.rawValue)))")
+	}
 	func fitViewBoxToContent() { call("fitViewBoxToContent()") }
 
 	/// Space covered by floating panels, so fitting and centring use what's left.
@@ -270,7 +305,8 @@ final class CanvasController {
 					path: d["path"] as? String ?? "\(order)", tag: tag,
 					elementID: d["id"] as? String,
 					label: d["label"] as? String, isHidden: d["hidden"] as? Bool ?? false,
-					fill: d["fill"] as? String, references: refs
+					fill: d["fill"] as? String, references: refs,
+					preview: d["preview"] as? [String]
 				)
 			}
 			if items != outline { outline = items }
@@ -305,6 +341,9 @@ final class CanvasController {
 			if moved, !info.isRoot, body["fromSource"] as? Bool != true {
 				sourceEditor?.revealElement(order: order)
 			}
+
+		case "tool":
+			if let name = body["tool"] as? String, let t = CanvasTool(rawValue: name) { tool = t }
 
 		case "editElement":
 			wantsInspector = true

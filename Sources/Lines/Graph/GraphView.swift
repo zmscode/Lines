@@ -20,6 +20,10 @@ struct GraphView: View {
 	private static let hiddenTags: Set<String> = [
 		"stop", "tspan", "title", "desc", "metadata", "style", "script",
 	]
+	/// Filter primitives (feGaussianBlur, …) are shown inside their filter's node.
+	private static func isShown(_ item: OutlineItem) -> Bool {
+		!hiddenTags.contains(item.tag) && !item.tag.hasPrefix("fe")
+	}
 	private static let nodeLimit = 300
 
 	var body: some View {
@@ -52,19 +56,38 @@ struct GraphView: View {
 			},
 			swiftFlowInstance: flow
 		) { node in
-			GraphNodeView(node: node)
+			GraphNodeView(node: node, controller: controller)
 		} overlay: {
 			Background(variant: .dots, color: .secondary.opacity(0.35))
 			Controls()
 			MiniMap(selectedNodeColor: .accentColor)
 		}
 		.background(GraphNavigation(flow: flow))
-		.overlay(alignment: .topTrailing) {
-			Button("Tidy Up", systemImage: "wand.and.rays") {
-				movedByHand.removeAll()
-				relayout(graph, force: true)
+		.overlay(alignment: .top) {
+			// Top centre, clear of the floating layers and inspector panels.
+			GlassEffectContainer(spacing: 8) {
+				HStack(spacing: 8) {
+					Menu {
+						ForEach(CanvasController.Definition.allCases) { kind in
+							Button(kind.title, systemImage: kind.symbol) {
+								controller.addDefinition(kind)
+							}
+						}
+					} label: {
+						Label("Add", systemImage: "plus")
+					}
+					.menuIndicator(.hidden)
+					.buttonStyle(.glass)
+					.help("Add a gradient, clip path, mask or filter, then connect it to a shape")
+
+					Button("Tidy Up", systemImage: "wand.and.rays") {
+						movedByHand.removeAll()
+						relayout(graph, force: true)
+					}
+					.buttonStyle(.glass)
+					.help("Arrange the graph automatically")
+				}
 			}
-			.help("Arrange the graph automatically")
 			.padding(12)
 		}
 		.overlay {
@@ -83,7 +106,7 @@ struct GraphView: View {
 
 	/// Large drawings show their top levels plus anything involved in a reference.
 	private var visibleItems: [OutlineItem] {
-		let items = controller.outline.filter { !Self.hiddenTags.contains($0.tag) }
+		let items = controller.outline.filter(Self.isShown)
 		guard items.count > Self.nodeLimit else { return items }
 		let referenced = Set(items.flatMap { $0.references.map(\.targetID) })
 		return Array(

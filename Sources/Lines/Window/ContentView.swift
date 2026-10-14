@@ -5,9 +5,7 @@ struct ContentView: View {
 	var document: SVGDocument
 
 	@State private var controller = CanvasController()
-	@SceneStorage("showInspector") private var showInspector = false
-	@State private var showsInsert = false
-	@State private var arrangeExpanded = false
+	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
 	@Environment(\.undoManager) private var undoManager
 	@Environment(\.dismissWindow) private var dismissWindow
@@ -46,6 +44,7 @@ struct ContentView: View {
 				controller.document = document
 				controller.layout = defaultLayout
 				controller.showsCode = showsCodeByDefault
+				controller.showsInspector = savedShowsInspector
 				controller.undoManager = undoManager
 				updateInsets()
 			}
@@ -53,19 +52,28 @@ struct ContentView: View {
 			.onChange(of: controller.wantsInspector) { _, wants in
 				guard wants else { return }
 				controller.wantsInspector = false
-				withAnimation(Self.panelAnimation) { showInspector = true }
+				withAnimation(Self.panelAnimation) { controller.showsInspector = true }
 			}
 			.onChange(of: controller.showsLayers) { _, _ in updateInsets() }
-			.onChange(of: showInspector) { _, _ in updateInsets() }
+			.onChange(of: controller.layout) { _, _ in updateInsets() }
+			.onChange(of: controller.showsInspector) { _, shows in
+				savedShowsInspector = shows
+				updateInsets()
+			}
 	}
 
 	static let panelAnimation = Animation.snappy(duration: 0.28)
 
+	/// Room taken by the tools palette on the canvas's leading edge.
+	private var paletteSpace: CGFloat {
+		controller.layout == .canvas ? ToolPalette.width + Self.panelMargin : 0
+	}
+
 	private func updateInsets() {
 		let m = Self.panelMargin
 		controller.setInsets(
-			left: controller.showsLayers ? Self.layersWidth + m * 2 : 0,
-			right: showInspector ? Self.inspectorWidth + m * 2 : 0,
+			left: paletteSpace + (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
+			right: controller.showsInspector ? Self.inspectorWidth + m * 2 : 0,
 			top: 0, bottom: 0)
 	}
 
@@ -104,7 +112,16 @@ struct ContentView: View {
 					.padding(
 						.leading, controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0
 					)
-					.padding(.trailing, showInspector ? Self.inspectorWidth + Self.panelMargin : 0)
+					.padding(
+						.trailing,
+						controller.showsInspector ? Self.inspectorWidth + Self.panelMargin : 0)
+			}
+		}
+		.overlay(alignment: .topLeading) {
+			if controller.layout == .canvas {
+				ToolPalette(controller: controller)
+					.padding(Self.panelMargin)
+					.transition(.opacity)
 			}
 		}
 		.overlay(alignment: .topLeading) {
@@ -114,12 +131,13 @@ struct ContentView: View {
 				}
 				.frame(width: Self.layersWidth)
 				.padding(Self.panelMargin)
+				.padding(.leading, paletteSpace)
 				.transition(.move(edge: .leading).combined(with: .opacity))
 			}
 		}
 		.overlay(alignment: .topTrailing) {
-			if showInspector {
-				FloatingPanel(title: nil, close: { showInspector = false }) {
+			if controller.showsInspector {
+				FloatingPanel(title: nil, close: { controller.showsInspector = false }) {
 					InspectorView(controller: controller)
 				}
 				.frame(width: Self.inspectorWidth)
@@ -128,7 +146,7 @@ struct ContentView: View {
 			}
 		}
 		.animation(Self.panelAnimation, value: controller.showsLayers)
-		.animation(Self.panelAnimation, value: showInspector)
+		.animation(Self.panelAnimation, value: controller.showsInspector)
 	}
 
 	private var canvas: some View {
@@ -136,11 +154,6 @@ struct ContentView: View {
 			text: document.text, background: background, customColour: customColour,
 			controller: controller
 		)
-		.overlay {
-			if controller.layout == .canvas {
-				CanvasControls(controller: controller)
-			}
-		}
 		.overlay(alignment: .bottom) {
 			if let error = controller.parseError {
 				ParseErrorBanner(message: error)
@@ -153,91 +166,44 @@ struct ContentView: View {
 
 	// MARK: Toolbar
 	//
-	// Grouped by function (HIG › Toolbars): what the window shows, then
-	// insertion, arrangement and zoom; sharing and the inspector stay on the
-	// trailing edge. Every item is also in the menu bar.
+	// Three groups (HIG › Toolbars): the panels on the leading edge, what the
+	// viewer shows in the centre, and sharing on the trailing edge. Drawing
+	// tools live in the palette on the canvas. Every item is also in the menu bar.
 
 	@ToolbarContentBuilder
 	private var toolbar: some CustomizableToolbarContent {
-		viewItems
-		editingItems
-		trailingItems
-	}
-
-	@ToolbarContentBuilder
-	private var viewItems: some CustomizableToolbarContent {
-		ToolbarItem(id: "view", placement: .navigation) {
+		ToolbarItem(id: "panels", placement: .navigation) {
 			ControlGroup {
 				Toggle(isOn: $controller.showsLayers) {
 					Label("Layers", systemImage: "square.3.layers.3d")
 				}
-				.help(controller.showsLayers ? "Hide Layers" : "Show Layers")
+				.help(controller.showsLayers ? "Hide Layers (⌘1)" : "Show Layers (⌘1)")
+				Toggle(isOn: $controller.showsInspector) {
+					Label("Inspector", systemImage: "slider.horizontal.3")
+				}
+				.help(controller.showsInspector ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
 				Toggle(isOn: $controller.showsCode) {
 					Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
 				}
-				.help(controller.showsCode ? "Hide Code" : "Show Code")
-				Toggle(
-					isOn: Binding(
-						get: { controller.layout == .graph },
-						set: { controller.layout = $0 ? .graph : .canvas }
-					)
-				) {
-					Label("Graph", systemImage: EditorLayout.graph.symbol)
-				}
-				.help(controller.layout == .graph ? "Show Canvas" : "Show Element Graph")
+				.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
 			} label: {
-				Label("View", systemImage: "rectangle.3.group")
+				Label("Panels", systemImage: "rectangle.3.group")
 			}
 		}
 		.customizationBehavior(.disabled)
 
-		ToolbarSpacer(.flexible)
-	}
-
-	@ToolbarContentBuilder
-	private var editingItems: some CustomizableToolbarContent {
-		ToolbarItem(id: "insert") {
-			Button("Insert", systemImage: "plus") { showsInsert.toggle() }
-				.help("Insert a shape, text or image")
-				.popover(isPresented: $showsInsert, arrowEdge: .bottom) {
-					InsertPalette(controller: controller) { showsInsert = false }
+		ToolbarItem(id: "mode", placement: .principal) {
+			Picker("View", selection: $controller.layout) {
+				ForEach(EditorLayout.allCases) { layout in
+					Label(layout == .canvas ? "Canvas" : "Graph", systemImage: layout.symbol)
+						.tag(layout)
 				}
-		}
-
-		ToolbarSpacer(.fixed)
-
-		ToolbarItem(id: "arrange") {
-			ExpandingControl(
-				title: "Arrange", systemImage: "square.3.layers.3d.middle.filled",
-				isExpanded: $arrangeExpanded
-			) {
-				Button("Bring to Front", systemImage: "square.3.layers.3d.top.filled") {
-					controller.reorder(.front)
-				}
-				Button("Bring Forward", systemImage: "square.2.layers.3d.top.filled") {
-					controller.reorder(.forward)
-				}
-				Button("Send Backward", systemImage: "square.2.layers.3d.bottom.filled") {
-					controller.reorder(.backward)
-				}
-				Button("Send to Back", systemImage: "square.3.layers.3d.bottom.filled") {
-					controller.reorder(.back)
-				}
-				Button("Group", systemImage: "square.on.square.dashed") {
-					controller.groupSelection()
-				}
-				Button("Ungroup", systemImage: "square.on.square.intersection.dashed") {
-					controller.ungroupSelection()
-				}
-				.disabled(controller.selection?.tag != "g")
 			}
-			.disabled(!controller.hasElementSelection)
+			.pickerStyle(.segmented)
+			.labelStyle(.titleAndIcon)
+			.fixedSize()
+			.help("Show the drawing or its element graph (⌘3)")
 		}
-	}
-
-	@ToolbarContentBuilder
-	private var trailingItems: some CustomizableToolbarContent {
-		ToolbarSpacer(.flexible)
 
 		ToolbarItem(id: "share", placement: .primaryAction) {
 			Menu {
@@ -262,17 +228,7 @@ struct ContentView: View {
 				Label("Share", systemImage: "square.and.arrow.up")
 			}
 			.menuIndicator(.hidden)
-			.help("Export or share the drawing")
+			.help("Export, print or share the drawing")
 		}
-
-		ToolbarItem(id: "inspector", placement: .primaryAction) {
-			Button(
-				showInspector ? "Hide Inspector" : "Show Inspector", systemImage: "sidebar.trailing"
-			) {
-				showInspector.toggle()
-			}
-			.help(showInspector ? "Hide Inspector" : "Show Inspector")
-		}
-		.customizationBehavior(.disabled)
 	}
 }

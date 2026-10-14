@@ -28,7 +28,6 @@ struct LinesApp: App {
 		// The document title sits on its own row above the toolbar.
 		.windowToolbarStyle(.expanded)
 		.commands {
-			InspectorCommands()
 			FileCommands()
 			EditCommands()
 			ViewCommands()
@@ -119,6 +118,13 @@ private struct ViewCommands: Commands {
 				controller?.showsCode.toggle()
 			}
 			.keyboardShortcut("2", modifiers: .command)
+			Button(
+				controller?.showsInspector == true ? "Hide Inspector" : "Show Inspector",
+				systemImage: "slider.horizontal.3"
+			) {
+				controller?.showsInspector.toggle()
+			}
+			.keyboardShortcut("i", modifiers: [.command, .option])
 			Button(
 				controller?.layout == .graph ? "Show Canvas" : "Show Element Graph",
 				systemImage: controller?.layout == .graph

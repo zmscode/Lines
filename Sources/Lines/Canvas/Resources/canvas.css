@@ -136,6 +136,33 @@ body.space * {
 #sel.rotating * {
 	cursor: grabbing !important;
 }
+/* Tool cursors */
+body[data-tool="hand"],
+body[data-tool="hand"] * {
+	cursor: grab;
+}
+body[data-tool="rect"] #host,
+body[data-tool="roundedRect"] #host,
+body[data-tool="ellipse"] #host,
+body[data-tool="line"] #host,
+body[data-tool="arrow"] #host,
+body[data-tool="triangle"] #host,
+body[data-tool="hexagon"] #host,
+body[data-tool="star"] #host,
+body[data-tool="rect"],
+body[data-tool="roundedRect"],
+body[data-tool="ellipse"],
+body[data-tool="line"],
+body[data-tool="arrow"],
+body[data-tool="triangle"],
+body[data-tool="hexagon"],
+body[data-tool="star"] {
+	cursor: crosshair;
+}
+body[data-tool="text"],
+body[data-tool="text"] #host * {
+	cursor: text;
+}
 #text-editor {
 	position: fixed;
 	display: none;

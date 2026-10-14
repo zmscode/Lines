@@ -237,6 +237,44 @@ struct SourceEditor: NSViewRepresentable {
 final class CodeTextView: NSTextView {
 	private var pinch: CGFloat = 0
 
+	/// ⌘-scroll changes the text size, like ⌘+ and ⌘−.
+	override func scrollWheel(with event: NSEvent) {
+		guard event.modifierFlags.contains(.command), event.scrollingDeltaY != 0 else {
+			super.scrollWheel(with: event)
+			return
+		}
+		pinch += event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.01 : 0.1)
+		applyPinch()
+		if event.phase == .ended || event.momentumPhase == .ended { pinch = 0 }
+	}
+
+	/// ⌘+ (or ⌘=), ⌘− and ⌘0 size the text while the editor has focus.
+	override func performKeyEquivalent(with event: NSEvent) -> Bool {
+		let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+		guard flags == .command || flags == [.command, .shift], window?.firstResponder === self
+		else {
+			return super.performKeyEquivalent(with: event)
+		}
+		switch event.charactersIgnoringModifiers {
+		case "=", "+": SourceEditor.adjustFontSize(by: 1)
+		case "-": SourceEditor.adjustFontSize(by: -1)
+		case "0": SourceEditor.setFontSize(12)
+		default: return super.performKeyEquivalent(with: event)
+		}
+		return true
+	}
+
+	private func applyPinch() {
+		while pinch >= 0.1 {
+			SourceEditor.adjustFontSize(by: 1)
+			pinch -= 0.1
+		}
+		while pinch <= -0.1 {
+			SourceEditor.adjustFontSize(by: -1)
+			pinch += 0.1
+		}
+	}
+
 	override func magnify(with event: NSEvent) {
 		pinch += event.magnification
 		// One point per ~10% of pinch keeps it controllable.

@@ -1,15 +1,13 @@
 import SwiftUI
 
-/// Controls that float over the canvas, so the toolbar can stay minimal:
-/// a background pill at the top left and round zoom buttons at the bottom
-/// right. The minimap (drawn by the canvas page) sits at the bottom left.
+/// Round zoom buttons floating at the canvas's bottom right. The tools
+/// palette is on the left and the minimap (drawn by the canvas page) at the
+/// bottom left.
 struct CanvasControls: View {
 	var controller: CanvasController
 
 	var body: some View {
 		ZStack {
-			BackgroundPill()
-				.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 			ZoomButtons(controller: controller)
 				.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
 		}
@@ -49,7 +47,9 @@ private struct ZoomButtons: View {
 
 /// Shows the current canvas background; click to switch between the quick
 /// choices or pick a custom colour.
-private struct BackgroundPill: View {
+/// The canvas background swatch at the foot of the tools palette, like the
+/// colour swatches at the bottom of Photoshop's toolbar.
+struct BackgroundPill: View {
 	@AppStorage("canvasBackground") private var background: CanvasBackground = .checkerboard
 	@AppStorage(CanvasBackground.customColourKey) private var customColour = "#f2a65a"
 	@State private var isPresented = false
@@ -58,19 +58,16 @@ private struct BackgroundPill: View {
 		Button {
 			isPresented.toggle()
 		} label: {
-			HStack(spacing: 6) {
-				BackgroundSwatch(background: background, customColour: customColour)
-					.frame(width: 16, height: 16)
-				Image(systemName: "chevron.down")
-					.font(.caption2.weight(.semibold))
-					.foregroundStyle(.secondary)
-			}
+			BackgroundSwatch(background: background, customColour: customColour)
+				.frame(width: 22, height: 22)
+				.frame(width: ToolPalette.buttonSize, height: ToolPalette.buttonSize)
+				.contentShape(.rect)
 		}
-		.buttonStyle(.glass)
+		.buttonStyle(.plain)
 		.help("Canvas background: \(background.title)")
 		.accessibilityLabel("Canvas background")
 		.accessibilityValue(background.title)
-		.popover(isPresented: $isPresented, arrowEdge: .bottom) {
+		.popover(isPresented: $isPresented, arrowEdge: .trailing) {
 			VStack(alignment: .leading, spacing: 12) {
 				Text("Background").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
 				HStack(spacing: 10) {

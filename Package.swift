@@ -5,7 +5,8 @@ let package = Package(
 	name: "Lines",
 	platforms: [.macOS("27.0")],
 	dependencies: [
-		.package(url: "https://github.com/aaurelions/SwiftFlow.git", exact: "0.2.0"),
+		// Vendored with a fix; see Vendor/SwiftFlow/VENDORED.md.
+		.package(path: "Vendor/SwiftFlow"),
 		// Vendored with fixes; see Vendor/ColourPickerMaker/VENDORED.md.
 		.package(path: "Vendor/ColourPickerMaker"),
 	],
