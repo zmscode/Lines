@@ -2,6 +2,10 @@
 
 app := "build/Lines.app"
 bundle_id := "com.zms.Lines"
+version := trim(read("VERSION"))
+# Where releases are published, and the Homebrew tap that installs them.
+github := "zmscode/Lines"
+tap := "zmscode/homebrew-lines"
 xcode := "/Applications/Xcode.app/Contents/Developer"
 
 # Prefer a full Xcode when one is installed, even if xcode-select still points
@@ -42,7 +46,7 @@ rebuild config="release":
 # A hash of everything that goes into the app, plus the build configuration
 [private]
 _inputs-hash config:
-    @{ echo "{{ config }}"; find Sources Support Vendor Package.swift Package.resolved justfile \
+    @{ echo "{{ config }}"; find Sources Support Vendor Package.swift Package.resolved justfile VERSION \
         -type f -not -path '*/.build/*' -not -name '.DS_Store' -print0 2>/dev/null \
         | LC_ALL=C sort -z | xargs -0 shasum; } | shasum | cut -d' ' -f1
 
@@ -98,7 +102,18 @@ _bundle config: _icon
     if [ -f Support/Localizable.xcstrings ]; then
       xcrun xcstringstool compile Support/Localizable.xcstrings --output-directory "{{ app }}/Contents/Resources" >/dev/null
     fi
-    codesign --force --sign - "{{ app }}"
+    # The version from VERSION; the build number counts commits.
+    /usr/libexec/PlistBuddy \
+      -c "Set :CFBundleShortVersionString {{ version }}" \
+      -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)" \
+      "{{ app }}/Contents/Info.plist"
+    # Signed with a Developer ID (and the hardened runtime notarization needs)
+    # when LINES_SIGN_IDENTITY names one; otherwise ad hoc, to run on this Mac.
+    if [ -n "${LINES_SIGN_IDENTITY:-}" ]; then
+      codesign --force --options runtime --timestamp --sign "$LINES_SIGN_IDENTITY" "{{ app }}"
+    else
+      codesign --force --sign - "{{ app }}"
+    fi
     # Finder and the Dock cache icons by bundle; touching the bundle and
     # re-registering it makes them pick up a changed icon.
     touch "{{ app }}"
@@ -138,6 +153,59 @@ _icon:
       done
       iconutil -c icns build/icon/AppIcon.iconset -o build/icon/AppIcon.icns
     fi
+
+# Build, sign, notarize and zip a release, and point the cask at it
+release:
+    #!/usr/bin/env sh
+    set -e
+    if [ -z "${LINES_SIGN_IDENTITY:-}" ] && [ -z "${LINES_ALLOW_UNSIGNED:-}" ]; then
+      echo "Set LINES_SIGN_IDENTITY to a Developer ID Application identity (see RELEASING.md)." >&2
+      echo "Homebrew disables casks that fail Gatekeeper; LINES_ALLOW_UNSIGNED=1 builds one anyway, for testing." >&2
+      exit 1
+    fi
+    just rebuild release
+    codesign --verify --strict --deep "{{ app }}"
+    zip="build/Lines-{{ version }}.zip"
+    rm -f "$zip"
+    ditto -c -k --keepParent "{{ app }}" "$zip"
+    if [ -n "${LINES_NOTARY_PROFILE:-}" ]; then
+      xcrun notarytool submit "$zip" --keychain-profile "$LINES_NOTARY_PROFILE" --wait
+      xcrun stapler staple "{{ app }}"
+      spctl --assess --type execute --verbose "{{ app }}"
+      # Zip again, so the download carries the stapled ticket.
+      rm -f "$zip"
+      ditto -c -k --keepParent "{{ app }}" "$zip"
+    elif [ -n "${LINES_SIGN_IDENTITY:-}" ]; then
+      echo "Not notarized: set LINES_NOTARY_PROFILE (see RELEASING.md)." >&2
+    fi
+    sha="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
+    sed -i '' -E \
+      -e "s/^  version \".*\"/  version \"{{ version }}\"/" \
+      -e "s/^  sha256 .*/  sha256 \"$sha\"/" \
+      Casks/lines.rb
+    echo "Built $zip ($sha)"
+    echo "Casks/lines.rb now points at {{ version }}. Next: just publish"
+
+# Publish the release on GitHub and update the tap (run after `just release`)
+publish:
+    #!/usr/bin/env sh
+    set -e
+    zip="build/Lines-{{ version }}.zip"
+    [ -f "$zip" ] || { echo "No $zip: run just release first." >&2; exit 1; }
+    gh release create "v{{ version }}" "$zip" --repo "{{ github }}" --title "Lines {{ version }}" --generate-notes
+    tapdir="$(mktemp -d)"
+    gh repo clone "{{ tap }}" "$tapdir" -- --depth 1
+    mkdir -p "$tapdir/Casks"
+    cp Casks/lines.rb "$tapdir/Casks/lines.rb"
+    git -C "$tapdir" add Casks/lines.rb
+    git -C "$tapdir" commit -m "lines {{ version }}"
+    git -C "$tapdir" push
+    rm -rf "$tapdir"
+    echo "Published. Install with: brew install --cask {{ replace(tap, "homebrew-", "") }}/lines"
+
+# Check the cask's style and syntax with Homebrew's own rules
+cask-check:
+    brew style Casks/lines.rb
 
 # Remove build products
 clean:

@@ -11,7 +11,17 @@ just run              # build, quit any running copy, open the new build
 just build            # release build → build/Lines.app (`just build debug` for debug)
 just format           # swift-format with the project's .swift-format
 just strings          # refresh the String Catalog (Support/Localizable.xcstrings)
+just release          # signed, notarized zip + updated cask (see RELEASING.md)
+just publish          # GitHub release + tap update
 ```
+
+## Install
+
+```sh
+brew install --cask zmscode/lines/lines
+```
+
+Requires macOS 27 on Apple silicon. Releases are signed and notarized; see [RELEASING.md](RELEASING.md) for how they're made.
 
 ## Features
 
