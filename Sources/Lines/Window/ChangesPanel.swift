@@ -82,8 +82,8 @@ struct LineDiff {
 	}
 }
 
-/// What's changed in the source: a git-style timeline of versions you can
-/// scrub through on the canvas, and a line diff of the code.
+/// What's changed in the source: the history of versions as a git-style
+/// graph you can scrub, branch and prune, and a line diff of the code.
 struct ChangesPanel: View {
 	var original: String
 	var current: String
@@ -93,12 +93,21 @@ struct ChangesPanel: View {
 	var close: () -> Void
 
 	enum Mode: String, CaseIterable {
-		case timeline = "Timeline"
-		case code = "Code"
+		case timeline, code
+		var title: String {
+			self == .timeline ? String(localized: "Timeline") : String(localized: "Code")
+		}
+		var symbol: String {
+			self == .timeline
+				? "point.topleft.down.to.point.bottomright.curvepath"
+				: "chevron.left.forwardslash.chevron.right"
+		}
 	}
 	@State private var mode: Mode = .timeline
-	/// The version picked in the timeline; the code diff compares it with now.
+	/// The version shown on the canvas; the code diff compares it with now.
 	@State private var selected: CanvasController.Snapshot.ID?
+	/// Versions picked with ⌘- or ⇧-click, to delete.
+	@State private var marked: Set<CanvasController.Snapshot.ID> = []
 
 	private var history: [CanvasController.Snapshot] { controller.history }
 	private var selectedSnapshot: CanvasController.Snapshot? {
@@ -108,13 +117,29 @@ struct ChangesPanel: View {
 	var body: some View {
 		FloatingPanel(title: "Changes", close: close) {
 			VStack(alignment: .leading, spacing: 0) {
-				Picker("View", selection: $mode) {
-					ForEach(Mode.allCases, id: \.self) { Text($0.rawValue) }
+				// The same icon buttons as the app's other strips.
+				HStack(spacing: 2) {
+					ForEach(Mode.allCases, id: \.self) { m in
+						Button(m.title, systemImage: m.symbol) { mode = m }
+							.buttonStyle(.icon(size: 28, selected: mode == m))
+							.help(m.title)
+					}
+					Spacer()
+					if mode == .timeline && !marked.isEmpty {
+						Button(
+							"Delete \(marked.count) Version\(marked.count == 1 ? "" : "s")",
+							role: .destructive
+						) {
+							deleteMarked()
+						}
+						.controlSize(.small)
+						.help(
+							"Remove these versions from the history (the drawing goes back if Now is one of them)"
+						)
+					}
 				}
-				.pickerStyle(.segmented)
-				.labelsHidden()
-				.padding(.horizontal, 14)
-				.padding(.bottom, 10)
+				.padding(.horizontal, 10)
+				.padding(.bottom, 8)
 
 				switch mode {
 				case .timeline: timeline
@@ -134,13 +159,14 @@ struct ChangesPanel: View {
 		VStack(alignment: .leading, spacing: 0) {
 			ScrollView {
 				CommitGraph(
-					history: history, selected: selected ?? history.last?.id,
-					select: select
+					history: history, headID: controller.headID,
+					selected: selected ?? controller.headID, marked: marked,
+					select: select, mark: mark
 				)
 				.padding(.horizontal, 8)
 				.padding(.bottom, 8)
 			}
-			if let snapshot = selectedSnapshot, snapshot.id != history.last?.id {
+			if let snapshot = selectedSnapshot, snapshot.id != controller.headID {
 				Divider()
 				HStack {
 					Text("Showing “\(snapshot.title)” on the canvas")
@@ -151,11 +177,15 @@ struct ChangesPanel: View {
 					Button("Compare") { mode = .code }
 						.help("See this version's code against the current one")
 					Button("Restore") {
+						// Later versions stay, on their own branch.
+						controller.checkOut(snapshot.id)
 						restore(snapshot.text, "Restore Version")
 						selected = nil
 					}
 					.buttonStyle(.borderedProminent)
-					.help("Make this version current again (undoable)")
+					.help(
+						"Make this version current again; newer versions stay on a branch (undoable)"
+					)
 				}
 				.controlSize(.small)
 				.padding(.horizontal, 14)
@@ -165,17 +195,50 @@ struct ChangesPanel: View {
 	}
 
 	private func select(_ id: CanvasController.Snapshot.ID) {
-		let isLatest = id == history.last?.id
-		selected = isLatest ? nil : id
-		controller.preview(version: isLatest ? nil : id)
+		marked = []
+		let isHead = id == controller.headID
+		selected = isHead ? nil : id
+		controller.preview(version: isHead ? nil : id)
+	}
+
+	/// ⌘-click toggles one; ⇧-click marks everything between it and the last.
+	private func mark(_ id: CanvasController.Snapshot.ID, range: Bool) {
+		guard id != history.first?.id else { return }  // "Opened" stays
+		if range, let anchor = marked.first ?? selected,
+			let a = history.firstIndex(where: { $0.id == anchor }),
+			let b = history.firstIndex(where: { $0.id == id })
+		{
+			for s in history[min(a, b)...max(a, b)] where s.id != history.first?.id {
+				marked.insert(s.id)
+			}
+		} else if marked.contains(id) {
+			marked.remove(id)
+		} else {
+			marked.insert(id)
+		}
+	}
+
+	private func deleteMarked() {
+		let ids = marked
+		marked = []
+		selected = nil
+		if let text = controller.deleteVersions(ids) {
+			restore(text, "Delete Versions")
+		}
 	}
 
 	// MARK: Code
+
+	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
+	@AppStorage(SyntaxTheme.lightKey) private var lightTheme = SyntaxTheme.defaultLight
+	@AppStorage("editorFontSize") private var fontSize: Double = 12
+	@AppStorage(CodeFont.key) private var fontName = ""
 
 	@ViewBuilder
 	private var code: some View {
 		let base = selectedSnapshot?.text ?? original
 		let diff = LineDiff(from: base, to: current)
+		let theme = SyntaxTheme.pair(light: lightTheme, dark: darkTheme)
 		HStack(spacing: 10) {
 			Label("\(diff.added)", systemImage: "plus")
 				.foregroundStyle(.green)
@@ -186,6 +249,7 @@ struct ChangesPanel: View {
 				.lineLimit(1)
 			Spacer()
 			Button("Revert", systemImage: "arrow.uturn.backward") {
+				if let id = selectedSnapshot?.id { controller.checkOut(id) }
 				restore(base, selectedSnapshot == nil ? "Revert Changes" : "Restore Version")
 				selected = nil
 			}
@@ -202,43 +266,63 @@ struct ChangesPanel: View {
 				"No Changes", systemImage: "checkmark.circle",
 				description: Text("The source matches that version."))
 		} else {
+			// In the code editor's theme and font.
 			ScrollView([.vertical, .horizontal]) {
 				LazyVStack(alignment: .leading, spacing: 0) {
-					ForEach(diff.rows) { row in DiffRow(row: row) }
+					ForEach(diff.rows) { row in
+						DiffRow(row: row, theme: theme, fontSize: fontSize, fontName: fontName)
+					}
 				}
-				.padding(.bottom, 8)
+				.padding(.vertical, 6)
 			}
-			.font(.system(size: 11, design: .monospaced))
+			.background(Color(nsColor: theme.background))
+			.clipShape(.rect(cornerRadius: 10, style: .continuous))
+			.padding([.horizontal, .bottom], 8)
 		}
 	}
 }
 
 private struct DiffRow: View {
 	var row: LineDiff.Row
+	var theme: SyntaxTheme
+	var fontSize: Double
+	var fontName: String
 
 	var body: some View {
+		let size = max(9, fontSize - 1)
 		HStack(spacing: 0) {
 			Text(row.old.map(String.init) ?? "")
 				.frame(width: 34, alignment: .trailing)
-				.foregroundStyle(.tertiary)
+				.foregroundStyle(Color(nsColor: theme.plain).opacity(0.4))
 			Text(row.new.map(String.init) ?? "")
 				.frame(width: 34, alignment: .trailing)
-				.foregroundStyle(.tertiary)
+				.foregroundStyle(Color(nsColor: theme.plain).opacity(0.4))
 			Text(marker)
 				.frame(width: 18)
 				.foregroundStyle(colour)
-			Text(row.text.isEmpty ? " " : row.text)
-				.foregroundStyle(
-					row.kind == .skipped ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
-				)
-				.italic(row.kind == .skipped)
-				.fixedSize()
-				.padding(.trailing, 12)
+			Group {
+				if row.kind == .skipped {
+					Text(row.text).italic().foregroundStyle(
+						Color(nsColor: theme.plain).opacity(0.5))
+				} else {
+					Text(highlighted(size: size))
+				}
+			}
+			.fixedSize()
+			.padding(.trailing, 12)
 		}
+		.font(Font(CodeFont.regular(size: size, name: fontName)))
 		.padding(.vertical, 1)
 		.frame(maxWidth: .infinity, alignment: .leading)
-		.background(colour.opacity(row.kind == .added || row.kind == .removed ? 0.14 : 0))
+		.background(colour.opacity(row.kind == .added || row.kind == .removed ? 0.16 : 0))
 		.textSelection(.enabled)
+	}
+
+	/// The line coloured like the code editor colours it.
+	private func highlighted(size: Double) -> AttributedString {
+		let storage = NSTextStorage(string: row.text.isEmpty ? " " : row.text)
+		Highlighter.highlight(storage, fontSize: size, theme: theme)
+		return (try? AttributedString(storage, including: \.appKit)) ?? AttributedString(row.text)
 	}
 
 	private var marker: String {
@@ -259,134 +343,186 @@ private struct DiffRow: View {
 	}
 }
 
-/// The history as `git log --graph`: newest at the top, one continuous rail
-/// with a dot per version. Click a version, or drag along the rail to scrub
-/// through them; the canvas shows each. The stretch from the chosen version
-/// up to Now is tinted.
+/// The history as `git log --graph`: newest at the top, the current branch
+/// on the main line and versions left behind by a restore on a side line.
+/// Click a version to see it on the canvas, ⌘- or ⇧-click to pick several,
+/// or drag along the lines to scrub.
 private struct CommitGraph: View {
 	var history: [CanvasController.Snapshot]
+	var headID: CanvasController.Snapshot.ID?
 	var selected: CanvasController.Snapshot.ID?
+	var marked: Set<CanvasController.Snapshot.ID>
 	var select: (CanvasController.Snapshot.ID) -> Void
+	var mark: (CanvasController.Snapshot.ID, Bool) -> Void
 
-	static let rowHeight: CGFloat = 54
-	static let railX: CGFloat = 16
+	static let rowHeight: CGFloat = 50
+	static let laneWidth: CGFloat = 14
+	static let railX: CGFloat = 14
 
 	/// Newest first.
 	private var rows: [CanvasController.Snapshot] { history.reversed() }
-	private var selectedRow: Int { rows.firstIndex { $0.id == selected } ?? 0 }
+
+	/// The head's ancestry is lane 0; each branch that left it gets the next lane.
+	private var lanes: [UUID: Int] {
+		let byID = Dictionary(uniqueKeysWithValues: history.map { ($0.id, $0) })
+		var lanes: [UUID: Int] = [:]
+		var id = headID
+		while let current = id {
+			lanes[current] = 0
+			id = byID[current]?.parentID
+		}
+		var nextLane = 1
+		// Newest first, so a branch's tip claims its lane and its ancestors follow.
+		for snapshot in rows where lanes[snapshot.id] == nil {
+			var chain: [UUID] = []
+			var current: UUID? = snapshot.id
+			while let c = current, lanes[c] == nil {
+				chain.append(c)
+				current = byID[c]?.parentID
+			}
+			for c in chain { lanes[c] = nextLane }
+			nextLane += 1
+		}
+		return lanes
+	}
 
 	var body: some View {
-		let count = rows.count
+		let lanes = lanes
+		let rowIndex = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0) })
+		let laneCount = (lanes.values.max() ?? 0) + 1
+		let railWidth = Self.railX * 2 + CGFloat(laneCount - 1) * Self.laneWidth
 		VStack(spacing: 0) {
-			ForEach(Array(rows.enumerated()), id: \.element.id) { row, snapshot in
+			ForEach(Array(rows.enumerated()), id: \.element.id) { index, snapshot in
 				CommitRow(
-					snapshot: snapshot, isNow: row == 0, isSelected: row == selectedRow,
-					isAhead: row < selectedRow
-				) { select(snapshot.id) }
+					snapshot: snapshot, lane: lanes[snapshot.id] ?? 0, railWidth: railWidth,
+					isNow: snapshot.id == headID, isSelected: snapshot.id == selected,
+					isMarked: marked.contains(snapshot.id)
+				) { modifiers in
+					if modifiers.contains(.command) {
+						mark(snapshot.id, false)
+					} else if modifiers.contains(.shift) {
+						mark(snapshot.id, true)
+					} else {
+						select(snapshot.id)
+					}
+				}
 				.frame(height: Self.rowHeight)
 			}
 		}
 		.background(alignment: .topLeading) {
-			// The rail: dot to dot, tinted from the chosen version up to Now.
-			if count > 1 {
-				let top = Self.rowHeight / 2
-				let length = CGFloat(count - 1) * Self.rowHeight
-				ZStack(alignment: .top) {
-					Capsule().fill(.quaternary).frame(width: 3, height: length)
-					Capsule().fill(.tint.opacity(0.6))
-						.frame(width: 3, height: CGFloat(selectedRow) * Self.rowHeight)
+			// Each version joined to the one it came from.
+			Canvas { context, _ in
+				for snapshot in rows {
+					guard let parent = snapshot.parentID, let from = rowIndex[snapshot.id],
+						let to = rowIndex[parent]
+					else { continue }
+					let x1 = Self.railX + CGFloat(lanes[snapshot.id] ?? 0) * Self.laneWidth
+					let x2 = Self.railX + CGFloat(lanes[parent] ?? 0) * Self.laneWidth
+					let y1 = (CGFloat(from) + 0.5) * Self.rowHeight
+					let y2 = (CGFloat(to) + 0.5) * Self.rowHeight
+					var path = Path()
+					path.move(to: CGPoint(x: x1, y: y1))
+					if x1 == x2 {
+						path.addLine(to: CGPoint(x: x2, y: y2))
+					} else {
+						// A branch curves back to where it left.
+						path.addLine(to: CGPoint(x: x1, y: y2 - Self.rowHeight * 0.6))
+						path.addQuadCurve(to: CGPoint(x: x2, y: y2), control: CGPoint(x: x1, y: y2))
+					}
+					let onMain = (lanes[snapshot.id] ?? 0) == 0
+					context.stroke(
+						path,
+						with: onMain
+							? .color(.accentColor.opacity(0.6)) : .color(.secondary.opacity(0.45)),
+						style: StrokeStyle(
+							lineWidth: 2.5, lineCap: .round, dash: onMain ? [] : [4, 3]))
 				}
-				.offset(x: Self.railX - 1.5, y: top)
 			}
+			.frame(width: railWidth, height: CGFloat(rows.count) * Self.rowHeight)
 		}
 		.overlay(alignment: .leading) {
-			// Dragging along the rail scrubs.
+			// Dragging along the lines scrubs.
 			Color.clear
-				.frame(width: Self.railX * 2)
+				.frame(width: railWidth)
 				.contentShape(.rect)
 				.gesture(
-					DragGesture(minimumDistance: 0)
+					DragGesture(minimumDistance: 2)
 						.onChanged { value in
-							let row = Int(value.location.y / Self.rowHeight)
-							let clamped = min(max(row, 0), count - 1)
-							if clamped != selectedRow { select(rows[clamped].id) }
+							let row = min(
+								max(Int(value.location.y / Self.rowHeight), 0), rows.count - 1)
+							if rows[row].id != selected { select(rows[row].id) }
 						}
 				)
 				.help("Drag along the line to scrub through the versions")
 		}
-		.accessibilityElement(children: .contain)
-		.accessibilityAdjustableAction { direction in
-			switch direction {
-			case .increment: if selectedRow > 0 { select(rows[selectedRow - 1].id) }
-			case .decrement: if selectedRow < count - 1 { select(rows[selectedRow + 1].id) }
-			@unknown default: break
-			}
-		}
 	}
 }
 
-/// One version: its dot on the rail, title and short id, when, and a
-/// `git --stat`-style bar of lines added and removed.
+/// One version: its dot on its line, its name, when, and a `git --stat`
+/// style bar of lines added and removed.
 private struct CommitRow: View {
 	var snapshot: CanvasController.Snapshot
+	var lane: Int
+	var railWidth: CGFloat
 	var isNow: Bool
 	var isSelected: Bool
-	/// Newer than the version being shown.
-	var isAhead: Bool
-	var select: () -> Void
+	var isMarked: Bool
+	var action: (NSEvent.ModifierFlags) -> Void
 
 	@State private var isHovered = false
 
 	var body: some View {
-		Button(action: select) {
-			HStack(spacing: 10) {
-				dot.frame(width: CommitGraph.railX * 2)
-				VStack(alignment: .leading, spacing: 3) {
-					HStack(spacing: 6) {
-						Text(snapshot.title)
-							.fontWeight(isSelected ? .semibold : .regular)
-							.lineLimit(1)
-						if isNow {
-							Text("Now")
-								.font(.caption2.weight(.semibold))
-								.padding(.horizontal, 5)
-								.padding(.vertical, 1)
-								.background(.tint.opacity(0.18), in: .capsule)
-						}
-					}
-					HStack(spacing: 6) {
-						Text(snapshot.shortID)
-							.font(.caption.monospaced())
-							.foregroundStyle(.tertiary)
-						Text(snapshot.date, format: .relative(presentation: .named))
-							.font(.caption)
-							.foregroundStyle(.secondary)
+		HStack(spacing: 8) {
+			dot
+				.padding(.leading, CommitGraph.railX - 6 + CGFloat(lane) * CommitGraph.laneWidth)
+				.frame(width: railWidth, alignment: .leading)
+			VStack(alignment: .leading, spacing: 3) {
+				HStack(spacing: 6) {
+					Text(snapshot.title)
+						.fontWeight(isSelected ? .semibold : .regular)
+						.lineLimit(1)
+					if isNow {
+						Text("Now")
+							.font(.caption2.weight(.semibold))
+							.padding(.horizontal, 5)
+							.padding(.vertical, 1)
+							.background(.tint.opacity(0.18), in: .capsule)
 					}
 				}
-				Spacer(minLength: 6)
-				if snapshot.added + snapshot.removed > 0 { stat }
+				Text(snapshot.date, format: .relative(presentation: .named))
+					.font(.caption)
+					.foregroundStyle(.secondary)
 			}
-			.padding(.trailing, 8)
-			.frame(maxHeight: .infinity)
-			.background(
-				isSelected
+			.opacity(lane > 0 ? 0.7 : 1)
+			Spacer(minLength: 6)
+			if snapshot.added + snapshot.removed > 0 { stat }
+		}
+		.padding(.trailing, 8)
+		.frame(maxHeight: .infinity)
+		.background(
+			isMarked
+				? AnyShapeStyle(.red.opacity(0.14))
+				: isSelected
 					? AnyShapeStyle(.tint.opacity(0.12))
 					: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
-				in: .rect(cornerRadius: 8, style: .continuous)
-			)
-			.opacity(isAhead ? 0.75 : 1)
-			.contentShape(.rect)
-		}
-		.buttonStyle(.plain)
+			in: .rect(cornerRadius: 8, style: .continuous)
+		)
+		.contentShape(.rect)
+		.onTapGesture { action(NSEvent.modifierFlags) }
 		.onHover { isHovered = $0 }
-		.help(isNow ? "The current version" : "Show this version on the canvas")
+		.help(
+			isNow
+				? "The current version"
+				: "Show this version on the canvas (⌘-click or ⇧-click to pick several)"
+		)
+		.accessibilityElement(children: .combine)
+		.accessibilityAddTraits(.isButton)
 		.accessibilityLabel(
 			"\(snapshot.title), \(snapshot.added) lines added, \(snapshot.removed) removed"
 		)
 		.accessibilityAddTraits(isSelected ? .isSelected : [])
 	}
 
-	/// A filled dot for the chosen version, a ringed one for Now, hollow otherwise.
 	private var dot: some View {
 		ZStack {
 			Circle()
@@ -394,7 +530,9 @@ private struct CommitRow: View {
 				.frame(width: 12, height: 12)
 			Circle()
 				.strokeBorder(
-					isSelected || isNow ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary),
+					isMarked
+						? AnyShapeStyle(.red)
+						: isSelected || isNow ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary),
 					lineWidth: 2
 				)
 				.frame(width: 12, height: 12)
@@ -403,6 +541,7 @@ private struct CommitRow: View {
 					width: 20, height: 20)
 			}
 		}
+		.frame(width: 12, height: 12)
 	}
 
 	/// "+12 −3" and five blocks split between them, like `git diff --stat`.

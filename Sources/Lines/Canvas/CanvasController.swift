@@ -25,15 +25,11 @@ final class CanvasController {
 	/// The changes panel, comparing the source with `originalText`.
 	var showsChanges = false
 	/// The source as the window opened it.
-	var originalText: String? {
-		didSet {
-			if history.isEmpty, let originalText {
-				history = [Snapshot(text: originalText, title: "Opened", date: .now)]
-			}
-		}
-	}
+	var originalText: String?
 
 	/// One version of the source in this window's history, like a commit.
+	/// Versions point at the one they came from, so restoring an old version
+	/// and editing on from it starts a branch instead of losing what followed.
 	struct Snapshot: Identifiable, Equatable {
 		let id = UUID()
 		var text: String
@@ -41,41 +37,95 @@ final class CanvasController {
 		var date: Date
 		var added = 0
 		var removed = 0
-		/// A short, git-style id for the version's text.
-		var shortID: String { Self.shortID(of: text) }
-
-		/// FNV-1a over the text, as seven hex digits.
-		static func shortID(of text: String) -> String {
-			var hash: UInt32 = 2_166_136_261
-			for byte in text.utf8 {
-				hash ^= UInt32(byte)
-				hash = hash &* 16_777_619
-			}
-			return String(String(format: "%08x", hash).prefix(7))
-		}
+		/// The version this one was made from (nil for the first).
+		var parentID: UUID? = nil
 	}
 
 	/// Versions of the source since the window opened, oldest first.
-	var history: [Snapshot] = []
+	private(set) var history: [Snapshot] = []
+	/// The version the document is at now (the branch tip being worked on).
+	private(set) var headID: Snapshot.ID?
 	/// The version being shown on the canvas while scrubbing the history.
 	private(set) var previewedVersion: Snapshot.ID?
+
+	var head: Snapshot? { history.first { $0.id == headID } }
 
 	/// Starts the history over from `text`, as the file was opened.
 	func resetHistory(to text: String) {
 		originalText = text
-		history = [Snapshot(text: text, title: "Opened", date: .now)]
+		let first = Snapshot(text: text, title: "Opened", date: .now)
+		history = [first]
+		headID = first.id
 		previewedVersion = nil
 	}
 
-	/// Records the source as a new version if it changed.
+	/// Records the source as a new version on the current branch, unless
+	/// nothing visible changed (whitespace, formatting) or it was undone.
 	func recordVersion(_ text: String, title: String?) {
-		guard let last = history.last, last.text != text else { return }
-		let diff = LineDiff(from: last.text, to: text)
-		history.append(
-			Snapshot(
-				text: text, title: title.flatMap { $0.isEmpty ? nil : $0 } ?? "Edit", date: .now,
-				added: diff.added, removed: diff.removed))
-		if history.count > 300 { history.remove(at: 1) }  // keep "Opened"
+		guard let head, head.text != text else { return }
+		// Undoing an edit takes it back off the history instead of adding one.
+		if let parentID = head.parentID, let parent = history.first(where: { $0.id == parentID }),
+			Self.drawsTheSame(parent.text, text),
+			!history.contains(where: { $0.parentID == head.id })
+		{
+			history.removeAll { $0.id == head.id }
+			headID = parent.id
+			return
+		}
+		// A change you can't see (indentation, formatting) isn't a version;
+		// the current one just takes the new text.
+		if Self.drawsTheSame(head.text, text) {
+			if let i = history.firstIndex(where: { $0.id == head.id }) { history[i].text = text }
+			return
+		}
+		let diff = LineDiff(from: head.text, to: text)
+		let snapshot = Snapshot(
+			text: text, title: title.flatMap { $0.isEmpty ? nil : $0 } ?? "Edit", date: .now,
+			added: diff.added, removed: diff.removed, parentID: head.id)
+		history.append(snapshot)
+		headID = snapshot.id
+		if history.count > 300 { deleteVersions([history[1].id]) }  // keep "Opened"
+	}
+
+	/// Moves the head to a version whose text is being restored, so later
+	/// edits branch from it.
+	func checkOut(_ id: Snapshot.ID) {
+		guard history.contains(where: { $0.id == id }) else { return }
+		headID = id
+	}
+
+	/// Removes versions from the history (never the first). Their children
+	/// reattach to the nearest remaining ancestor; if the head goes, it moves
+	/// there too and the document is restored to it (returned, to apply).
+	@discardableResult
+	func deleteVersions(_ ids: Set<Snapshot.ID>) -> String? {
+		let removable = ids.subtracting([history.first?.id].compactMap { $0 })
+		guard !removable.isEmpty else { return nil }
+		func survivingAncestor(of id: UUID?) -> UUID? {
+			var current = id
+			while let c = current, removable.contains(c) {
+				current = history.first { $0.id == c }?.parentID
+			}
+			return current
+		}
+		var restore: String?
+		if let headID, removable.contains(headID) {
+			self.headID = survivingAncestor(of: headID)
+			restore = history.first { $0.id == self.headID }?.text
+		}
+		history = history.filter { !removable.contains($0.id) }.map { snapshot in
+			var s = snapshot
+			s.parentID = survivingAncestor(of: snapshot.parentID)
+			return s
+		}
+		if let previewedVersion, removable.contains(previewedVersion) { preview(version: nil) }
+		return restore
+	}
+
+	/// Whether two sources draw the same: equal once whitespace between tags
+	/// (indentation, line breaks) is ignored.
+	static func drawsTheSame(_ a: String, _ b: String) -> Bool {
+		a == b || XMLFormatter.minify(a) == XMLFormatter.minify(b)
 	}
 
 	/// Shows an older version on the canvas (locked while shown); nil returns
@@ -84,7 +134,7 @@ final class CanvasController {
 		guard id != previewedVersion else { return }
 		previewedVersion = id
 		if let id, let snapshot = history.first(where: { $0.id == id }),
-			snapshot.id != history.last?.id
+			snapshot.id != headID
 		{
 			call("setEditable(false)")
 			renderedText = nil
