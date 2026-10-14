@@ -38,6 +38,10 @@ struct EffectsCard: View {
 					if slot.attribute == "filter", let filter = referenced(slot) {
 						FilterParameters(filter: filter, controller: controller)
 					}
+					if slot.attribute != "filter", let definition = referenced(slot) {
+						MaskEditor(definition: definition, controller: controller)
+							.padding(.leading, 22)
+					}
 				}
 			}
 		}

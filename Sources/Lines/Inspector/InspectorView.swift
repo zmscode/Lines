@@ -52,6 +52,10 @@ private struct ElementInspector: View {
 		quickActions
 		if AnimationTag.contains(tag) {
 			AnimationCard(selection: selection, controller: controller)
+		} else if DefinitionCard.handles(tag),
+			let item = controller.outline.first(where: { $0.order == selection.order })
+		{
+			DefinitionCard(item: item, controller: controller)
 		} else {
 			if let bounds = selection.bounds { geometry(bounds) }
 			appearance
@@ -225,36 +229,53 @@ private struct PaintRow: View {
 	var body: some View {
 		let value = selection.value(attribute) ?? (attribute == "fill" ? "black" : "none")
 		let opacity = selection.value(attribute + "-opacity").flatMap(Double.init) ?? 1
-		HStack(spacing: 10) {
-			ColourWell(
-				title: title, value: value, opacity: opacity, documentColours: documentColours,
-				onPick: { hex, alpha in
-					controller.setPaint(attribute, color: hex, opacity: alpha, coalesce: true)
-				},
-				onNone: { controller.setAttribute(attribute, "none") }
-			)
-			VStack(alignment: .leading, spacing: 1) {
-				Text(title)
-				Text(describe(value, opacity: opacity))
-					.font(.caption.monospaced())
-					.foregroundStyle(.secondary)
+		VStack(alignment: .leading, spacing: 10) {
+			HStack(spacing: 10) {
+				ColourWell(
+					title: title, value: value, opacity: opacity, documentColours: documentColours,
+					onPick: { hex, alpha in
+						controller.setPaint(attribute, color: hex, opacity: alpha, coalesce: true)
+					},
+					onNone: { controller.setAttribute(attribute, "none") }
+				)
+				VStack(alignment: .leading, spacing: 1) {
+					Text(title)
+					Text(describe(value, opacity: opacity))
+						.font(.caption.monospaced())
+						.foregroundStyle(.secondary)
+				}
+				Spacer()
+				if value == "none" {
+					Button("Add \(title)", systemImage: "plus.circle") {
+						controller.setPaint(
+							attribute, color: attribute == "fill" ? "#0a84ff" : "#d9753f",
+							opacity: 1,
+							coalesce: false)
+					}
+					.help("Add \(title.lowercased())")
+				} else {
+					Button("Remove \(title)", systemImage: "minus.circle") {
+						controller.setAttribute(attribute, "none")
+					}
+					.help("Remove \(title.lowercased())")
+				}
 			}
-			Spacer()
-			if value == "none" {
-				Button("Add \(title)", systemImage: "plus.circle") {
-					controller.setPaint(
-						attribute, color: attribute == "fill" ? "#0a84ff" : "#d9753f", opacity: 1,
-						coalesce: false)
-				}
-				.help("Add \(title.lowercased())")
-			} else {
-				Button("Remove \(title)", systemImage: "minus.circle") {
-					controller.setAttribute(attribute, "none")
-				}
-				.help("Remove \(title.lowercased())")
+			.buttonStyle(.icon(size: 26))
+			// A gradient paint is edited right here.
+			if let gradient = gradient(value) {
+				GradientEditor(gradient: gradient, controller: controller)
+					.padding(.leading, 4)
 			}
 		}
-		.buttonStyle(.icon(size: 26))
+	}
+
+	/// The gradient a `url(#id)` paint points at, if it's one.
+	private func gradient(_ value: String) -> OutlineItem? {
+		guard let m = value.firstMatch(of: #/url\(\s*['"]?#([^'")\s]+)/#) else { return nil }
+		let id = String(m.1)
+		return controller.outline.first {
+			$0.elementID == id && ($0.tag == "linearGradient" || $0.tag == "radialGradient")
+		}
 	}
 
 	private func describe(_ value: String, opacity: Double) -> String {

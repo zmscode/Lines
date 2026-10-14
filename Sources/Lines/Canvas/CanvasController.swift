@@ -149,6 +149,12 @@ final class CanvasController {
 		call("addDefinition(\(js(kind.rawValue)), \(order.map(String.init) ?? "null"))")
 	}
 	func removeAllReferences(order: Int) { call("removeAllReferences(\(order))") }
+	func addStop(toGradient order: Int) { call("addStop(\(order))") }
+	/// Adds a rectangle or circle to a mask or clip path.
+	func addShape(_ kind: String, toDefinition order: Int) {
+		call("addDefinitionShape(\(order), \(js(kind)))")
+	}
+	func invertMask(order: Int) { call("invertMask(\(order))") }
 
 	// MARK: Animation
 

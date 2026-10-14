@@ -1,0 +1,331 @@
+import SwiftUI
+
+/// Edits a gradient's stops and direction: shown when a gradient is selected,
+/// and under Fill or Stroke when a shape is painted with one.
+struct GradientEditor: View {
+	var gradient: OutlineItem
+	var controller: CanvasController
+
+	private var stops: [OutlineItem] {
+		controller.outline.filter { $0.parent == gradient.order && $0.tag == "stop" }
+	}
+
+	private var isLinear: Bool { gradient.tag == "linearGradient" }
+	private var usesBoundingBox: Bool { gradient.prop("gradientUnits") != "userSpaceOnUse" }
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 10) {
+			strip
+			ForEach(Array(stops.enumerated()), id: \.element.order) { index, stop in
+				StopRow(
+					stop: stop, index: index, canDelete: stops.count > 2, controller: controller)
+			}
+			HStack {
+				Button("Add Stop", systemImage: "plus") {
+					controller.addStop(toGradient: gradient.order)
+				}
+				Spacer()
+				Button("Reverse", systemImage: "arrow.left.arrow.right") { reverse() }
+					.help("Swap the stops end to end")
+			}
+			.controlSize(.small)
+			Divider()
+			if isLinear {
+				if usesBoundingBox {
+					row("Angle") {
+						ScrubField(
+							label: "Angle", systemImage: "angle", value: angle, unit: "°",
+							range: -360...360
+						) { setAngle($0) }
+					}
+				} else {
+					coordinates(["x1", "y1", "x2", "y2"])
+				}
+			} else {
+				coordinates(["cx", "cy", "r", "fx", "fy"])
+			}
+			row("Spread") {
+				Picker("Spread", selection: spread) {
+					Text("Pad").tag("pad")
+					Text("Reflect").tag("reflect")
+					Text("Repeat").tag("repeat")
+				}
+				.labelsHidden()
+			}
+		}
+	}
+
+	/// The gradient as it looks, from its stops.
+	private var strip: some View {
+		let colours = stops.map { stop in
+			Gradient.Stop(
+				color: (CSSColor.parse(Self.colour(of: stop)) ?? .black)
+					.opacity(Double(stop.prop("stop-opacity") ?? "") ?? 1),
+				location: Self.offset(of: stop))
+		}
+		return RoundedRectangle(cornerRadius: 6, style: .continuous)
+			.fill(
+				colours.isEmpty
+					? AnyShapeStyle(.quaternary)
+					: AnyShapeStyle(
+						LinearGradient(stops: colours, startPoint: .leading, endPoint: .trailing))
+			)
+			.frame(height: 22)
+			.overlay {
+				RoundedRectangle(cornerRadius: 6, style: .continuous)
+					.strokeBorder(.separator, lineWidth: 0.5)
+			}
+			.accessibilityHidden(true)
+	}
+
+	private func coordinates(_ names: [String]) -> some View {
+		Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+			ForEach(Array(stride(from: 0, to: names.count, by: 2)), id: \.self) { i in
+				GridRow {
+					ForEach(names[i..<min(i + 2, names.count)], id: \.self) { name in
+						ScrubField(
+							label: name.uppercased(),
+							value: gradient.prop(name).flatMap(Self.number),
+							range: -100_000...100_000, step: usesBoundingBox ? 0.01 : 1
+						) {
+							controller.setAttribute(
+								name, ScrubField.format($0), onOrder: gradient.order,
+								coalesce: true)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private func row(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+		HStack {
+			Text(title).foregroundStyle(.secondary)
+			Spacer()
+			content().frame(width: 130)
+		}
+	}
+
+	// MARK: Values
+
+	/// Degrees clockwise from left-to-right, from x1/y1 → x2/y2.
+	private var angle: Double {
+		let p = { (n: String, d: Double) in gradient.prop(n).flatMap(Self.number) ?? d }
+		let dx = p("x2", 1) - p("x1", 0)
+		let dy = p("y2", 0) - p("y1", 0)
+		return (atan2(dy, dx) * 180 / .pi).rounded()
+	}
+
+	private func setAngle(_ degrees: Double) {
+		let r = degrees * .pi / 180
+		let values = [
+			("x1", 0.5 - cos(r) / 2), ("y1", 0.5 - sin(r) / 2),
+			("x2", 0.5 + cos(r) / 2), ("y2", 0.5 + sin(r) / 2),
+		]
+		for (name, v) in values {
+			controller.setAttribute(
+				name, ScrubField.format((v * 1000).rounded() / 1000), onOrder: gradient.order,
+				coalesce: true)
+		}
+	}
+
+	private var spread: Binding<String> {
+		Binding(
+			get: { gradient.prop("spreadMethod") ?? "pad" },
+			set: {
+				controller.setAttribute(
+					"spreadMethod", $0 == "pad" ? nil : $0, onOrder: gradient.order)
+			})
+	}
+
+	private func reverse() {
+		for stop in stops {
+			let flipped = 1 - Self.offset(of: stop)
+			controller.setAttribute(
+				"offset", ScrubField.format((flipped * 1000).rounded() / 1000),
+				onOrder: stop.order)
+		}
+	}
+
+	static func number(_ s: String) -> Double? {
+		let t = s.trimmingCharacters(in: .whitespaces)
+		if t.hasSuffix("%") { return Double(t.dropLast()).map { $0 / 100 } }
+		return Double(t)
+	}
+
+	static func offset(of stop: OutlineItem) -> Double {
+		min(max(stop.prop("offset").flatMap(number) ?? 0, 0), 1)
+	}
+
+	/// A stop's colour, from its attribute or its style.
+	static func colour(of stop: OutlineItem) -> String {
+		if let c = stop.prop("stop-color") { return c }
+		if let style = stop.prop("style"),
+			let m = style.firstMatch(of: #/stop-color\s*:\s*([^;]+)/#)
+		{
+			return String(m.1).trimmingCharacters(in: .whitespaces)
+		}
+		return "#000000"
+	}
+}
+
+private struct StopRow: View {
+	var stop: OutlineItem
+	var index: Int
+	var canDelete: Bool
+	var controller: CanvasController
+
+	var body: some View {
+		HStack(spacing: 8) {
+			ColourWell(
+				title: "Stop \(index + 1)", value: GradientEditor.colour(of: stop),
+				opacity: Double(stop.prop("stop-opacity") ?? "") ?? 1,
+				documentColours: DocumentColours.of(controller, limit: 16),
+				onPick: { hex, alpha in
+					controller.setAttribute(
+						"stop-color", hex, onOrder: stop.order, coalesce: true)
+					controller.setAttribute(
+						"stop-opacity", alpha >= 0.999 ? nil : ScrubField.format(alpha),
+						onOrder: stop.order, coalesce: true)
+				},
+				onNone: {
+					controller.setAttribute("stop-opacity", "0", onOrder: stop.order)
+				}
+			)
+			Slider(
+				value: Binding(
+					get: { GradientEditor.offset(of: stop) },
+					set: {
+						controller.setAttribute(
+							"offset", ScrubField.format(($0 * 100).rounded() / 100),
+							onOrder: stop.order, coalesce: true)
+					}), in: 0...1
+			)
+			.controlSize(.small)
+			.help("Where this colour sits along the gradient")
+			Text("\(Int((GradientEditor.offset(of: stop) * 100).rounded()))%")
+				.font(.caption.monospacedDigit())
+				.foregroundStyle(.secondary)
+				.frame(width: 34, alignment: .trailing)
+			Button("Remove Stop", systemImage: "minus.circle") {
+				controller.delete(order: stop.order)
+			}
+			.buttonStyle(.icon(size: 22))
+			.disabled(!canDelete)
+			.help(canDelete ? "Remove this stop" : "A gradient needs at least two stops")
+		}
+	}
+}
+
+/// Edits a mask or clip path: the shapes it's made of, adding more, and (for
+/// masks) whether each shows or hides what's under it.
+struct MaskEditor: View {
+	var definition: OutlineItem
+	var controller: CanvasController
+
+	private var isMask: Bool { definition.tag == "mask" }
+
+	private var shapes: [OutlineItem] {
+		controller.outline.filter { $0.parent == definition.order }
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 8) {
+			Text(
+				isMask
+					? "White areas show what's masked, black areas hide it, greys fade it."
+					: "Only what's inside these shapes is drawn."
+			)
+			.font(.caption)
+			.foregroundStyle(.secondary)
+			ForEach(shapes) { shape in
+				HStack(spacing: 8) {
+					Image(systemName: InspectorView.symbol(for: shape.tag, isRoot: false))
+						.foregroundStyle(.secondary)
+						.frame(width: 18)
+					Text(shape.displayName).lineLimit(1)
+					Spacer()
+					if isMask {
+						Picker("Mask", selection: reveal(shape)) {
+							Text("Show").tag(true)
+							Text("Hide").tag(false)
+						}
+						.pickerStyle(.segmented)
+						.labelsHidden()
+						.frame(width: 104)
+						.help("White shows what's under this shape; black hides it")
+					}
+					Button("Edit Shape", systemImage: "arrow.right.circle") {
+						controller.select(order: shape.order)
+					}
+					.buttonStyle(.icon(size: 22))
+					.help("Select this shape to edit it")
+					Button("Remove Shape", systemImage: "minus.circle") {
+						controller.delete(order: shape.order)
+					}
+					.buttonStyle(.icon(size: 22))
+					.help("Remove this shape")
+				}
+			}
+			HStack {
+				Menu {
+					Button("Rectangle", systemImage: "rectangle") {
+						controller.addShape("rect", toDefinition: definition.order)
+					}
+					Button("Circle", systemImage: "circle") {
+						controller.addShape("circle", toDefinition: definition.order)
+					}
+				} label: {
+					Label("Add Shape", systemImage: "plus")
+				}
+				.fixedSize()
+				Spacer()
+				if isMask {
+					Button("Invert", systemImage: "circle.righthalf.filled") {
+						controller.invertMask(order: definition.order)
+					}
+					.help("Swap white and black, so what's shown is hidden")
+				}
+			}
+			.controlSize(.small)
+		}
+	}
+
+	private func reveal(_ shape: OutlineItem) -> Binding<Bool> {
+		Binding(
+			get: {
+				let fill = (shape.prop("fill") ?? shape.fill ?? "black").lowercased()
+				return ["white", "#fff", "#ffffff"].contains(fill)
+			},
+			set: {
+				controller.setAttribute("fill", $0 ? "white" : "black", onOrder: shape.order)
+			})
+	}
+}
+
+/// The inspector card for a selected gradient, mask or clip path.
+struct DefinitionCard: View {
+	var item: OutlineItem
+	var controller: CanvasController
+
+	var body: some View {
+		switch item.tag {
+		case "linearGradient", "radialGradient":
+			InspectorCard(title: "Gradient") {
+				GradientEditor(gradient: item, controller: controller)
+			}
+		case "mask":
+			InspectorCard(title: "Mask") { MaskEditor(definition: item, controller: controller) }
+		case "clipPath":
+			InspectorCard(title: "Clip Path") {
+				MaskEditor(definition: item, controller: controller)
+			}
+		default:
+			EmptyView()
+		}
+	}
+
+	static func handles(_ tag: String) -> Bool {
+		["linearGradient", "radialGradient", "mask", "clipPath"].contains(tag)
+	}
+}

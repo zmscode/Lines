@@ -2053,6 +2053,74 @@ function addDefinition(kind, applyOrder) {
   commit(`Add ${names[kind]}`);
 }
 
+// Adds a stop to a gradient, halfway between the last two, in the last colour.
+function addStop(order) {
+  const grad = byOrder(order);
+  if (!grad) return;
+  const stops = Array.from(grad.children).filter((c) => c.localName === "stop");
+  const off = (s) => {
+    const v = (s && s.getAttribute("offset")) || "0";
+    return v.endsWith("%") ? parseFloat(v) / 100 : parseFloat(v) || 0;
+  };
+  const last = stops[stops.length - 1];
+  const prev = stops[stops.length - 2];
+  const stop = document.createElementNS(NS, "stop");
+  const at = last ? (prev ? (off(prev) + off(last)) / 2 : off(last) / 2) : 0;
+  stop.setAttribute("offset", round(at));
+  const colour = last
+    ? last.getAttribute("stop-color") || (last.style && last.style.stopColor) || "#000000"
+    : palette[paletteIndex++ % palette.length];
+  stop.setAttribute("stop-color", colour);
+  insert(stop, grad, last || null);
+  commit("Add Stop");
+}
+
+// Adds a shape to a mask or clip path, covering what its other shapes cover
+// (or the drawing). Masks get white, which shows what's under it.
+function addDefinitionShape(order, kind) {
+  const def = byOrder(order);
+  if (!def || !root) return;
+  let b = null;
+  try {
+    const bb = def.getBBox && def.getBBox();
+    if (bb && (bb.width || bb.height)) b = bb;
+  } catch (e) {}
+  if (!b) {
+    const vb = root.viewBox && root.viewBox.baseVal;
+    const { w, h } = intrinsicSize();
+    b = vb && vb.width ? vb : { x: 0, y: 0, width: w, height: h };
+  }
+  const el = document.createElementNS(NS, kind === "circle" ? "circle" : "rect");
+  if (kind === "circle") {
+    el.setAttribute("cx", round(b.x + b.width / 2));
+    el.setAttribute("cy", round(b.y + b.height / 2));
+    el.setAttribute("r", round(Math.min(b.width, b.height) / 3));
+  } else {
+    el.setAttribute("x", round(b.x + b.width / 4));
+    el.setAttribute("y", round(b.y + b.height / 4));
+    el.setAttribute("width", round(b.width / 2));
+    el.setAttribute("height", round(b.height / 2));
+  }
+  if (def.localName === "mask") el.setAttribute("fill", "white");
+  insert(el, def);
+  commit(def.localName === "mask" ? "Add Shape to Mask" : "Add Shape to Clip Path");
+}
+
+// Swaps white and black in a mask, so what it showed it hides.
+function invertMask(order) {
+  const mask = byOrder(order);
+  if (!mask) return;
+  const white = /^(white|#fff|#ffffff)$/i,
+    black = /^(black|#000|#000000)$/i;
+  for (const el of mask.querySelectorAll("*")) {
+    const f = el.getAttribute("fill");
+    if (f && white.test(f)) el.setAttribute("fill", "black");
+    else if (f && black.test(f)) el.setAttribute("fill", "white");
+    else if (!f && el.localName !== "g") el.setAttribute("fill", "white");
+  }
+  commit("Invert Mask");
+}
+
 // Removes every reference this element makes (fill, clip-path, mask, …).
 function removeAllReferences(order) {
   const el = byOrder(order);
@@ -2825,12 +2893,37 @@ function exportPNG(scale) {
 // MARK: Preview mode — locked: nothing changes, and ⌘-click follows links.
 
 const EDITING_FUNCTIONS = [
-  "setAttr", "setPaint", "removeAttr", "setText", "addShape", "addImage", "deleteSelected",
-  "duplicateSelected", "reorder", "groupSelected", "flipSelected", "ungroupSelected",
-  "pasteMarkup", "setBounds", "setRotation", "fitViewBoxToContent", "addDefinition",
-  "removeAllReferences", "addAnimation", "beginTextEdit", "setAttrOn", "toggleHidden",
-  "setReference", "removeReference", "moveElements", "moveRelative", "renameElement",
+  "setAttr",
+  "setPaint",
+  "removeAttr",
+  "setText",
+  "addShape",
+  "addImage",
+  "deleteSelected",
+  "duplicateSelected",
+  "reorder",
+  "groupSelected",
+  "flipSelected",
+  "ungroupSelected",
+  "pasteMarkup",
+  "setBounds",
+  "setRotation",
+  "fitViewBoxToContent",
+  "addDefinition",
+  "removeAllReferences",
+  "addAnimation",
+  "beginTextEdit",
+  "setAttrOn",
+  "toggleHidden",
+  "setReference",
+  "removeReference",
+  "moveElements",
+  "moveRelative",
+  "renameElement",
   "deleteByOrder",
+  "addStop",
+  "addDefinitionShape",
+  "invertMask",
 ];
 for (const name of EDITING_FUNCTIONS) {
   const f = window[name];
