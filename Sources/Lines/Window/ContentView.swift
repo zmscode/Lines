@@ -293,26 +293,28 @@ struct ContentView: View {
 			}
 		}
 		.overlay(alignment: .bottomLeading) {
-			// The lock, at the canvas's lower left (the minimap sits beside it).
-			FloatingStrip {
-				Button(
-					controller.isEditing ? "Lock" : "Unlock",
-					systemImage: controller.isEditing ? "lock.open" : "lock.fill"
-				) {
-					controller.isEditing.toggle()
+			// The lock, at the canvas's lower left (the minimap sits beside it);
+			// the timeline takes the bottom of the window when it's open.
+			if !controller.showsTimeline {
+				FloatingStrip {
+					Button(
+						controller.isEditing ? "Lock" : "Unlock",
+						systemImage: controller.isEditing ? "lock.open" : "lock.fill"
+					) {
+						controller.isEditing.toggle()
+					}
+					.buttonStyle(
+						.icon(size: ToolPalette.buttonSize, selected: !controller.isEditing)
+					)
+					.contentTransition(.symbolEffect(.replace))
+					.help(
+						controller.isEditing
+							? "Lock to preview without changing anything (⇧⌘L)"
+							: "Unlock to edit (⇧⌘L)")
 				}
-				.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: !controller.isEditing))
-				.contentTransition(.symbolEffect(.replace))
-				.help(
-					controller.isEditing
-						? "Lock to preview without changing anything (⇧⌘L)"
-						: "Unlock to edit (⇧⌘L)")
+				.padding(Self.panelMargin)
+				.padding(.leading, leadingPanelsSpace)
 			}
-			.padding(Self.panelMargin)
-			.padding(.leading, leadingPanelsSpace)
-			.padding(
-				.bottom,
-				controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0)
 		}
 		.overlay(alignment: .top) {
 			if let edit = controller.definitionEdit {

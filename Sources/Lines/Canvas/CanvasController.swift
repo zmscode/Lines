@@ -17,7 +17,9 @@ final class CanvasController {
 	}
 	var showsCode = false
 	var showsLayers = false
-	var showsInspector = false
+	var showsInspector = false {
+		didSet { if showsInspector != oldValue { call("setInspectorOpen(\(showsInspector))") } }
+	}
 	var tool: CanvasTool = .select
 	var showsTimeline = false
 	/// The changes panel, comparing the source with `originalText`.
@@ -475,6 +477,7 @@ final class CanvasController {
 			if documentFrameShown { call("showDocumentFrame(true)") }
 			if !isEditing { call("setEditable(false)") }
 			if layout == .graph { call("setCanvasBehind(true)") }
+			if showsInspector { call("setInspectorOpen(true)") }
 
 		case "changed":
 			guard var svg = body["svg"] as? String, let document else { return }

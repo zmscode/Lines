@@ -1384,7 +1384,8 @@ function reorder(mode) {
   const ordered = mode === "front" || mode === "forward" ? inDocument.reverse() : inDocument;
   const keep = all;
   inBatch(() => {
-    for (const el of mode === "front" || mode === "back" ? ordered.reverse() : ordered) reorderOne(el, mode);
+    for (const el of mode === "front" || mode === "back" ? ordered.reverse() : ordered)
+      reorderOne(el, mode);
   });
   selectMany(keep);
 }
@@ -3095,8 +3096,11 @@ host.addEventListener("dblclick", (e) => {
   if (!t) return;
   const text = t.localName === "text" ? t : t.closest && t.closest("text");
   if (text) {
+    // The first double-click opens the inspector; with it open, the next
+    // edits the text in place.
     select(text);
-    beginTextEdit(text);
+    if (inspectorOpen) beginTextEdit(text);
+    else post({ type: "editElement" });
   } else if (t.localName !== "g") {
     post({ type: "editElement" });
   }
@@ -3148,6 +3152,12 @@ function labelOf(el) {
     if (t) return t.length > 32 ? t.slice(0, 32) + "…" : t;
   }
   return null;
+}
+
+// Whether the inspector is showing, for double-clicks on text.
+let inspectorOpen = false;
+function setInspectorOpen(on) {
+  inspectorOpen = !!on;
 }
 
 // Set while the graph covers the canvas.
