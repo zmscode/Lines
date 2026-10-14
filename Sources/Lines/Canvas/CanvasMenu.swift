@@ -5,6 +5,12 @@ import AppKit
 @MainActor
 enum CanvasMenu {
 	static func items(for controller: CanvasController, editing: NSResponder) -> [NSMenuItem] {
+		guard controller.isEditing else {
+			return [
+				item("Unlock to Edit", "lock.open") { controller.isEditing = true },
+				item("Show Timeline", "film.stack") { controller.showsTimeline = true },
+			]
+		}
 		var items: [NSMenuItem] = [
 			standard("Cut", #selector(CanvasWebView.cut(_:)), "x", editing),
 			standard("Copy", #selector(CanvasWebView.copy(_:)), "c", editing),

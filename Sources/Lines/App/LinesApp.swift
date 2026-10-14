@@ -137,6 +137,14 @@ private struct ViewCommands: Commands {
 			.keyboardShortcut("3", modifiers: .command)
 			.disabled(controller == nil)
 			Button(
+				controller?.isEditing == false ? "Unlock Editing" : "Lock Editing",
+				systemImage: controller?.isEditing == false ? "lock.open" : "lock"
+			) {
+				controller?.isEditing.toggle()
+			}
+			.keyboardShortcut("l", modifiers: [.command, .shift])
+			.disabled(controller == nil)
+			Button(
 				controller?.showsTimeline == true ? "Hide Timeline" : "Show Timeline",
 				systemImage: "film.stack"
 			) {

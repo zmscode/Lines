@@ -117,7 +117,7 @@ private struct TimelineHeader: View {
 			}
 			.menuIndicator(.hidden)
 			.buttonStyle(.icon(size: 26))
-			.disabled(targetOrder == nil)
+			.disabled(targetOrder == nil || !controller.isEditing)
 			.help(
 				targetOrder == nil
 					? "Select an element to animate" : "Add an animation to the selection")
@@ -126,7 +126,7 @@ private struct TimelineHeader: View {
 				if let order = selectedAnimation { controller.delete(order: order) }
 			}
 			.buttonStyle(.icon(size: 26))
-			.disabled(selectedAnimation == nil)
+			.disabled(selectedAnimation == nil || !controller.isEditing)
 			.help("Delete the selected animation")
 
 			Button("Close", systemImage: "xmark", action: close)
@@ -229,6 +229,7 @@ private struct TimelineTracks: View {
 									AnimationBar(
 										animation: animation, scale: scale, span: span,
 										isSelected: isSelected(animation.order),
+										isEditable: controller.isEditing,
 										select: { controller.select(order: animation.order) },
 										setBegin: { seconds in
 											controller.setAttribute(
@@ -332,6 +333,7 @@ private struct AnimationBar: View {
 	var scale: Double
 	var span: Double
 	var isSelected: Bool
+	var isEditable = true
 	var select: () -> Void
 	var setBegin: (Double) -> Void
 	var setDuration: (Double) -> Void
@@ -377,7 +379,7 @@ private struct AnimationBar: View {
 							setBegin(Self.snap(begin))
 							moveBy = 0
 						},
-					isEnabled: !animation.isCSS
+					isEnabled: !animation.isCSS && isEditable
 				)
 				.onTapGesture(perform: select)
 				.help(
@@ -388,7 +390,7 @@ private struct AnimationBar: View {
 				.offset(x: x)
 
 			// The first pass's trailing edge sets the duration.
-			if !animation.isCSS { durationHandle(x: x) }
+			if !animation.isCSS && isEditable { durationHandle(x: x) }
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 	}

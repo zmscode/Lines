@@ -21,6 +21,10 @@ final class CanvasController {
 	/// The animation playhead, in seconds, and whether animations are playing.
 	var animationTime: Double = 0
 	var isPlaying = true
+	/// Off in preview mode: the drawing can be viewed but not changed.
+	var isEditing = true {
+		didSet { if isEditing != oldValue { call("setEditable(\(isEditing))") } }
+	}
 	/// Playback rate for previewing animations (SMIL itself has none).
 	var animationSpeed: Double = 1 {
 		didSet { call("animSetSpeed(\(animationSpeed))") }
@@ -33,7 +37,7 @@ final class CanvasController {
 
 	/// Re-indents the source as one undoable step.
 	func formatDocument() {
-		guard let document else { return }
+		guard let document, isEditing else { return }
 		let formatted = XMLFormatter.format(document.text)
 		guard formatted != document.text else { return }
 		document.breakUndoCoalescing()
@@ -338,6 +342,7 @@ final class CanvasController {
 			setAccentColor(NSColor(Brand.accent))
 			if !lastInsets.isEmpty { call("setInsets(\(lastInsets))") }
 			if documentFrameShown { call("showDocumentFrame(true)") }
+			if !isEditing { call("setEditable(false)") }
 
 		case "changed":
 			guard var svg = body["svg"] as? String, let document else { return }
@@ -387,6 +392,14 @@ final class CanvasController {
 			}
 			if items != outline { outline = items }
 			outlineTruncated = body["truncated"] as? Bool ?? false
+
+		case "openLink":
+			// ⌘-click on a link in preview mode; only web and mail links leave the app.
+			if let string = body["url"] as? String, let url = URL(string: string),
+				let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme)
+			{
+				NSWorkspace.shared.open(url)
+			}
 
 		case "error":
 			parseError = body["message"] as? String

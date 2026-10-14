@@ -18,6 +18,7 @@ struct ContentView: View {
 	@AppStorage(CanvasBackground.customColourKey) private var customColour = "#f2a65a"
 	@AppStorage("defaultLayout") private var defaultLayout: EditorLayout = .canvas
 	@AppStorage("showsCodeByDefault") private var showsCodeByDefault = false
+	@AppStorage("opensFilesLocked") private var opensFilesLocked = true
 	@AppStorage("editorFontSize") private var fontSize: Double = 12
 	@AppStorage("wrapsLines") private var wrapsLines = true
 	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
@@ -53,6 +54,8 @@ struct ContentView: View {
 			.onAppear {
 				dismissWindow(id: WelcomeView.windowID)
 				controller.document = document
+				// Files open to look at; new drawings open ready to edit.
+				controller.isEditing = !(opensFilesLocked && document.configuration?.fileURL != nil)
 				controller.layout = defaultLayout
 				controller.showsCode = showsCodeByDefault
 				controller.showsInspector = savedShowsInspector
@@ -82,6 +85,7 @@ struct ContentView: View {
 			.onChange(of: documentFrameShown, initial: true) { _, shown in
 				controller.setDocumentFrame(shown)
 			}
+			.onChange(of: controller.isEditing) { _, _ in updateInsets() }
 			.onChange(of: controller.layout) { _, layout in
 				if layout == .graph && isLoaded { closeSidePanels() }
 				updateInsets()
@@ -117,7 +121,8 @@ struct ContentView: View {
 
 	/// Room taken by the tools palette on the canvas's leading edge.
 	private var paletteSpace: CGFloat {
-		controller.layout == .canvas ? ToolPalette.width + Self.panelMargin : 0
+		controller.layout == .canvas && controller.isEditing
+			? ToolPalette.width + Self.panelMargin : 0
 	}
 
 	/// The document's extents and resize handles show while the inspector is
@@ -204,7 +209,7 @@ struct ContentView: View {
 			}
 		}
 		.overlay(alignment: .topLeading) {
-			if controller.layout == .canvas {
+			if controller.layout == .canvas && controller.isEditing {
 				ToolPalette(controller: controller)
 					.padding(Self.panelMargin)
 					.padding(.leading, codeSpace)
@@ -215,6 +220,7 @@ struct ContentView: View {
 			if controller.showsLayers {
 				FloatingPanel(title: "Layers", close: { controller.showsLayers = false }) {
 					LayersPanel(controller: controller)
+						.disabled(!controller.isEditing)
 				}
 				.frame(width: Self.layersWidth)
 				.padding(Self.panelMargin)
@@ -226,6 +232,7 @@ struct ContentView: View {
 			if controller.showsInspector {
 				FloatingPanel(title: nil, close: { controller.showsInspector = false }) {
 					InspectorView(controller: controller)
+						.disabled(!controller.isEditing)
 				}
 				.frame(width: Self.inspectorWidth)
 				.padding(Self.panelMargin)
@@ -246,6 +253,14 @@ struct ContentView: View {
 					.transition(.move(edge: .bottom).combined(with: .opacity))
 			}
 		}
+		.overlay(alignment: .top) {
+			if !controller.isEditing {
+				PreviewBadge { controller.isEditing = true }
+					.padding(Self.panelMargin)
+					.transition(.move(edge: .top).combined(with: .opacity))
+			}
+		}
+		.animation(Self.panelAnimation, value: controller.isEditing)
 		.animation(Self.panelAnimation, value: controller.showsTimeline)
 		.animation(Self.panelAnimation, value: controller.showsLayers)
 		.animation(Self.panelAnimation, value: controller.showsInspector)
@@ -316,7 +331,40 @@ struct ContentView: View {
 		}
 
 		ToolbarItem(placement: .primaryAction) {
+			Toggle(isOn: $controller.isEditing) {
+				Label(
+					controller.isEditing ? "Editing" : "Locked",
+					systemImage: controller.isEditing ? "lock.open" : "lock.fill")
+			}
+			.help(
+				controller.isEditing
+					? "Lock to preview without changing anything (⇧⌘L)"
+					: "Unlock to edit (⇧⌘L)")
+		}
+		ToolbarSpacer(.fixed, placement: .primaryAction)
+		ToolbarItem(placement: .primaryAction) {
 			ExportButton(controller: controller, document: document)
 		}
+	}
+}
+
+/// Shown at the top of the viewer while a file is open for preview.
+private struct PreviewBadge: View {
+	var unlock: () -> Void
+
+	var body: some View {
+		HStack(spacing: 8) {
+			Image(systemName: "lock.fill").foregroundStyle(.secondary)
+			Text("Preview").font(.callout.weight(.medium))
+			Text("⌘-click links to open them").font(.caption).foregroundStyle(.secondary)
+			Button("Edit", action: unlock)
+				.controlSize(.small)
+				.help("Unlock to edit (⇧⌘L)")
+		}
+		.padding(.leading, 12)
+		.padding(.trailing, 6)
+		.padding(.vertical, 5)
+		.glassEffect(.regular, in: .capsule)
+		.shadow(color: .black.opacity(0.12), radius: 8, y: 3)
 	}
 }

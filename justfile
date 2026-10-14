@@ -14,9 +14,32 @@ alias c := clean
 default:
     @just --list
 
-# Build build/Lines.app (release by default; `just build debug` for a debug build)
+# Skips the build when nothing that goes into the app has changed since the last one.
+# Build build/Lines.app if anything changed (release by default; `just build debug` for debug)
 build config="release":
-    @./build.sh {{ config }}
+    #!/usr/bin/env sh
+    set -e
+    stamp="build/.inputs-{{ config }}"
+    current="$(just _inputs-hash {{ config }})"
+    if [ -d "{{ app }}" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$current" ]; then
+      echo "{{ app }} is up to date ({{ config }})"
+      exit 0
+    fi
+    ./build.sh {{ config }}
+    rm -f build/.inputs-*  # one app bundle, so only the latest config is current
+    echo "$current" > "$stamp"
+
+# Build even if nothing has changed
+rebuild config="release":
+    rm -f build/.inputs-*
+    @just build {{ config }}
+
+# A hash of everything that goes into the app, plus the build configuration
+[private]
+_inputs-hash config:
+    @{ echo "{{ config }}"; find Sources Support Vendor Package.swift Package.resolved build.sh \
+        -type f -not -path '*/.build/*' -not -name '.DS_Store' -print0 2>/dev/null \
+        | LC_ALL=C sort -z | xargs -0 shasum; } | shasum | cut -d' ' -f1
 
 # Build, quit any running copy, and open the fresh build
 run config="release": (build config)

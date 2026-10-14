@@ -10,6 +10,8 @@ let root = null; // live <svg> element
 let prefix = ""; // text before the root element (prolog, doctype, comments)
 let suffix = "\n"; // text after the root element
 let selected = null;
+// Off in preview mode: the drawing can be viewed, zoomed and played, not changed.
+let editable = true;
 let lastGood = null;
 let zoom = 1; // display scale; never written to the file
 let autoFit = true; // keep fitting to the window until someone zooms by hand
@@ -384,7 +386,7 @@ function applyOffset(el, geo, dx, dy) {
 }
 
 host.addEventListener("mousedown", (e) => {
-  if (e.button !== 0 || !root || tool !== "select") return;
+  if (e.button !== 0 || !root || tool !== "select" || !editable) return;
   const t = pickTarget(e.target);
   let target = t;
   // Clicking inside an already-selected group moves the group; double-clicking drills in.
@@ -427,7 +429,7 @@ document.addEventListener("mousedown", (e) => {
     minimap.contains(e.target)
   )
     return;
-  if (!host.contains(e.target) && e.button === 0) {
+  if (!host.contains(e.target) && e.button === 0 && editable) {
     if (!e.shiftKey) select(null);
     if (tool === "select" && !spaceDown) beginMarquee(e);
   }
@@ -436,7 +438,7 @@ document.addEventListener("mousedown", (e) => {
 // Right-click selects what's under the pointer (keeping a selection it's part
 // of), so the app's context menu acts on it.
 host.addEventListener("contextmenu", (e) => {
-  if (!root) return;
+  if (!root || !editable) return;
   const t = pickTarget(e.target);
   if (!t) select(null);
   else if (!selection().includes(t)) select(t);
@@ -499,6 +501,7 @@ window.addEventListener("mousemove", (e) => {
     return;
   }
   if (!drag) {
+    if (!editable) return;
     const t = pickTarget(e.target);
     if (t && t !== selected) place(hoverBox, t);
     else hoverBox.style.display = "none";
@@ -531,7 +534,7 @@ document.addEventListener("mouseleave", () => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (!root) return;
+  if (!root || !editable) return;
   if (!e.metaKey && !e.ctrlKey && !e.altKey && TOOL_KEYS[e.key.toLowerCase()]) {
     setTool(TOOL_KEYS[e.key.toLowerCase()], true);
     e.preventDefault();
@@ -2076,7 +2079,7 @@ function showDocumentFrame(on) {
 }
 
 function updateDocFrame() {
-  if (!docFrameShown || !root) {
+  if (!docFrameShown || !root || !editable) {
     docBox.style.display = "none";
     return;
   }
@@ -2425,6 +2428,7 @@ textEditor.addEventListener("input", () => {
 textEditor.addEventListener("blur", () => endTextEdit(true));
 
 host.addEventListener("dblclick", (e) => {
+  if (!editable) return;
   const t = pickTarget(e.target);
   if (!t) return;
   const text = t.localName === "text" ? t : t.closest && t.closest("text");
@@ -2813,5 +2817,52 @@ function exportPNG(scale) {
   img.onerror = () => post({ type: "pngFailed", scale });
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
+
+// MARK: Preview mode — locked: nothing changes, and ⌘-click follows links.
+
+const EDITING_FUNCTIONS = [
+  "setAttr", "setPaint", "removeAttr", "setText", "addShape", "addImage", "deleteSelected",
+  "duplicateSelected", "reorder", "groupSelected", "flipSelected", "ungroupSelected",
+  "pasteMarkup", "setBounds", "setRotation", "fitViewBoxToContent", "addDefinition",
+  "removeAllReferences", "addAnimation", "beginTextEdit", "setAttrOn", "toggleHidden",
+  "setReference", "removeReference", "moveElements", "moveRelative", "renameElement",
+  "deleteByOrder",
+];
+for (const name of EDITING_FUNCTIONS) {
+  const f = window[name];
+  if (typeof f === "function") window[name] = (...args) => (editable ? f(...args) : undefined);
+}
+
+function setEditable(on) {
+  editable = !!on;
+  document.body.classList.toggle("preview", !editable);
+  if (!editable) {
+    if (typeof endTextEdit === "function" && editingText) endTextEdit(true);
+    setTool("select");
+    select(null);
+    hoverBox.style.display = "none";
+  }
+  updateDocFrame();
+}
+
+function linkAt(t) {
+  const a = t && t.closest ? t.closest("a") : null;
+  if (!a || !root || !root.contains(a)) return null;
+  return a.getAttribute("href") || a.getAttributeNS(XLINK, "href");
+}
+
+host.addEventListener("click", (e) => {
+  if (editable) return;
+  const href = linkAt(e.target);
+  if (href && e.metaKey) {
+    post({ type: "openLink", url: href });
+    e.preventDefault();
+  }
+});
+
+// Links show a pointer in preview mode while ⌘ is held.
+window.addEventListener("mousemove", (e) => {
+  document.body.classList.toggle("over-link", !editable && e.metaKey && !!linkAt(e.target));
+});
 
 post({ type: "ready" });

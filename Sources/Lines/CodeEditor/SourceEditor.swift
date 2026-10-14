@@ -62,6 +62,7 @@ struct SourceEditor: NSViewRepresentable {
 		coordinator.apply(fontSize: fontSize, wrapsLines: wrapsLines, theme: theme)
 		scrollView.hasHorizontalScroller = !wrapsLines
 		coordinator.sync(to: document.text)
+		(scrollView.documentView as? NSTextView)?.isEditable = controller.isEditing
 	}
 
 	/// Text size for the code editor, shared with Settings.

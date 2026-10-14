@@ -54,6 +54,7 @@ private struct GeneralSettings: View {
 	@AppStorage("canvasBackground") private var background: CanvasBackground = .checkerboard
 	@AppStorage("defaultLayout") private var defaultLayout: EditorLayout = .canvas
 	@AppStorage("showsCodeByDefault") private var showsCodeByDefault = false
+	@AppStorage("opensFilesLocked") private var opensFilesLocked = true
 
 	var body: some View {
 		Form {
@@ -76,6 +77,10 @@ private struct GeneralSettings: View {
 					}
 				}
 				Toggle("Show code alongside", isOn: $showsCodeByDefault)
+				Toggle("Open files locked, for preview", isOn: $opensFilesLocked)
+					.help(
+						"Files open to look at; unlock them (⇧⌘L) to edit. New drawings always open ready to edit."
+					)
 			}
 
 			Section("Toolbar") {

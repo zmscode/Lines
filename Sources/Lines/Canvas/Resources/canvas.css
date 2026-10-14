@@ -314,3 +314,13 @@ body[data-tool="text"] #host * {
 	pointer-events: none;
 	z-index: 5;
 }
+
+/* Preview mode: no editing cursors; ⌘ over a link shows it can be followed. */
+body.preview #host,
+body.preview #host * {
+  cursor: default !important;
+}
+body.preview.over-link #host,
+body.preview.over-link #host * {
+  cursor: pointer !important;
+}
