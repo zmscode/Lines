@@ -96,7 +96,10 @@
     "<rect width=\"24\"/>" : {
 
     },
-    "A CSS animation: edit its timing in the stylesheet" : {
+    "A CSS animation: double-click for its timing" : {
+
+    },
+    "A CSS animation: edit its timing in the stylesheet." : {
 
     },
     "A gradient needs at least two stops" : {
@@ -306,6 +309,9 @@
     "Definitions" : {
 
     },
+    "Delay" : {
+
+    },
     "Delete" : {
 
     },
@@ -361,7 +367,7 @@
     "Drag to change the duration" : {
 
     },
-    "Drag to change when it begins" : {
+    "Drag to change when it begins; double-click to edit" : {
 
     },
     "Drag to scrub" : {
@@ -383,6 +389,9 @@
 
     },
     "Duplicate (⌘D)" : {
+
+    },
+    "Duration" : {
 
     },
     "Ease" : {
@@ -615,6 +624,9 @@
 
     },
     "Keep the final value when the animation finishes (fill=\"freeze\")" : {
+
+    },
+    "Keyframes" : {
 
     },
     "Layers" : {
@@ -882,6 +894,9 @@
 
     },
     "Repeat" : {
+
+    },
+    "Repeats" : {
 
     },
     "Resources" : {

@@ -315,6 +315,8 @@ final class CanvasController {
 		call("addAnimation(\(order), \(js(preset.rawValue)))")
 	}
 	func setTimelineActive(_ on: Bool) { call("setTimelineActive(\(on))") }
+	/// Playback loops back to the start here while the timeline shows; nil runs on.
+	func setTimelineLoop(_ seconds: Double?) { call("setTimelineLoop(\(seconds ?? 0))") }
 
 	func setTool(_ newTool: CanvasTool) {
 		tool = newTool

@@ -2905,8 +2905,25 @@ let animTime = 0;
 let timeTimer = 0;
 let timelineActive = false;
 
+// Where playback loops back to the start while the timeline shows (0: never).
+let loopEnd = 0;
+
+function setTimelineLoop(seconds) {
+  loopEnd = seconds > 0 ? seconds : 0;
+}
+
+function wrapLoop() {
+  if (!root || animPaused || !timelineActive || !loopEnd) return;
+  if (root.getCurrentTime() >= loopEnd) {
+    root.setCurrentTime(0);
+    animTime = 0;
+    syncCSSAnimations(0);
+  }
+}
+
 function reportTime() {
   if (!root) return;
+  wrapLoop();
   post({ type: "time", t: root.getCurrentTime(), playing: !animPaused });
 }
 
@@ -2945,6 +2962,7 @@ function speedTick(now) {
   speedLast = now;
   animTime = root.getCurrentTime() + dt * animSpeed;
   root.setCurrentTime(animTime);
+  wrapLoop();
   speedFrame = requestAnimationFrame(speedTick);
 }
 

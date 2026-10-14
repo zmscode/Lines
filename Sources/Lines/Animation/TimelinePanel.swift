@@ -174,6 +174,9 @@ private struct TimelineHeader: View {
 private struct TimelineTracks: View {
 	var controller: CanvasController
 
+	/// The animation whose editor is open, from a double-click.
+	@State private var editing: Int?
+
 	/// Elements and their animations, in document order.
 	private var groups: [(target: OutlineItem?, animations: [AnimationInfo])] {
 		var order: [Int] = []
@@ -189,11 +192,12 @@ private struct TimelineTracks: View {
 	}
 
 	/// The seconds shown across the track: everything, with room to spare.
+	/// Endless animations show two passes; playback loops at the end.
 	private var span: Double {
 		let ends = controller.animations.map { a in
 			a.repeatsForever ? a.begin + (a.duration ?? 1) * 2 : a.end
 		}
-		let longest = max(ends.max() ?? 0, controller.animationTime + 0.5, 3)
+		let longest = max(ends.max() ?? 0, 3)
 		let steps: [Double] = [3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 90, 120]
 		return steps.first { $0 >= longest * 1.1 } ?? (longest * 1.1).rounded(.up)
 	}
@@ -227,12 +231,23 @@ private struct TimelineTracks: View {
 									)
 									.frame(width: TimelinePanel.labelWidth, alignment: .leading)
 									.contentShape(.rect)
-									.onTapGesture { controller.select(order: animation.order) }
+									.onTapGesture(count: 2) {
+										controller.select(order: animation.order)
+										editing = animation.order
+									}
+									.simultaneousGesture(
+										TapGesture().onEnded {
+											controller.select(order: animation.order)
+										})
 									AnimationBar(
 										animation: animation, scale: scale, span: span,
 										isSelected: isSelected(animation.order),
 										isEditable: controller.isEditing,
 										select: { controller.select(order: animation.order) },
+										edit: {
+											controller.select(order: animation.order)
+											editing = animation.order
+										},
 										setBegin: { seconds in
 											controller.setAttribute(
 												"begin", Self.clock(seconds),
@@ -245,6 +260,15 @@ private struct TimelineTracks: View {
 										}
 									)
 									.frame(width: trackWidth, height: TimelinePanel.rowHeight)
+									.popover(
+										isPresented: Binding(
+											get: { editing == animation.order },
+											set: { if !$0 { editing = nil } }),
+										arrowEdge: .top
+									) {
+										AnimationEditPopover(
+											animation: animation, controller: controller)
+									}
 									.background {
 										// Clicking or dragging between bars moves the playhead.
 										Color.clear
@@ -267,7 +291,7 @@ private struct TimelineTracks: View {
 				// The line runs through the tracks; its head sits in the ruler and
 				// drags to scrub.
 				GeometryReader { box in
-					let x = TimelinePanel.labelWidth + controller.animationTime * scale
+					let x = TimelinePanel.labelWidth + min(controller.animationTime, span) * scale
 					Rectangle()
 						.fill(.tint)
 						.frame(
@@ -295,6 +319,8 @@ private struct TimelineTracks: View {
 			.coordinateSpace(.named("timeline"))
 			.padding(.horizontal, 8)
 		}
+		.onChange(of: span, initial: true) { _, span in controller.setTimelineLoop(span) }
+		.onDisappear { controller.setTimelineLoop(nil) }
 	}
 
 	/// Pauses and moves the playhead (snapped to 0.01s).
@@ -378,6 +404,8 @@ private struct AnimationBar: View {
 	var isSelected: Bool
 	var isEditable = true
 	var select: () -> Void
+	/// Opens its editor (double-click).
+	var edit: () -> Void = {}
 	var setBegin: (Double) -> Void
 	var setDuration: (Double) -> Void
 
@@ -411,6 +439,28 @@ private struct AnimationBar: View {
 						.frame(maxWidth: max(0, duration * scale - 10), alignment: .leading)
 				}
 				.frame(width: width, height: TimelinePanel.rowHeight - 8)
+				// Endless repeats fade out at the end of the track, marked ∞.
+				.mask {
+					if animation.repeatsForever {
+						LinearGradient(
+							stops: [
+								.init(color: .black, location: 0),
+								.init(color: .black, location: max(0, 1 - 48 / width)),
+								.init(color: .black.opacity(0.1), location: 1),
+							], startPoint: .leading, endPoint: .trailing)
+					} else {
+						Color.black
+					}
+				}
+				.overlay(alignment: .trailing) {
+					if animation.repeatsForever {
+						Image(systemName: "infinity")
+							.font(.caption2.weight(.semibold))
+							.foregroundStyle(.indigo)
+							.padding(.trailing, 4)
+							.accessibilityHidden(true)
+					}
+				}
 				.contentShape(.rect)
 				.gesture(
 					DragGesture(minimumDistance: 2)
@@ -424,11 +474,12 @@ private struct AnimationBar: View {
 						},
 					isEnabled: !animation.isCSS && isEditable
 				)
-				.onTapGesture(perform: select)
+				.onTapGesture(count: 2, perform: edit)
+				.simultaneousGesture(TapGesture().onEnded(select))
 				.help(
 					animation.isCSS
-						? "A CSS animation: edit its timing in the stylesheet"
-						: "Drag to change when it begins"
+						? "A CSS animation: double-click for its timing"
+						: "Drag to change when it begins; double-click to edit"
 				)
 				.offset(x: x)
 
@@ -444,6 +495,7 @@ private struct AnimationBar: View {
 		)
 		.accessibilityAddTraits(isSelected ? .isSelected : [])
 		.accessibilityAction { select() }
+		.accessibilityAction(named: "Edit") { edit() }
 		.accessibilityAdjustableAction { direction in
 			// Nudges when it begins, a tenth of a second at a time.
 			guard isEditable, !animation.isCSS else { return }
@@ -565,5 +617,55 @@ private struct PlayheadHandle: View {
 				p.closeSubpath()
 			}
 		}
+	}
+}
+
+/// The animation's settings over the timeline, from a double-click: the
+/// inspector's animation card, or a CSS animation's timing.
+private struct AnimationEditPopover: View {
+	var animation: AnimationInfo
+	var controller: CanvasController
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 10) {
+			Label(animation.property, systemImage: animation.symbol)
+				.font(.headline)
+				.lineLimit(1)
+			if let css = animation.css {
+				Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+					GridRow {
+						Text("Keyframes").foregroundStyle(.secondary)
+						Text(css.name)
+					}
+					GridRow {
+						Text("Delay").foregroundStyle(.secondary)
+						Text(AnimationInfo.format(seconds: css.delay))
+					}
+					GridRow {
+						Text("Duration").foregroundStyle(.secondary)
+						Text(AnimationInfo.format(seconds: css.duration))
+					}
+					GridRow {
+						Text("Repeats").foregroundStyle(.secondary)
+						Text(css.iterations.map { $0.formatted() } ?? String(localized: "Forever"))
+					}
+					GridRow {
+						Text("Easing").foregroundStyle(.secondary)
+						Text(css.easing)
+					}
+				}
+				.font(.callout)
+				Text("A CSS animation: edit its timing in the stylesheet.")
+					.font(.callout)
+					.foregroundStyle(.secondary)
+			} else if let selection = controller.selection, selection.order == animation.order {
+				AnimationCard(selection: selection, controller: controller)
+					.disabled(!controller.isEditing)
+			} else {
+				ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 60)
+			}
+		}
+		.padding(14)
+		.frame(width: 320)
 	}
 }
