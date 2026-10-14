@@ -396,13 +396,9 @@ private struct TextCard: View {
 			.textFieldStyle(.roundedBorder)
 
 			HStack(spacing: 8) {
-				Menu(familyName) {
-					ForEach(Self.families, id: \.value) { family in
-						Button(family.name) { controller.setAttribute("font-family", family.value) }
-					}
+				FontFamilyButton(name: familyName, common: Self.families) { value in
+					controller.setAttribute("font-family", value)
 				}
-				.fixedSize()
-				.help("Font")
 				ScrubField(
 					label: "Size", systemImage: "textformat.size", value: fontSize,
 					range: 1...10_000
@@ -447,8 +443,10 @@ private struct TextCard: View {
 	private var familyName: String {
 		let value = selection.value("font-family") ?? ""
 		if let known = Self.families.first(where: { $0.value == value }) { return known.name }
-		return value.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) }
-			?? "System"
+		return value.split(separator: ",").first.map {
+			$0.trimmingCharacters(in: .whitespaces).trimmingCharacters(
+				in: CharacterSet(charactersIn: "'\""))
+		} ?? "System"
 	}
 }
 
@@ -709,5 +707,116 @@ private struct CornerRadiusRow: View {
 		default:
 			return nil
 		}
+	}
+}
+
+/// Picks a text's font: the common web-safe families first, then every
+/// family installed on this Mac, searchable and shown in its own face.
+private struct FontFamilyButton: View {
+	var name: String
+	var common: [(name: String, value: String)]
+	var choose: (String) -> Void
+
+	@State private var isPresented = false
+	@State private var query = ""
+
+	@MainActor private static let installed: [String] =
+		NSFontManager.shared.availableFontFamilies.filter { !$0.hasPrefix(".") }.sorted()
+
+	private var matches: [String] {
+		let q = query.trimmingCharacters(in: .whitespaces)
+		guard !q.isEmpty else { return Self.installed }
+		return Self.installed.compactMap { family in
+			FuzzyMatch.match(q, in: family).map { (family, $0.score) }
+		}
+		.sorted { $0.1 > $1.1 }
+		.map(\.0)
+	}
+
+	private var isCommon: Bool { common.contains { $0.name == name } }
+
+	var body: some View {
+		Button {
+			isPresented.toggle()
+		} label: {
+			HStack(spacing: 4) {
+				Text(name).lineLimit(1)
+				if !isCommon {
+					Image(systemName: "exclamationmark.triangle.fill")
+						.font(.caption2)
+						.foregroundStyle(.orange)
+				}
+				Image(systemName: "chevron.up.chevron.down").font(.caption2)
+			}
+		}
+		.fixedSize()
+		.help(
+			isCommon
+				? "Font"
+				: "\(name) only shows where it's installed; elsewhere the text falls back to another font"
+		)
+		.popover(isPresented: $isPresented, arrowEdge: .leading) {
+			VStack(alignment: .leading, spacing: 8) {
+				TextField("Search Fonts", text: $query)
+					.textFieldStyle(.roundedBorder)
+				List {
+					if query.isEmpty {
+						Section("Common — show almost everywhere") {
+							ForEach(common, id: \.value) { family in
+								row(family.name, value: family.value)
+							}
+						}
+					}
+					Section(query.isEmpty ? "On This Mac" : "Matches") {
+						ForEach(matches, id: \.self) { family in
+							row(family, value: Self.cssValue(for: family))
+						}
+					}
+				}
+				.listStyle(.sidebar)
+				.frame(height: 320)
+				Label(
+					"Fonts that aren't common may not render in browsers or apps without them installed.",
+					systemImage: "exclamationmark.triangle"
+				)
+				.font(.caption)
+				.foregroundStyle(.secondary)
+			}
+			.padding(12)
+			.frame(width: 280)
+		}
+	}
+
+	private func row(_ family: String, value: String) -> some View {
+		Button {
+			choose(value)
+			isPresented = false
+		} label: {
+			HStack {
+				Text(family).font(.custom(family, size: 14)).lineLimit(1)
+				Spacer()
+				if family == name { Image(systemName: "checkmark").foregroundStyle(.tint) }
+			}
+			.contentShape(.rect)
+		}
+		.buttonStyle(.plain)
+	}
+
+	/// A font-family value with a fallback of the same kind.
+	static func cssValue(for family: String) -> String {
+		let font = NSFontManager.shared.font(withFamily: family, traits: [], weight: 5, size: 12)
+		let generic: String
+		if font?.isFixedPitch == true {
+			generic = "monospace"
+		} else if font?.fontDescriptor.symbolicTraits.contains(.classModernSerifs) == true
+			|| font?.fontDescriptor.symbolicTraits.contains(.classOldStyleSerifs) == true
+			|| font?.fontDescriptor.symbolicTraits.contains(.classTransitionalSerifs) == true
+		{
+			generic = "serif"
+		} else {
+			generic = "sans-serif"
+		}
+		let quoted = family.contains(" ") ? "'\(family)'" : family
+		return "\(quoted), \(generic)"
 	}
 }

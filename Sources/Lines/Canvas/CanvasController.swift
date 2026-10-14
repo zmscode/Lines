@@ -385,6 +385,8 @@ final class CanvasController {
 	/// Renders the drawing with WebKit, the same renderer as the canvas.
 	/// The graph node the pointer is resting on, for its impact preview.
 	var hoveredNode: Int?
+	/// A graph node whose preview stays up until it's closed.
+	var pinnedPreviewNode: Int?
 
 	/// How a node changes the drawing: labelled pictures (without/with a
 	/// definition, an animation's frames, or an element in place).

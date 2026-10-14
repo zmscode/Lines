@@ -181,31 +181,26 @@ struct ChangesPanel: View {
 	private var scrubber: some View {
 		let count = history.count
 		let index = history.firstIndex { $0.id == selected } ?? (count - 1)
-		return VStack(alignment: .leading, spacing: 4) {
-			Slider(
-				value: Binding(
-					get: { Double(index) },
-					set: { new in
-						let i = min(max(Int(new.rounded()), 0), count - 1)
-						select(history[i].id)
-					}),
-				in: 0...Double(max(1, count - 1)), step: 1
-			) {
-				Text("Version")
-			} minimumValueLabel: {
-				Text("Opened").font(.caption).foregroundStyle(.secondary)
-			} maximumValueLabel: {
-				Text("Now").font(.caption).foregroundStyle(.secondary)
+		return VStack(alignment: .leading, spacing: 6) {
+			HStack {
+				Text(index == count - 1 ? "Now" : history[index].title)
+					.font(.callout.weight(.medium))
+					.lineLimit(1)
+				Spacer()
+				Text(index == count - 1 ? "\(count) versions" : "\(index + 1) of \(count)")
+					.font(.caption.monospacedDigit())
+					.foregroundStyle(.secondary)
 			}
-			.labelsHidden()
-			.help("Drag through the history; the canvas shows each version")
-			Text(
-				index == count - 1
-					? "Current version"
-					: "Version \(index + 1) of \(count) · \(history[index].title)"
-			)
-			.font(.caption)
-			.foregroundStyle(.secondary)
+			VersionScrubber(count: count, index: index) { new in
+				select(history[new].id)
+			}
+			HStack {
+				Text("Opened")
+				Spacer()
+				Text("Now")
+			}
+			.font(.caption2)
+			.foregroundStyle(.tertiary)
 		}
 	}
 
@@ -370,5 +365,78 @@ private struct DiffRow: View {
 		case .removed: .red
 		default: .secondary
 		}
+	}
+}
+
+/// A track of version dots with a marker you drag between them.
+private struct VersionScrubber: View {
+	var count: Int
+	var index: Int
+	var select: (Int) -> Void
+
+	@State private var isDragging = false
+
+	var body: some View {
+		GeometryReader { geo in
+			let inset: CGFloat = 8
+			let width = max(1, geo.size.width - inset * 2)
+			let step = count > 1 ? width / CGFloat(count - 1) : 0
+			let x = { (i: Int) in inset + CGFloat(i) * step }
+			ZStack(alignment: .leading) {
+				// The track: done to the marker, still to come after it.
+				Capsule()
+					.fill(.quaternary)
+					.frame(height: 4)
+					.padding(.horizontal, inset)
+				Capsule()
+					.fill(.tint.opacity(0.5))
+					.frame(width: max(0, x(index) - inset), height: 4)
+					.offset(x: inset)
+				// A dot per version, unless there are too many to tell apart.
+				if step >= 6 {
+					ForEach(0..<count, id: \.self) { i in
+						Circle()
+							.fill(
+								i <= index
+									? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary.opacity(0.5))
+							)
+							.frame(width: 6, height: 6)
+							.position(x: x(i), y: geo.size.height / 2)
+					}
+				}
+				// The marker.
+				Circle()
+					.fill(.background)
+					.overlay { Circle().strokeBorder(.tint, lineWidth: 3) }
+					.frame(width: isDragging ? 18 : 15, height: isDragging ? 18 : 15)
+					.shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+					.position(x: x(index), y: geo.size.height / 2)
+					.animation(.snappy(duration: 0.15), value: index)
+			}
+			.contentShape(.rect)
+			.gesture(
+				DragGesture(minimumDistance: 0)
+					.onChanged { value in
+						isDragging = true
+						guard count > 1 else { return }
+						let i = Int(((value.location.x - inset) / step).rounded())
+						let clamped = min(max(i, 0), count - 1)
+						if clamped != index { select(clamped) }
+					}
+					.onEnded { _ in isDragging = false }
+			)
+		}
+		.frame(height: 22)
+		.accessibilityElement()
+		.accessibilityLabel("Version")
+		.accessibilityValue("\(index + 1) of \(count)")
+		.accessibilityAdjustableAction { direction in
+			switch direction {
+			case .increment: if index < count - 1 { select(index + 1) }
+			case .decrement: if index > 0 { select(index - 1) }
+			@unknown default: break
+			}
+		}
+		.help("Drag through the history; the canvas shows each version")
 	}
 }

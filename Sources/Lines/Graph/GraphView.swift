@@ -120,7 +120,8 @@ struct GraphView: View {
 			.padding(.leading, leadingInset)
 		}
 		.overlay(alignment: .topTrailing) {
-			if let order = controller.hoveredNode,
+			// A hovered preview button wins over a pinned preview.
+			if let order = controller.hoveredNode ?? controller.pinnedPreviewNode,
 				let item = graph.items.first(where: { $0.order == order })
 			{
 				NodeImpactCard(data: graph.data(for: item), controller: controller)
@@ -129,7 +130,11 @@ struct GraphView: View {
 			}
 		}
 		.animation(.easeOut(duration: 0.15), value: controller.hoveredNode)
-		.onDisappear { controller.hoveredNode = nil }
+		.animation(.easeOut(duration: 0.15), value: controller.pinnedPreviewNode)
+		.onDisappear {
+			controller.hoveredNode = nil
+			controller.pinnedPreviewNode = nil
+		}
 		.overlay(alignment: .bottomTrailing) {
 			// The same zoom strip as the canvas.
 			FloatingStrip {

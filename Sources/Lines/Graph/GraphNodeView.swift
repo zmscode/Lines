@@ -121,7 +121,6 @@ struct GraphNodeView: View {
 			}
 		}
 		.contextMenu { menu(data) }
-		.modifier(NodeHoverPreview(data: data, controller: controller))
 		.shadow(color: .black.opacity(0.08), radius: 3, y: 1)
 		.opacity(data.isHidden ? 0.6 : 1)
 	}
@@ -141,8 +140,10 @@ struct GraphNodeView: View {
 			if data.isHidden {
 				Image(systemName: "eye.slash").font(.caption).foregroundStyle(.secondary)
 			}
+			if let controller { PreviewButton(order: data.order, controller: controller) }
 		}
-		.padding(.horizontal, 10)
+		.padding(.leading, 10)
+		.padding(.trailing, 6)
 		.frame(height: Self.headerHeight)
 	}
 
@@ -522,28 +523,30 @@ struct NodeValue: View {
 	}
 }
 
-/// After a short hover, the graph shows how this node changes the drawing
-/// (see `NodeImpactCard`).
-private struct NodeHoverPreview: ViewModifier {
-	var data: GraphNodeData
-	var controller: CanvasController?
+/// A node's preview button: hover it to see how the node changes the
+/// drawing (see `NodeImpactCard`); click to keep the preview up.
+private struct PreviewButton: View {
+	var order: Int
+	var controller: CanvasController
 
-	@State private var task: Task<Void, Never>?
+	private var isPinned: Bool { controller.pinnedPreviewNode == order }
 
-	func body(content: Content) -> some View {
-		content.onHover { inside in
-			task?.cancel()
-			guard let controller else { return }
+	var body: some View {
+		Button(isPinned ? "Hide Preview" : "Preview", systemImage: isPinned ? "eye.fill" : "eye") {
+			controller.pinnedPreviewNode = isPinned ? nil : order
+		}
+		.buttonStyle(.icon(size: 26, selected: isPinned))
+		.onHover { inside in
 			if inside {
-				task = Task { @MainActor in
-					try? await Task.sleep(for: .milliseconds(500))
-					guard !Task.isCancelled else { return }
-					controller.hoveredNode = data.order
-				}
-			} else if controller.hoveredNode == data.order {
+				controller.hoveredNode = order
+			} else if controller.hoveredNode == order {
 				controller.hoveredNode = nil
 			}
 		}
+		.help(
+			isPinned
+				? "Hide the preview"
+				: "Hover to preview how this changes the drawing; click to keep it open")
 	}
 }
 
@@ -564,6 +567,13 @@ struct NodeImpactCard: View {
 					.foregroundStyle(.tint)
 				Text(data.name).font(.headline).lineLimit(1)
 				Spacer()
+				if controller.pinnedPreviewNode == data.order {
+					Button("Close Preview", systemImage: "xmark") {
+						controller.pinnedPreviewNode = nil
+					}
+					.buttonStyle(.icon(size: 22))
+					.help("Close")
+				}
 			}
 			if isLoading {
 				ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 80)
@@ -608,7 +618,7 @@ struct NodeImpactCard: View {
 			pictures = await controller.impactPreview(order: data.order)
 			isLoading = false
 		}
-		.allowsHitTesting(false)
+		.allowsHitTesting(controller.pinnedPreviewNode == data.order)
 	}
 }
 
