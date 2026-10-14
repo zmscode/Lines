@@ -18,6 +18,8 @@ struct LayersPanel: View {
 	@State private var expanded: Set<String> = []
 	@State private var renaming: String?
 	@State private var dragging: String?
+	/// A resource being dragged onto a layer, to apply it.
+	@State private var draggingResource: ResourceInfo?
 	@State private var dropTarget: DropTarget?
 	@State private var filesTargeted = false
 
@@ -34,12 +36,15 @@ struct LayersPanel: View {
 		var id: String { node.id }
 	}
 
-	static let rowHeight: CGFloat = 28
+	static let rowHeight: CGFloat = 32
 
 	var body: some View {
-		let tree = LayerNode.build(controller.outline)
+		let tree = LayerNode.build(Self.layerItems(controller.outline))
 		let index = LayerIndex(tree)
 		let rows = flatten(tree)
+		let animated = Set(
+			controller.outline.filter { AnimationTag.contains($0.tag) }.map(\.parent)
+				+ controller.outline.filter { !$0.cssAnimations.isEmpty }.map(\.order))
 		VStack(spacing: 0) {
 			ScrollViewReader { proxy in
 				ScrollView {
@@ -49,24 +54,38 @@ struct LayersPanel: View {
 								row: row, controller: controller,
 								isExpanded: expanded.contains(row.id),
 								toggleExpanded: { toggle(row.id) }, renaming: $renaming,
-								dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil
+								dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
+								isAnimated: animated.contains(row.node.item.order)
 							)
 							.id(row.id)
 							.onDrag {
 								dragging = row.id
+								draggingResource = nil
 								return provider(for: row)
 							}
 							.onDrop(
 								of: [.linesLayer],
 								delegate: RowDropDelegate(
 									row: row, index: index, dragging: $dragging,
+									draggingResource: $draggingResource,
 									target: $dropTarget,
-									perform: perform)
+									perform: perform,
+									apply: { resource in
+										guard let attribute = resource.kind.attribute else {
+											return
+										}
+										controller.setReference(
+											order: row.node.item.order, attribute: attribute,
+											targetOrder: resource.order)
+									})
 							)
 						}
 					}
 					.padding(.horizontal, 6)
 					.padding(.vertical, 4)
+
+					ResourcesSection(
+						controller: controller, draggingResource: $draggingResource)
 				}
 				.onChange(of: controller.selection?.order) { _, order in
 					if let path = revealSelection(order) {
@@ -105,6 +124,20 @@ struct LayersPanel: View {
 	}
 
 	// MARK: Tree
+
+	/// The drawing's elements without <defs>, resources (which have their own
+	/// section) and what sits inside them.
+	static func layerItems(_ outline: [OutlineItem]) -> [OutlineItem] {
+		var hidden = Set<Int>()
+		for item in outline {
+			if hidden.contains(item.parent) || item.tag == "defs"
+				|| ResourceInfo.isResource(item.tag)
+			{
+				hidden.insert(item.order)
+			}
+		}
+		return outline.filter { !hidden.contains($0.order) }
+	}
 
 	private func flatten(_ nodes: [LayerNode], depth: Int = 0) -> [Row] {
 		nodes.flatMap { node -> [Row] in
@@ -214,12 +247,28 @@ private struct RowDropDelegate: DropDelegate {
 	var row: LayersPanel.Row
 	var index: LayerIndex
 	@Binding var dragging: String?
+	@Binding var draggingResource: ResourceInfo?
 	@Binding var target: LayersPanel.DropTarget?
 	var perform: (String, LayersPanel.DropTarget, LayerIndex) -> Void
+	var apply: (ResourceInfo) -> Void
+
+	/// A resource can land on drawn elements (and groups, for clips, masks, filters).
+	private var acceptsResource: Bool {
+		guard let resource = draggingResource, resource.kind.attribute != nil else { return false }
+		let tag = row.node.item.tag
+		if resource.kind == .gradient || resource.kind == .pattern {
+			return [
+				"rect", "circle", "ellipse", "path", "polygon", "polyline", "text", "line", "g",
+			]
+			.contains(tag)
+		}
+		return !AnimationTag.contains(tag)
+	}
 
 	private var isGroup: Bool { row.node.item.tag == "g" || !row.node.children.isEmpty }
 
 	func validateDrop(info: DropInfo) -> Bool {
+		if draggingResource != nil { return acceptsResource }
 		guard let dragging else { return false }
 		// Never into itself or its own descendants.
 		return row.id != dragging && !row.id.hasPrefix(dragging + ".")
@@ -241,6 +290,12 @@ private struct RowDropDelegate: DropDelegate {
 			target = nil
 			dragging = nil
 		}
+		if let resource = draggingResource {
+			draggingResource = nil
+			guard acceptsResource else { return false }
+			apply(resource)
+			return true
+		}
 		guard let dragging, let target, validateDrop(info: info) else { return false }
 		perform(dragging, target, index)
 		return true
@@ -249,6 +304,12 @@ private struct RowDropDelegate: DropDelegate {
 	private func update(_ info: DropInfo) {
 		guard validateDrop(info: info) else {
 			target = nil
+			return
+		}
+		// A resource applies to the whole row.
+		if draggingResource != nil {
+			let next = LayersPanel.DropTarget(path: row.id, zone: .inside)
+			if target != next { target = next }
 			return
 		}
 		let y = info.location.y / LayersPanel.rowHeight
@@ -268,6 +329,7 @@ private struct LayerRowView: View {
 	var toggleExpanded: () -> Void
 	@Binding var renaming: String?
 	var dropZone: LayersPanel.DropTarget.Zone?
+	var isAnimated = false
 
 	@State private var isHovered = false
 	@State private var draft = ""
@@ -298,23 +360,13 @@ private struct LayerRowView: View {
 			.help(isExpanded ? "Collapse" : "Expand")
 			.accessibilityLabel(isExpanded ? "Collapse" : "Expand")
 
-			Image(systemName: InspectorView.symbol(for: item.tag, isRoot: false))
-				.foregroundStyle(swatch)
-				.frame(width: 18)
+			LayerThumbnail(item: item, controller: controller)
 
 			name
 
 			Spacer(minLength: 4)
 
-			if !item.references.isEmpty {
-				Image(systemName: "link")
-					.font(.caption2)
-					.foregroundStyle(.tertiary)
-					.help(
-						"Uses "
-							+ item.references.map { "#\($0.targetID) (\($0.attribute))" }.joined(
-								separator: ", "))
-			}
+			LayerBadges(item: item, isAnimated: isAnimated, controller: controller)
 
 			Button(
 				item.isHidden ? "Show" : "Hide", systemImage: item.isHidden ? "eye.slash" : "eye"

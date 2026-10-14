@@ -406,6 +406,25 @@ final class CanvasController {
 	}
 
 	/// Renders the drawing with WebKit, the same renderer as the canvas.
+	/// Bumped when the drawing changes, so layer thumbnails redraw.
+	private(set) var thumbnailGeneration = 0
+	@ObservationIgnored private var thumbnailCache: [Int: NSImage] = [:]
+
+	/// An element drawn on its own, framed to its box, for layer rows.
+	func thumbnail(order: Int, size: Double = 64) async -> NSImage? {
+		if let cached = thumbnailCache[order] { return cached }
+		guard isReady, let webView,
+			let result = try? await webView.callAsyncJavaScript(
+				"return await elementThumbnail(order, size)",
+				arguments: ["order": order, "size": size], contentWorld: .page),
+			let url = result as? String, let comma = url.firstIndex(of: ","),
+			let data = Data(base64Encoded: String(url[url.index(after: comma)...])),
+			let image = NSImage(data: data)
+		else { return nil }
+		thumbnailCache[order] = image
+		return image
+	}
+
 	/// The graph node the pointer is resting on, for its impact preview.
 	var hoveredNode: Int?
 	/// Inputs ("nodeID:attribute") a connection being dragged in the graph
@@ -547,10 +566,19 @@ final class CanvasController {
 							delay: a["delay"] as? Double ?? 0,
 							iterations: iterations < 0 ? nil : iterations,
 							easing: a["easing"] as? String ?? "linear")
+					},
+					box: (d["box"] as? [Double]).flatMap {
+						$0.count == 4
+							? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil
 					}
 				)
 			}
-			if items != outline { outline = items }
+			if items != outline {
+				outline = items
+				// Thumbnails redraw after any change to the drawing.
+				thumbnailCache.removeAll()
+				thumbnailGeneration += 1
+			}
 			webView?.setAccessibilityValue(
 				"\(documentName), \(items.count) element\(items.count == 1 ? "" : "s")")
 			webView?.setAccessibilityHelp(

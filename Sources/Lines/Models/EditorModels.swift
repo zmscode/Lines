@@ -122,6 +122,8 @@ struct OutlineItem: Identifiable, Equatable, Sendable {
 	var props: [String: String] = [:]
 	/// CSS (@keyframes) animations running on the element.
 	var cssAnimations: [CSSAnimation] = []
+	/// The element's box in its parent's coordinates, for drawn elements.
+	var box: CGRect? = nil
 
 	struct CSSAnimation: Equatable, Sendable {
 		var name: String

@@ -3373,6 +3373,10 @@ function sendOutline() {
         preview: previewOf(el),
         props: propsOf(el),
         css: cssAnimationsOf(el),
+        box:
+          !nonVisual.has(el.localName) && !ANIM_TAGS.has(el.localName) && items.length < 3000
+            ? boundsOf(el)
+            : null,
       });
     }
     Array.from(el.children).forEach((c, i) => {
@@ -3662,6 +3666,19 @@ function previewImage(order, size) {
   });
 }
 
+// MARK: Layer thumbnails — an element on its own, framed to its box.
+
+function elementThumbnail(order, size) {
+  const el = byOrder(order);
+  if (!root || !el || el === root) return Promise.resolve(null);
+  const target = ANIM_TAGS.has(el.localName) ? el.parentNode : el;
+  if (!target || target === root || nonVisual.has(target.localName)) return Promise.resolve(null);
+  const box = userBox([target], 0.08);
+  if (!box || box.w <= 0 || box.h <= 0) return Promise.resolve(null);
+  const { clone } = focusedClone([target], "0");
+  return renderClone(clone, box, size);
+}
+
 // MARK: Impact previews — how a node changes the drawing, for the graph.
 //
 // A definition: the shapes using it, without and with it. An animation: its
@@ -3702,7 +3719,7 @@ function userBox(els, pad) {
 }
 
 // Copies the drawing; `affected` (live elements) stay bright, the rest dims.
-function focusedClone(affected) {
+function focusedClone(affected, others = "0.18") {
   const clone = root.cloneNode(true);
   const keep = new Set([clone]);
   const inside = new Set();
@@ -3723,7 +3740,7 @@ function focusedClone(affected) {
         !["defs", "style"].includes(c.localName) &&
         !ANIM_TAGS.has(c.localName)
       )
-        c.setAttribute("opacity", "0.18");
+        c.setAttribute("opacity", others);
     }
   };
   walk(clone);

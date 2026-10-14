@@ -776,41 +776,6 @@ enum NodeDescription {
 	}
 }
 
-/// Plain names for colours, for sentences: "pink", "dark blue".
-enum ColourName {
-	static func of(_ value: String) -> String {
-		let v = value.trimmingCharacters(in: .whitespaces).lowercased()
-		if v == "none" || v == "transparent" { return "nothing" }
-		guard let colour = CSSColor.parse(v),
-			let ns = NSColor(colour).usingColorSpace(.sRGB)
-		else { return v }
-		var h: CGFloat = 0
-		var s: CGFloat = 0
-		var b: CGFloat = 0
-		var a: CGFloat = 0
-		ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-		if b < 0.12 { return "black" }
-		if s < 0.12 {
-			return b > 0.9 ? "white" : b > 0.6 ? "light grey" : b > 0.3 ? "grey" : "dark grey"
-		}
-		let hue = h * 360
-		let name: String =
-			switch hue {
-			case ..<15, 345...: "red"
-			case ..<40: "orange"
-			case ..<65: "yellow"
-			case ..<160: "green"
-			case ..<195: "teal"
-			case ..<250: "blue"
-			case ..<290: "purple"
-			default: "pink"
-			}
-		if b < 0.4 { return "dark \(name)" }
-		if s < 0.4 && b > 0.8 { return "pale \(name)" }
-		return name
-	}
-}
-
 extension String {
 	fileprivate var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
