@@ -131,11 +131,11 @@ private struct ViewCommands: Commands {
 			}
 			.keyboardShortcut("i", modifiers: [.command, .option])
 			Button(
-				controller?.layout == .graph ? "Show Canvas" : "Show Element Graph",
-				systemImage: controller?.layout == .graph
-					? EditorLayout.canvas.symbol : EditorLayout.graph.symbol
+				controller?.layout == .outline ? "Show Canvas" : "Show Outline",
+				systemImage: controller?.layout == .outline
+					? EditorLayout.canvas.symbol : EditorLayout.outline.symbol
 			) {
-				controller?.layout = controller?.layout == .graph ? .canvas : .graph
+				controller?.layout = controller?.layout == .outline ? .canvas : .outline
 			}
 			.keyboardShortcut("3", modifiers: .command)
 			.disabled(controller == nil)

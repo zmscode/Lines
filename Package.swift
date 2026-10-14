@@ -5,8 +5,6 @@ let package = Package(
 	name: "Lines",
 	platforms: [.macOS("27.0")],
 	dependencies: [
-		// Vendored with a fix; see Vendor/SwiftFlow/VENDORED.md.
-		.package(path: "Vendor/SwiftFlow"),
 		// Vendored with fixes; see Vendor/ColourPickerMaker/VENDORED.md.
 		.package(path: "Vendor/ColourPickerMaker"),
 		// The search field in Settings.
@@ -16,7 +14,6 @@ let package = Package(
 		.executableTarget(
 			name: "Lines",
 			dependencies: [
-				.product(name: "SwiftFlow", package: "SwiftFlow"),
 				.product(name: "ColourPickerMaker", package: "ColourPickerMaker"),
 				.product(name: "SearchBar", package: "SearchBar"),
 			],

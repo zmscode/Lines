@@ -4,6 +4,26 @@
     "" : {
 
     },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ %@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@%3$@"
+          }
+        }
+      }
+    },
     "%@ appearance" : {
 
     },
@@ -26,6 +46,16 @@
         }
       }
     },
+    "%@, %lld lines added, %lld removed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$lld lines added, %3$lld removed"
+          }
+        }
+      }
+    },
     "%@: %@" : {
       "localizations" : {
         "en" : {
@@ -36,12 +66,12 @@
         }
       }
     },
-    "%@: %@ — click to change" : {
+    "%@: %@ — click to select it" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@: %2$@ — click to change"
+            "value" : "%1$@: %2$@ — click to select it"
           }
         }
       }
@@ -52,23 +82,13 @@
     "%lld fonts" : {
 
     },
-    "%lld of %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld"
-          }
-        }
-      }
-    },
     "%lld points" : {
 
     },
     "%lld pt" : {
 
     },
-    "%lld versions" : {
+    "%lld shown" : {
 
     },
     "%lld%%" : {
@@ -81,9 +101,6 @@
 
     },
     "+%lld" : {
-
-    },
-    "<%@>" : {
 
     },
     "<rect width=\"24\"/>" : {
@@ -110,10 +127,19 @@
     "Add Attribute" : {
 
     },
+    "Add Resource" : {
+
+    },
+    "Add Separator" : {
+
+    },
     "Add Shape" : {
 
     },
     "Add Stop" : {
+
+    },
+    "Add a gradient, pattern, clip, mask or filter (applied to the selection, if any)" : {
 
     },
     "Add one to the selected element with the + menu." : {
@@ -128,16 +154,25 @@
     "All Attributes" : {
 
     },
+    "All Elements" : {
+
+    },
+    "Animated" : {
+
+    },
+    "Animated — show the timeline" : {
+
+    },
     "Animation" : {
 
     },
     "Animations" : {
 
     },
-    "Appearance" : {
+    "Anything" : {
 
     },
-    "Apply to Selection" : {
+    "Appearance" : {
 
     },
     "Arrange" : {
@@ -159,6 +194,9 @@
 
     },
     "Back to Start" : {
+
+    },
+    "Back to the order elements appear in the file" : {
 
     },
     "Background" : {
@@ -225,9 +263,6 @@
 
     },
     "Close" : {
-
-    },
-    "Close Preview" : {
 
     },
     "Close Timeline" : {
@@ -308,25 +343,31 @@
     "Direction" : {
 
     },
+    "Document Order" : {
+
+    },
     "Done" : {
 
     },
-    "Drag through the history; the canvas shows each version" : {
+    "Drag along the line to scrub through the versions" : {
+
+    },
+    "Drag into the toolbar above" : {
+
+    },
+    "Drag items into the toolbar, or out of it to remove them." : {
+
+    },
+    "Drag onto a layer to apply it" : {
 
     },
     "Drag to adjust %@" : {
-
-    },
-    "Drag to an input to use this %@" : {
 
     },
     "Drag to change the duration" : {
 
     },
     "Drag to change when it begins" : {
-
-    },
-    "Drag to reorder" : {
 
     },
     "Drag to scrub" : {
@@ -377,9 +418,6 @@
     "Edit Shapes on Canvas" : {
 
     },
-    "Edit in Inspector" : {
-
-    },
     "Editing %@ “%@”" : {
       "localizations" : {
         "en" : {
@@ -390,10 +428,7 @@
         }
       }
     },
-    "Element Graph" : {
-
-    },
-    "Elements and the references between them appear here." : {
+    "Effects" : {
 
     },
     "Elements in the drawing appear here." : {
@@ -403,6 +438,9 @@
 
     },
     "Empty Group" : {
+
+    },
+    "Everything else is on the toolbar." : {
 
     },
     "Expand" : {
@@ -433,6 +471,9 @@
 
     },
     "Fade In" : {
+
+    },
+    "Fill" : {
 
     },
     "Fills just the drawing's area, with the window colour around it." : {
@@ -480,10 +521,7 @@
     "Gradient Stop" : {
 
     },
-    "Graph" : {
-
-    },
-    "Graph Palette" : {
+    "Gradients, masks, filters and other reusable pieces appear here." : {
 
     },
     "Grey" : {
@@ -493,6 +531,9 @@
 
     },
     "Group the selected element (⌥⌘G)" : {
+
+    },
+    "Groups" : {
 
     },
     "Hand" : {
@@ -537,16 +578,10 @@
     "Hide Layers (⌘1)" : {
 
     },
-    "Hide Preview" : {
-
-    },
     "Hide Timeline" : {
 
     },
     "Hide Timeline (⌘4)" : {
-
-    },
-    "Hide the preview" : {
 
     },
     "Hide the raw attributes" : {
@@ -556,9 +591,6 @@
 
     },
     "Hold the end state" : {
-
-    },
-    "Hover to preview how this changes the drawing; click to keep it open" : {
 
     },
     "Hue and saturation" : {
@@ -648,6 +680,12 @@
     "Motion path" : {
 
     },
+    "Move Left" : {
+
+    },
+    "Move Right" : {
+
+    },
     "Move and resize its dashed shapes over the element." : {
 
     },
@@ -693,7 +731,13 @@
     "None" : {
 
     },
+    "Nothing Matches" : {
+
+    },
     "Nothing to Inspect" : {
+
+    },
+    "Nothing uses it — drag it onto a layer" : {
 
     },
     "Now" : {
@@ -720,9 +764,6 @@
     "Open in" : {
 
     },
-    "Opened" : {
-
-    },
     "Opens SVG files" : {
 
     },
@@ -730,6 +771,9 @@
 
     },
     "Other Installed Font…" : {
+
+    },
+    "Outline" : {
 
     },
     "Pad" : {
@@ -750,6 +794,9 @@
     "Pause Animations" : {
 
     },
+    "Pause the animations (⌥⌘P)" : {
+
+    },
     "Place an image: drop one here, or right-click to choose a file" : {
 
     },
@@ -757,6 +804,9 @@
 
     },
     "Play Animations" : {
+
+    },
+    "Play the animations (⌥⌘P)" : {
 
     },
     "Playback speed" : {
@@ -769,9 +819,6 @@
 
     },
     "Polyline" : {
-
-    },
-    "Press Return to apply" : {
 
     },
     "Preview" : {
@@ -795,9 +842,6 @@
     "Re-indents the markup after canvas edits and when you pause typing." : {
 
     },
-    "Rearrange the graph neatly (undoes any nodes you've moved)" : {
-
-    },
     "Rectangle" : {
 
     },
@@ -807,16 +851,22 @@
     "Release to Place" : {
 
     },
-    "Remove %@" : {
+    "Remove" : {
 
     },
-    "Remove Its References" : {
+    "Remove %@" : {
 
     },
     "Remove Shape" : {
 
     },
     "Remove Stop" : {
+
+    },
+    "Remove Unused" : {
+
+    },
+    "Remove resources nothing uses" : {
 
     },
     "Remove this shape" : {
@@ -837,10 +887,16 @@
     "Repeat" : {
 
     },
+    "Resources" : {
+
+    },
     "Restore" : {
 
     },
     "Restore Defaults" : {
+
+    },
+    "Results" : {
 
     },
     "Reverse" : {
@@ -870,9 +926,6 @@
     "Search Fonts" : {
 
     },
-    "Search Settings" : {
-
-    },
     "See this version's code against the current one" : {
 
     },
@@ -889,9 +942,6 @@
 
     },
     "Select it to edit" : {
-
-    },
-    "Select on Canvas" : {
 
     },
     "Select this shape to edit it" : {
@@ -921,6 +971,9 @@
     "Set the viewBox to the drawing’s bounds" : {
 
     },
+    "Shapes" : {
+
+    },
     "Show" : {
 
     },
@@ -945,12 +998,6 @@
     "Show Element" : {
 
     },
-    "Show Element Graph" : {
-
-    },
-    "Show Element Graph (⌘3)" : {
-
-    },
     "Show Inspector" : {
 
     },
@@ -966,6 +1013,12 @@
     "Show Layers (⌘1)" : {
 
     },
+    "Show Outline" : {
+
+    },
+    "Show Outline (⌘3)" : {
+
+    },
     "Show Timeline" : {
 
     },
@@ -978,16 +1031,25 @@
     "Show code alongside" : {
 
     },
+    "Show in Inspector" : {
+
+    },
     "Show on Canvas" : {
 
     },
-    "Show the selected node's element on the canvas" : {
+    "Show only elements that use a particular gradient, clip, mask or filter" : {
+
+    },
+    "Show only some kinds of element" : {
 
     },
     "Show the shapes over the element, to move and resize them directly (Esc when done)" : {
 
     },
     "Show this version on the canvas" : {
+
+    },
+    "Show what uses it" : {
 
     },
     "Showing “%@” on the canvas" : {
@@ -1035,6 +1097,9 @@
     "Stop and return to the start" : {
 
     },
+    "Stroke" : {
+
+    },
     "Style" : {
 
     },
@@ -1065,9 +1130,6 @@
     "The source matches that version." : {
 
     },
-    "Tidy Up" : {
-
-    },
     "Timeline" : {
 
     },
@@ -1090,6 +1152,9 @@
 
     },
     "Triangle" : {
+
+    },
+    "Try another search or filter." : {
 
     },
     "Type" : {
@@ -1128,10 +1193,16 @@
     "Use one radius for every corner" : {
 
     },
-    "Value" : {
+    "Used by %@" : {
 
     },
-    "Version" : {
+    "Uses %@" : {
+
+    },
+    "Uses Any Resource" : {
+
+    },
+    "Value" : {
 
     },
     "View" : {
@@ -1164,6 +1235,9 @@
     "Windows" : {
 
     },
+    "With Effects" : {
+
+    },
     "Wrap lines" : {
 
     },
@@ -1182,10 +1256,10 @@
     "lines since “%@”" : {
 
     },
-    "stops" : {
+    "unused" : {
 
     },
-    "→ %@" : {
+    "—" : {
 
     },
     "−%lld" : {

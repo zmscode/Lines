@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The order of a toolbar's items and which are shown, stored as a string
-/// ("layers,inspector,|1,code,!graph") so it fits in @AppStorage. Items
+/// ("layers,inspector,|1,code,!outline") so it fits in @AppStorage. Items
 /// starting with "|" are separators between groups; "!" hides an item.
 struct ToolbarLayout: Equatable {
 	struct Item: Identifiable, Hashable {
@@ -86,7 +86,7 @@ struct ToolbarLayout: Equatable {
 
 	static let windowKey = "toolbar.layout"
 	static let windowDefaults = [
-		"layers", "inspector", "|1", "code", "graph", "changes", "timeline",
+		"layers", "inspector", "|1", "code", "outline", "changes", "timeline",
 	]
 
 	static let paletteKey = "palette.layout"
@@ -94,9 +94,6 @@ struct ToolbarLayout: Equatable {
 		CanvasTool.groups.indices.prefix(2).map { "tool\($0)" } + ["|1"]
 		+ CanvasTool.groups.indices.dropFirst(2).map { "tool\($0)" } + ["|2"]
 		+ ["effects", "fills", "masking", "transform", "animate", "image", "|3", "background"]
-
-	static let graphKey = "graph.palette.layout"
-	static let graphDefaults = ["add", "cleanup", "|1", "flow", "tree", "|2", "tidy", "canvas"]
 
 	/// Names and symbols for the settings list.
 	static func describe(_ id: String) -> (title: String, symbol: String) {
@@ -112,7 +109,7 @@ struct ToolbarLayout: Equatable {
 		case "layers": return ("Layers", "square.3.layers.3d")
 		case "inspector": return ("Inspector", "slider.horizontal.3")
 		case "code": return ("Code", "chevron.left.forwardslash.chevron.right")
-		case "graph": return ("Graph", EditorLayout.graph.symbol)
+		case "outline": return ("Outline", EditorLayout.outline.symbol)
 		case "changes": return ("Changes", "plusminus")
 		case "timeline": return ("Animations", "film.stack")
 		case "effects": return ("Shadow & Blur", "shadow")
@@ -122,12 +119,6 @@ struct ToolbarLayout: Equatable {
 		case "animate": return ("Animations", "sparkles")
 		case "image": return ("Image", "photo.badge.plus")
 		case "background": return ("Canvas Background", "checkerboard.rectangle")
-		case "add": return ("Add Definition", "plus")
-		case "flow": return ("Flow Layout", GraphLayoutMode.flow.symbol)
-		case "tree": return ("Tree Layout", GraphLayoutMode.tree.symbol)
-		case "tidy": return ("Tidy Up", "wand.and.rays")
-		case "cleanup": return ("Remove Unused", "trash.slash")
-		case "canvas": return ("Show on Canvas", "scope")
 		default: return (id, "questionmark")
 		}
 	}

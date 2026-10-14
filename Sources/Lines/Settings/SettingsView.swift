@@ -74,7 +74,7 @@ struct SettingsEntry: Identifiable, Hashable {
 			keywords: ["open with", "finder", "double-click"]),
 		SettingsEntry(
 			title: "Open new windows in", pane: .windows,
-			keywords: ["layout", "canvas", "graph", "node"]),
+			keywords: ["layout", "canvas", "outline", "table"]),
 		SettingsEntry(
 			title: "Show code alongside", pane: .windows, keywords: ["source", "editor", "panel"]),
 		SettingsEntry(
@@ -92,14 +92,12 @@ struct SettingsEntry: Identifiable, Hashable {
 		SettingsEntry(
 			title: "Window toolbar buttons", pane: .toolbar,
 			keywords: [
-				"reorder", "layers", "inspector", "code", "graph", "changes", "animations", "hide",
+				"reorder", "layers", "inspector", "code", "outline", "changes", "animations",
+				"hide",
 			]),
 		SettingsEntry(
 			title: "Tools palette", pane: .toolbar,
 			keywords: ["reorder", "tools", "shapes", "left", "hide"]),
-		SettingsEntry(
-			title: "Graph palette", pane: .toolbar,
-			keywords: ["reorder", "node editor", "tidy", "hide"]),
 		SettingsEntry(
 			title: "Code font", pane: .editor,
 			keywords: ["typeface", "monospaced", "sf mono", "family"]),
@@ -254,14 +252,6 @@ private struct ToolbarSettings: View {
 				SettingsFootnote(
 					"The tools down the left of the canvas. Tools you hide keep their keyboard shortcuts."
 				)
-			}
-			Section {
-				ToolbarLayoutEditor(
-					key: ToolbarLayout.graphKey, defaults: ToolbarLayout.graphDefaults)
-			} header: {
-				Text("Graph Palette")
-			} footer: {
-				SettingsFootnote("The buttons down the left of the element graph.")
 			}
 		}
 		.formStyle(.grouped)

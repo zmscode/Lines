@@ -13,7 +13,7 @@ final class CanvasController {
 	var parseError: String?
 	var zoom: CGFloat = 1
 	var layout: EditorLayout = .canvas {
-		didSet { if layout != oldValue { call("setCanvasBehind(\(layout == .graph))") } }
+		didSet { if layout != oldValue { call("setCanvasBehind(\(layout == .outline))") } }
 	}
 	var showsCode = false
 	var showsLayers = false
@@ -425,16 +425,7 @@ final class CanvasController {
 		return image
 	}
 
-	/// The graph node the pointer is resting on, for its impact preview.
-	var hoveredNode: Int?
-	/// Inputs ("nodeID:attribute") a connection being dragged in the graph
-	/// could validly end on, to highlight them.
-	var validConnectionTargets: Set<String> = []
-
-	/// A graph node whose preview stays up until it's closed.
-	var pinnedPreviewNode: Int?
-
-	/// How a node changes the drawing: labelled pictures (without/with a
+	/// How a resource or element changes the drawing: labelled pictures (without/with a
 	/// definition, an animation's frames, or an element in place).
 	func impactPreview(order: Int, size: Double = 200) async -> [(label: String, image: NSImage)] {
 		guard isReady, let webView,
@@ -520,7 +511,7 @@ final class CanvasController {
 			if minimapShift > 0 { call("setMinimapShift(\(minimapShift))") }
 			if documentFrameShown { call("showDocumentFrame(true)") }
 			if !isEditing { call("setEditable(false)") }
-			if layout == .graph { call("setCanvasBehind(true)") }
+			if layout == .outline { call("setCanvasBehind(true)") }
 			if showsInspector { call("setInspectorOpen(true)") }
 
 		case "changed":

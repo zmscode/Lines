@@ -3,18 +3,19 @@ import SwiftUI
 /// What fills the main area of the window. The code and layers panels are
 /// shown alongside either one.
 enum EditorLayout: String, CaseIterable, Identifiable {
-	case canvas, graph
+	// "outline" replaced the old node graph; a saved "graph" falls back to the canvas.
+	case canvas, outline
 	var id: String { rawValue }
 	var title: String {
 		switch self {
 		case .canvas: String(localized: "Canvas")
-		case .graph: String(localized: "Element Graph")
+		case .outline: String(localized: "Outline")
 		}
 	}
 	var symbol: String {
 		switch self {
 		case .canvas: "photo"
-		case .graph: "point.3.connected.trianglepath.dotted"
+		case .outline: "tablecells"
 		}
 	}
 }

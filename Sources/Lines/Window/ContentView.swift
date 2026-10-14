@@ -110,7 +110,7 @@ struct ContentView: View {
 				}
 			}
 			.onChange(of: controller.layout) { _, layout in
-				if layout == .graph && isLoaded { closeSidePanels() }
+				if layout == .outline && isLoaded { closeSidePanels() }
 				updateInsets()
 			}
 			.onChange(of: controller.showsCode) { _, shows in
@@ -216,11 +216,11 @@ struct ContentView: View {
 	private var viewer: some View {
 		ZStack {
 			canvas
-				.opacity(controller.layout == .graph ? 0 : 1)
+				.opacity(controller.layout == .outline ? 0 : 1)
 				.allowsHitTesting(controller.layout == .canvas)
-				.accessibilityHidden(controller.layout == .graph)
-			if controller.layout == .graph {
-				GraphView(controller: controller, leadingInset: codeSpace)
+				.accessibilityHidden(controller.layout == .outline)
+			if controller.layout == .outline {
+				OutlineView(controller: controller, leadingInset: codeSpace)
 					.transition(.opacity)
 					.dropDestination(for: URL.self) { urls, _ in
 						controller.handleDroppedFiles(urls.filter(CanvasController.isSVG))
@@ -429,15 +429,15 @@ struct ContentView: View {
 				Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
 			}
 			.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
-		case "graph":
+		case "outline":
 			Toggle(
 				isOn: Binding(
-					get: { controller.layout == .graph },
-					set: { controller.layout = $0 ? .graph : .canvas })
+					get: { controller.layout == .outline },
+					set: { controller.layout = $0 ? .outline : .canvas })
 			) {
-				Label("Graph", systemImage: EditorLayout.graph.symbol)
+				Label("Outline", systemImage: EditorLayout.outline.symbol)
 			}
-			.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
+			.help(controller.layout == .outline ? "Show Canvas (⌘3)" : "Show Outline (⌘3)")
 		case "changes":
 			Toggle(isOn: $controller.showsChanges) {
 				Label("Changes", systemImage: "plusminus")
