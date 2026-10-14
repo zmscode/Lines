@@ -217,11 +217,12 @@ private struct PaletteEffectModifier: ViewModifier {
 
 /// One palette button. With several options it shows the last one used, a
 /// corner triangle, and a mini toolbar of the rest on right-click.
-private struct PaletteSlot: View {
+struct PaletteSlot: View {
 	var id: String
 	var options: [PaletteOption]
 	@Binding var chosen: [String: Int]
 	var isSelected: Bool
+	var size: CGFloat = ToolPalette.buttonSize
 
 	@State private var flyoutShown = false
 	@State private var isHovered = false
@@ -231,7 +232,7 @@ private struct PaletteSlot: View {
 	var body: some View {
 		let option = options[current]
 		Button(option.title, systemImage: option.symbol, action: option.perform)
-			.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: isSelected))
+			.buttonStyle(.icon(size: size, selected: isSelected))
 			.modifier(PaletteEffectModifier(effect: option.effect, isActive: isHovered))
 			.onHover { isHovered = $0 }
 			.help(options.count > 1 ? option.help + " — right-click for more" : option.help)

@@ -48,6 +48,7 @@ private struct TimelineHeader: View {
 	var close: () -> Void
 
 	private static let speeds: [Double] = [0.25, 0.5, 1, 1.5, 2]
+	@State private var chosenPreset: [String: Int] = [:]
 
 	var body: some View {
 		HStack(spacing: 2) {
@@ -104,23 +105,27 @@ private struct TimelineHeader: View {
 
 			Spacer()
 
-			Menu {
-				ForEach(AnimationPreset.allCases) { preset in
-					Button(preset.title, systemImage: preset.symbol) {
-						if let order = targetOrder {
+			// Like the tools palette's animation slot: click adds the last preset
+			// used; right-click or the corner triangle lists them all.
+			PaletteSlot(
+				id: "timeline.animate",
+				options: AnimationPreset.allCases.map { preset in
+					PaletteOption(
+						title: "Add \(preset.title)", symbol: preset.symbol,
+						help: targetOrder == nil
+							? "Select an element to animate"
+							: "Add \(preset.title) to the selection",
+						effect: preset.effect
+					) {
+						if let order = targetOrder, controller.isEditing {
 							controller.addAnimation(preset, toOrder: order)
+						} else {
+							NSSound.beep()
 						}
 					}
-				}
-			} label: {
-				Label("Add Animation", systemImage: "plus")
-			}
-			.menuIndicator(.hidden)
-			.buttonStyle(.icon(size: 26))
-			.disabled(targetOrder == nil || !controller.isEditing)
-			.help(
-				targetOrder == nil
-					? "Select an element to animate" : "Add an animation to the selection")
+				}, chosen: $chosenPreset, isSelected: false, size: 28
+			)
+			.opacity(targetOrder == nil || !controller.isEditing ? 0.5 : 1)
 
 			Button("Delete Animation", systemImage: "trash") {
 				if let order = selectedAnimation { controller.delete(order: order) }
@@ -200,11 +205,8 @@ private struct TimelineTracks: View {
 			VStack(spacing: 0) {
 				HStack(spacing: 0) {
 					Color.clear.frame(width: TimelinePanel.labelWidth)
-					TimelineRuler(span: span, scale: scale) { t in
-						controller.pause()
-						controller.seek(to: t)
-					}
-					.frame(width: trackWidth)
+					TimelineRuler(span: span, scale: scale) { t in scrub(to: t) }
+						.frame(width: trackWidth)
 				}
 				.frame(height: TimelinePanel.rulerHeight)
 				ScrollView(.vertical) {
@@ -243,6 +245,16 @@ private struct TimelineTracks: View {
 										}
 									)
 									.frame(width: trackWidth, height: TimelinePanel.rowHeight)
+									.background {
+										// Clicking or dragging between bars moves the playhead.
+										Color.clear
+											.contentShape(.rect)
+											.gesture(
+												DragGesture(minimumDistance: 0)
+													.onChanged { value in
+														scrub(to: value.location.x / scale)
+													})
+									}
 								}
 							}
 						}
@@ -251,13 +263,44 @@ private struct TimelineTracks: View {
 				}
 				.scrollIndicators(.automatic)
 			}
-			.overlay(alignment: .topLeading) {
-				Playhead()
-					.offset(x: TimelinePanel.labelWidth + controller.animationTime * scale - 0.75)
-					.allowsHitTesting(false)
+			.overlay {
+				// The line runs through the tracks; its head sits in the ruler and
+				// drags to scrub.
+				GeometryReader { box in
+					let x = TimelinePanel.labelWidth + controller.animationTime * scale
+					Rectangle()
+						.fill(.tint)
+						.frame(
+							width: 1.5,
+							height: max(0, box.size.height - TimelinePanel.rulerHeight + 4)
+						)
+						.position(
+							x: x,
+							y: TimelinePanel.rulerHeight - 4
+								+ (box.size.height - TimelinePanel.rulerHeight + 4) / 2
+						)
+						.allowsHitTesting(false)
+					PlayheadHandle(time: controller.animationTime)
+						.position(x: x, y: TimelinePanel.rulerHeight / 2)
+						.gesture(
+							DragGesture(minimumDistance: 0, coordinateSpace: .named("timeline"))
+								.onChanged { value in
+									scrub(to: (value.location.x - TimelinePanel.labelWidth) / scale)
+								}
+						)
+						.pointerStyle(.columnResize)
+						.help("Drag to scrub")
+				}
 			}
+			.coordinateSpace(.named("timeline"))
 			.padding(.horizontal, 8)
 		}
+	}
+
+	/// Pauses and moves the playhead (snapped to 0.01s).
+	private func scrub(to seconds: Double) {
+		if controller.isPlaying { controller.pause() }
+		controller.seek(to: (max(0, min(seconds, span)) * 100).rounded() / 100)
 	}
 
 	private func isSelected(_ order: Int?) -> Bool {
@@ -475,16 +518,35 @@ private struct TimelineRuler: View {
 	}
 }
 
-private struct Playhead: View {
+/// The playhead's head: a tab with a point at the bottom, centred on the time.
+private struct PlayheadHandle: View {
+	var time: Double
+
 	var body: some View {
 		VStack(spacing: 0) {
-			Image(systemName: "arrowtriangle.down.fill")
-				.font(.system(size: 9))
-				.foregroundStyle(.tint)
-				.offset(x: 0.75, y: 2)
-			Rectangle().fill(.tint).frame(width: 1.5)
+			RoundedRectangle(cornerRadius: 3, style: .continuous)
+				.fill(.tint)
+				.frame(width: 12, height: 11)
+			Triangle()
+				.fill(.tint)
+				.frame(width: 12, height: 5)
 		}
-		.frame(width: 1.5)
-		.frame(maxHeight: .infinity, alignment: .top)
+		.frame(width: 12, height: 16)
+		.shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
+		.contentShape(.rect.inset(by: -6))
+		.accessibilityElement()
+		.accessibilityLabel("Playhead")
+		.accessibilityValue(AnimationInfo.format(seconds: time))
+	}
+
+	private struct Triangle: Shape {
+		func path(in r: CGRect) -> Path {
+			Path { p in
+				p.move(to: CGPoint(x: r.minX, y: r.minY))
+				p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+				p.addLine(to: CGPoint(x: r.midX, y: r.maxY))
+				p.closeSubpath()
+			}
+		}
 	}
 }
