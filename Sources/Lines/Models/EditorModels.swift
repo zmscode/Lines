@@ -117,6 +117,17 @@ struct OutlineItem: Identifiable, Equatable, Sendable {
 	/// Attribute values: paints for shapes; everything for stops, filter
 	/// primitives and animations.
 	var props: [String: String] = [:]
+	/// CSS (@keyframes) animations running on the element.
+	var cssAnimations: [CSSAnimation] = []
+
+	struct CSSAnimation: Equatable, Sendable {
+		var name: String
+		var duration: Double
+		var delay: Double
+		/// nil repeats forever.
+		var iterations: Double?
+		var easing: String
+	}
 
 	func prop(_ name: String) -> String? { props[name] }
 

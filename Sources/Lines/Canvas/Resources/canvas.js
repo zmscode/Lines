@@ -2001,12 +2001,14 @@ function applySpeed() {
 function animSetSpeed(s) {
   animSpeed = s > 0 ? s : 1;
   applySpeed();
+  syncCSSAnimations(null);
 }
 
 function animPlay() {
   if (!root) return;
   animPaused = false;
   applySpeed();
+  syncCSSAnimations(null);
   updateTimeReports();
   reportTime();
 }
@@ -2022,6 +2024,7 @@ function animPause() {
   root.pauseAnimations();
   animPaused = true;
   animTime = root.getCurrentTime();
+  syncCSSAnimations(animTime);
   updateTimeReports();
   reportTime();
 }
@@ -2030,6 +2033,7 @@ function animSeek(t) {
   if (!root) return;
   root.setCurrentTime(Math.max(0, t));
   animTime = Math.max(0, t);
+  syncCSSAnimations(animTime);
   updateOverlay();
   reportTime();
 }
@@ -2039,9 +2043,11 @@ function restoreAnimationState() {
   if (animPaused) {
     root.pauseAnimations();
     root.setCurrentTime(animTime);
+    syncCSSAnimations(animTime);
   } else if (animSpeed !== 1) {
     root.setCurrentTime(animTime);
     applySpeed();
+    syncCSSAnimations(animTime);
   }
 }
 
@@ -2294,6 +2300,52 @@ function previewOf(el) {
   return null;
 }
 
+// CSS animations (@keyframes) running on an element, for the timeline.
+function cssAnimationsOf(el) {
+  if (!el.getAnimations) return null;
+  let list;
+  try {
+    list = el.getAnimations().filter((a) => a.animationName);
+  } catch (e) {
+    return null;
+  }
+  if (!list.length) return null;
+  return list.map((a) => {
+    const t = a.effect ? a.effect.getTiming() : {};
+    const dur = typeof t.duration === "number" ? t.duration / 1000 : 0;
+    return {
+      name: a.animationName,
+      duration: dur,
+      delay: (t.delay || 0) / 1000,
+      iterations: t.iterations === Infinity ? -1 : t.iterations || 1,
+      easing: t.easing || "linear",
+    };
+  });
+}
+
+// Every CSS animation in the drawing; SMIL's pause and seek don't reach them.
+function cssAnimations() {
+  if (!root || !document.getAnimations) return [];
+  try {
+    return document
+      .getAnimations()
+      .filter((a) => a.effect && a.effect.target && root.contains(a.effect.target));
+  } catch (e) {
+    return [];
+  }
+}
+
+function syncCSSAnimations(seekTo) {
+  for (const a of cssAnimations()) {
+    try {
+      a.playbackRate = animSpeed;
+      if (seekTo != null) a.currentTime = seekTo * 1000;
+      if (animPaused) a.pause();
+      else a.play();
+    } catch (e) {}
+  }
+}
+
 function sendOutline() {
   if (!root) return;
   const items = [];
@@ -2315,6 +2367,7 @@ function sendOutline() {
         refs: refsOf(el),
         preview: previewOf(el),
         props: propsOf(el),
+        css: cssAnimationsOf(el),
       });
     }
     Array.from(el.children).forEach((c, i) => walk(c, order, depth + 1, path.concat(i)));

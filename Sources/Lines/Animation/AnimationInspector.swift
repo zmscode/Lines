@@ -240,14 +240,14 @@ struct ElementAnimationsCard: View {
 	var controller: CanvasController
 
 	private var animations: [AnimationInfo] {
-		controller.animations.filter { $0.item.parent == selection.order }
+		controller.animations.filter { $0.target?.order == selection.order }
 	}
 
 	var body: some View {
 		InspectorCard(title: "Animations") {
 			ForEach(animations) { animation in
 				HStack(spacing: 8) {
-					Image(systemName: InspectorView.symbol(for: animation.item.tag, isRoot: false))
+					Image(systemName: animation.symbol)
 						.foregroundStyle(.indigo)
 						.frame(width: 16)
 					VStack(alignment: .leading, spacing: 1) {
@@ -258,11 +258,13 @@ struct ElementAnimationsCard: View {
 							.lineLimit(1)
 					}
 					Spacer()
-					Button("Delete Animation", systemImage: "minus.circle") {
-						controller.delete(order: animation.order)
+					if !animation.isCSS {
+						Button("Delete Animation", systemImage: "minus.circle") {
+							controller.delete(order: animation.order)
+						}
+						.buttonStyle(.icon(size: 22))
+						.help("Delete this animation")
 					}
-					.buttonStyle(.icon(size: 22))
-					.help("Delete this animation")
 				}
 				.contentShape(.rect)
 				.onTapGesture { controller.select(order: animation.order) }

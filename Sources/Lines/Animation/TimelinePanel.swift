@@ -303,7 +303,7 @@ private struct AnimationLabel: View {
 
 	var body: some View {
 		HStack(spacing: 6) {
-			Image(systemName: InspectorView.symbol(for: animation.item.tag, isRoot: false))
+			Image(systemName: animation.symbol)
 				.foregroundStyle(.indigo)
 				.frame(width: 16)
 			Text(animation.property)
@@ -376,33 +376,42 @@ private struct AnimationBar: View {
 						.onEnded { _ in
 							setBegin(Self.snap(begin))
 							moveBy = 0
-						}
+						},
+					isEnabled: !animation.isCSS
 				)
 				.onTapGesture(perform: select)
-				.help("Drag to change when it begins")
+				.help(
+					animation.isCSS
+						? "A CSS animation: edit its timing in the stylesheet"
+						: "Drag to change when it begins"
+				)
 				.offset(x: x)
 
 			// The first pass's trailing edge sets the duration.
-			Rectangle()
-				.fill(.clear)
-				.frame(width: 8, height: TimelinePanel.rowHeight - 8)
-				.contentShape(.rect)
-				.pointerStyle(.frameResize(position: .trailing))
-				.gesture(
-					DragGesture(minimumDistance: 1)
-						.onChanged { value in
-							select()
-							stretchBy = value.translation.width / scale
-						}
-						.onEnded { _ in
-							setDuration(Self.snap(duration))
-							stretchBy = 0
-						}
-				)
-				.help("Drag to change the duration")
-				.offset(x: x + duration * scale - 4)
+			if !animation.isCSS { durationHandle(x: x) }
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+	}
+
+	private func durationHandle(x: Double) -> some View {
+		Rectangle()
+			.fill(.clear)
+			.frame(width: 8, height: TimelinePanel.rowHeight - 8)
+			.contentShape(.rect)
+			.pointerStyle(.frameResize(position: .trailing))
+			.gesture(
+				DragGesture(minimumDistance: 1)
+					.onChanged { value in
+						select()
+						stretchBy = value.translation.width / scale
+					}
+					.onEnded { _ in
+						setDuration(Self.snap(duration))
+						stretchBy = 0
+					}
+			)
+			.help("Drag to change the duration")
+			.offset(x: x + duration * scale - 4)
 	}
 
 	/// A tick at the end of each pass after the first.

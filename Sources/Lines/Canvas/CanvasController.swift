@@ -368,7 +368,16 @@ final class CanvasController {
 					label: d["label"] as? String, isHidden: d["hidden"] as? Bool ?? false,
 					fill: d["fill"] as? String, references: refs,
 					preview: d["preview"] as? [String],
-					props: d["props"] as? [String: String] ?? [:]
+					props: d["props"] as? [String: String] ?? [:],
+					cssAnimations: (d["css"] as? [[String: Any]] ?? []).map { a in
+						let iterations = (a["iterations"] as? Double) ?? 1
+						return OutlineItem.CSSAnimation(
+							name: a["name"] as? String ?? "animation",
+							duration: a["duration"] as? Double ?? 0,
+							delay: a["delay"] as? Double ?? 0,
+							iterations: iterations < 0 ? nil : iterations,
+							easing: a["easing"] as? String ?? "linear")
+					}
 				)
 			}
 			if items != outline { outline = items }

@@ -34,35 +34,58 @@ enum AnimationPreset: String, CaseIterable, Identifiable {
 	}
 }
 
-/// One animation in the drawing, read from the outline for the timeline.
+/// One animation in the drawing, read from the outline for the timeline:
+/// a SMIL element, or a CSS animation running on an element.
 struct AnimationInfo: Identifiable {
+	/// The animation element; for a CSS animation, the element it runs on.
 	var item: OutlineItem
 	var target: OutlineItem?
+	var css: OutlineItem.CSSAnimation? = nil
+	var cssIndex = 0
 
-	var id: String { item.path }
+	var id: String { css == nil ? item.path : "\(item.path)#css\(cssIndex)" }
+	/// What to select for this animation.
 	var order: Int { item.order }
+	/// CSS animations play and scrub, but their timing is edited in the stylesheet.
+	var isCSS: Bool { css != nil }
 
-	/// What's animated: an attribute, a transform type, or a motion path.
+	var symbol: String {
+		isCSS ? "wand.and.sparkles" : InspectorView.symbol(for: item.tag, isRoot: false)
+	}
+
+	/// What's animated: an attribute, a transform type, a motion path, or a keyframes name.
 	var property: String {
+		if let css { return "@keyframes \(css.name)" }
 		switch item.tag {
-		case "animateTransform": item.prop("type").map { "transform: \($0)" } ?? "transform"
-		case "animateMotion": "motion path"
-		default: item.prop("attributeName") ?? "?"
+		case "animateTransform": return item.prop("type").map { "transform: \($0)" } ?? "transform"
+		case "animateMotion": return "motion path"
+		default: return item.prop("attributeName") ?? "?"
 		}
 	}
 
-	var begin: Double { AnimationInfo.seconds(item.prop("begin")) ?? 0 }
-	var duration: Double? { AnimationInfo.seconds(item.prop("dur")) }
-	var repeatsForever: Bool {
-		item.prop("repeatCount") == "indefinite" || item.prop("repeatDur") == "indefinite"
+	var begin: Double {
+		if let css { return css.delay }
+		return AnimationInfo.seconds(item.prop("begin")) ?? 0
 	}
-	var repeatCount: Double? { item.prop("repeatCount").flatMap(Double.init) }
+	var duration: Double? {
+		if let css { return css.duration }
+		return AnimationInfo.seconds(item.prop("dur"))
+	}
+	var repeatsForever: Bool {
+		if let css { return css.iterations == nil }
+		return item.prop("repeatCount") == "indefinite" || item.prop("repeatDur") == "indefinite"
+	}
+	var repeatCount: Double? {
+		if let css { return css.iterations }
+		return item.prop("repeatCount").flatMap(Double.init)
+	}
 
 	/// When the animation (one pass, or all its repeats) ends.
 	var end: Double { begin + (duration ?? 0) * (repeatsForever ? 1 : (repeatCount ?? 1)) }
 
-	/// "1 → 0", or the values list, for summaries.
+	/// "1 → 0", the values list, or a CSS animation's easing, for summaries.
 	var change: String {
+		if let css { return "CSS · \(css.easing)" }
 		if let values = item.prop("values") {
 			return values.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
 				.joined(separator: " → ")
@@ -93,11 +116,26 @@ struct AnimationInfo: Identifiable {
 		seconds < 10 ? String(format: "%.2fs", seconds) : String(format: "%.1fs", seconds)
 	}
 
-	/// Every animation in the outline, with the element it animates.
+	/// Every animation in the outline, with the element it animates: SMIL
+	/// elements (their parent, or the element their `href` names) and CSS
+	/// animations.
 	static func all(in outline: [OutlineItem]) -> [AnimationInfo] {
 		let byOrder = Dictionary(uniqueKeysWithValues: outline.map { ($0.order, $0) })
-		return outline.filter { AnimationTag.contains($0.tag) }.map {
-			AnimationInfo(item: $0, target: byOrder[$0.parent])
+		let byID = Dictionary(
+			outline.compactMap { item in item.elementID.map { ($0, item) } },
+			uniquingKeysWith: { first, _ in first })
+		var result: [AnimationInfo] = []
+		for item in outline {
+			if AnimationTag.contains(item.tag) {
+				let href = (item.prop("href") ?? item.prop("xlink:href"))
+					.flatMap { $0.hasPrefix("#") ? String($0.dropFirst()) : nil }
+				let target = href.flatMap { byID[$0] } ?? byOrder[item.parent]
+				result.append(AnimationInfo(item: item, target: target))
+			}
+			for (index, css) in item.cssAnimations.enumerated() {
+				result.append(AnimationInfo(item: item, target: item, css: css, cssIndex: index))
+			}
 		}
+		return result
 	}
 }
