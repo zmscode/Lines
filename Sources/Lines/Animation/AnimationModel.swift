@@ -11,6 +11,18 @@ enum AnimationPreset: String, CaseIterable, Identifiable {
 	case fade, fadeIn, spin, slide, colour, draw
 	var id: String { rawValue }
 
+	/// How its icon moves in the tools palette, hinting at what it does.
+	var effect: PaletteEffect {
+		switch self {
+		case .fade: .pulse
+		case .fadeIn: .breathe
+		case .spin: .rotate
+		case .slide: .wiggle
+		case .colour: .variableColour
+		case .draw: .bounce
+		}
+	}
+
 	var title: String {
 		switch self {
 		case .fade: "Fade (Loop)"
@@ -22,9 +34,10 @@ enum AnimationPreset: String, CaseIterable, Identifiable {
 		}
 	}
 
+	/// Distinct from the definition icons (gradients use the half-filled circle).
 	var symbol: String {
 		switch self {
-		case .fade: "circle.lefthalf.filled"
+		case .fade: "eye"
 		case .fadeIn: "sun.max"
 		case .spin: "arrow.trianglehead.2.clockwise.rotate.90"
 		case .slide: "arrow.left.and.right"

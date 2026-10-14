@@ -105,7 +105,7 @@ struct ToolPalette: View {
 			ActionSlot(
 				id: "animate",
 				options: AnimationPreset.allCases.map { preset in
-					onSelection("Animate: \(preset.title)", preset.symbol) {
+					onSelection("Animate: \(preset.title)", preset.symbol, effect: preset.effect) {
 						if let order = elementOrder {
 							controller.addAnimation(preset, toOrder: order)
 						}
@@ -126,10 +126,13 @@ struct ToolPalette: View {
 	}
 
 	/// An option that needs something selected; it beeps otherwise.
-	private func onSelection(_ title: String, _ symbol: String, perform: @escaping () -> Void)
-		-> PaletteOption
-	{
-		PaletteOption(title: title, symbol: symbol, help: "\(title) (to the selection)") {
+	private func onSelection(
+		_ title: String, _ symbol: String, effect: PaletteEffect = .none,
+		perform: @escaping () -> Void
+	) -> PaletteOption {
+		PaletteOption(
+			title: title, symbol: symbol, help: "\(title) (to the selection)", effect: effect
+		) {
 			if controller.hasElementSelection { perform() } else { NSSound.beep() }
 		}
 	}
@@ -182,7 +185,34 @@ struct PaletteOption {
 	var title: String
 	var symbol: String
 	var help: String
+	var effect: PaletteEffect = .none
 	var perform: () -> Void
+}
+
+/// A symbol animation for palette icons.
+enum PaletteEffect {
+	case none, pulse, breathe, rotate, wiggle, bounce, variableColour
+}
+
+/// Plays a palette icon's effect: continuously while `isActive`, otherwise
+/// every few seconds so the icon reads as an animation.
+private struct PaletteEffectModifier: ViewModifier {
+	var effect: PaletteEffect
+	var isActive: Bool
+
+	func body(content: Content) -> some View {
+		let repeating: SymbolEffectOptions =
+			isActive ? .repeat(.continuous) : .repeat(.periodic(delay: 3.5))
+		switch effect {
+		case .none: content
+		case .pulse: content.symbolEffect(.pulse, options: repeating)
+		case .breathe: content.symbolEffect(.breathe, options: repeating)
+		case .rotate: content.symbolEffect(.rotate, options: repeating)
+		case .wiggle: content.symbolEffect(.wiggle.left, options: repeating)
+		case .bounce: content.symbolEffect(.bounce, options: repeating)
+		case .variableColour: content.symbolEffect(.variableColor.iterative, options: repeating)
+		}
+	}
 }
 
 /// One palette button. With several options it shows the last one used, a
@@ -194,6 +224,7 @@ private struct PaletteSlot: View {
 	var isSelected: Bool
 
 	@State private var flyoutShown = false
+	@State private var isHovered = false
 
 	private var current: Int { min(chosen[id] ?? 0, options.count - 1) }
 
@@ -201,6 +232,8 @@ private struct PaletteSlot: View {
 		let option = options[current]
 		Button(option.title, systemImage: option.symbol, action: option.perform)
 			.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: isSelected))
+			.modifier(PaletteEffectModifier(effect: option.effect, isActive: isHovered))
+			.onHover { isHovered = $0 }
 			.help(options.count > 1 ? option.help + " — right-click for more" : option.help)
 			.accessibilityAddTraits(isSelected ? .isSelected : [])
 			.overlay(alignment: .bottomTrailing) {
@@ -214,20 +247,56 @@ private struct PaletteSlot: View {
 				if options.count > 1 { RightClickCatcher { flyoutShown = true } }
 			}
 			.popover(isPresented: $flyoutShown, arrowEdge: .trailing) {
-				HStack(spacing: 2) {
+				// A vertical mini toolbar: each option with its name, like
+				// Photoshop's tool flyouts.
+				VStack(alignment: .leading, spacing: 2) {
 					ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-						Button(option.title, systemImage: option.symbol) {
+						FlyoutRow(option: option, isSelected: index == current) {
 							chosen[id] = index
 							flyoutShown = false
 							option.perform()
 						}
-						.buttonStyle(.icon(size: 32, selected: index == current))
-						.help(option.help)
 					}
 				}
 				.padding(6)
 			}
 			.accessibilityAction(named: "More Options") { flyoutShown = true }
+	}
+}
+
+private struct FlyoutRow: View {
+	var option: PaletteOption
+	var isSelected: Bool
+	var action: () -> Void
+
+	@State private var isHovered = false
+
+	var body: some View {
+		Button(action: action) {
+			HStack(spacing: 10) {
+				Image(systemName: option.symbol)
+					.font(.system(size: 15, weight: .medium))
+					.frame(width: 22)
+					.foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+					.modifier(PaletteEffectModifier(effect: option.effect, isActive: true))
+				Text(option.title)
+					.lineLimit(1)
+				Spacer(minLength: 12)
+				if isSelected {
+					Image(systemName: "checkmark").font(.caption).foregroundStyle(.secondary)
+				}
+			}
+			.padding(.horizontal, 8)
+			.frame(minWidth: 190, minHeight: 30)
+			.background(
+				isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+				in: .rect(cornerRadius: 7, style: .continuous)
+			)
+			.contentShape(.rect)
+		}
+		.buttonStyle(.plain)
+		.onHover { isHovered = $0 }
+		.help(option.help)
 	}
 }
 
