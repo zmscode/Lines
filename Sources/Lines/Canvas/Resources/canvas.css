@@ -284,3 +284,12 @@ body[data-tool="text"] #host * {
 		background-image: conic-gradient(#232325 25%, transparent 0 50%, #232325 0 75%, transparent 0);
 	}
 }
+
+/* A selected animation outlines what it animates. */
+#sel.anim-target {
+	border-style: dashed;
+	pointer-events: none;
+}
+#sel.anim-target > * {
+	display: none;
+}

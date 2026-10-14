@@ -134,6 +134,22 @@ private struct ViewCommands: Commands {
 			}
 			.keyboardShortcut("3", modifiers: .command)
 			.disabled(controller == nil)
+			Button(
+				controller?.showsTimeline == true ? "Hide Timeline" : "Show Timeline",
+				systemImage: "film.stack"
+			) {
+				controller?.showsTimeline.toggle()
+			}
+			.keyboardShortcut("4", modifiers: .command)
+			.disabled(controller == nil)
+			Button(
+				controller?.isPlaying == true ? "Pause Animations" : "Play Animations",
+				systemImage: controller?.isPlaying == true ? "pause" : "play"
+			) {
+				if controller?.isPlaying == true { controller?.pause() } else { controller?.play() }
+			}
+			.keyboardShortcut("p", modifiers: [.command, .option])
+			.disabled(controller == nil)
 
 			Divider()
 

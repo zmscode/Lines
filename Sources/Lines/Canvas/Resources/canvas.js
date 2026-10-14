@@ -228,8 +228,14 @@ function place(box, el) {
   box.style.width = r.width + 2 + "px";
   box.style.height = r.height + 2 + "px";
 }
+const ANIM_TAGS = new Set(["animate", "animateTransform", "animateMotion", "set"]);
+const isAnimation = (el) => !!el && ANIM_TAGS.has(el.localName);
+
 function updateOverlay() {
-  place(selBox, selected);
+  // A selected animation outlines the element it animates, without handles.
+  const anim = isAnimation(selected);
+  selBox.classList.toggle("anim-target", anim);
+  place(selBox, anim ? selected.parentNode : selected);
   if (selected) {
     const r = selBox.getBoundingClientRect();
     selBox.classList.toggle("compact", r.width < 28 || r.height < 28);
@@ -1311,12 +1317,22 @@ selBox.addEventListener("pointercancel", endTransform);
 // The element's box in its parent's coordinates (what the inspector shows).
 function boundsOf(el) {
   if (!el.getBBox) return null;
+  // A hidden element has no box; measure it as if shown, so the inspector
+  // keeps its real position and size.
+  const hidden = el.getAttribute("display") === "none";
+  const style = el.getAttribute("style");
+  if (hidden) el.style.display = "inline";
   let b;
   try {
     b = el.getBBox();
   } catch (e) {
-    return null;
+    b = null;
   }
+  if (hidden) {
+    if (style == null) el.removeAttribute("style");
+    else el.setAttribute("style", style);
+  }
+  if (!b) return null;
   const parent = el.parentNode;
   const m = el.getCTM && parent.getCTM ? parent.getCTM().inverse().multiply(el.getCTM()) : null;
   const pts = [
@@ -1381,14 +1397,56 @@ function setRotation(degrees) {
 }
 
 // Sets the viewBox to the bounds of everything drawn, trimming empty space.
+// The drawing's box over the whole of its animations: sampled across their
+// running time and combined, so fitting never clips something mid-animation.
+function animatedBBox() {
+  const anims = Array.from(root.querySelectorAll("animate, animateTransform, animateMotion, set"));
+  const box = () => {
+    try {
+      const b = root.getBBox();
+      return b.width || b.height ? { x: b.x, y: b.y, r: b.x + b.width, b: b.y + b.height } : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  let u = box();
+  if (!anims.length) return u;
+  let end = 0;
+  for (const a of anims) {
+    let start = 0,
+      dur = 0;
+    try {
+      start = a.getStartTime();
+    } catch (e) {}
+    try {
+      dur = a.getSimpleDuration();
+    } catch (e) {}
+    end = Math.max(end, start + (isFinite(dur) ? dur : 0));
+  }
+  end = Math.min(end, 60);
+  if (!end) return u;
+  const wasPaused = root.animationsPaused();
+  const now = root.getCurrentTime();
+  root.pauseAnimations();
+  const steps = 48;
+  for (let i = 0; i <= steps; i++) {
+    root.setCurrentTime((end * i) / steps);
+    const b = box();
+    if (!b) continue;
+    u = u
+      ? { x: Math.min(u.x, b.x), y: Math.min(u.y, b.y), r: Math.max(u.r, b.r), b: Math.max(u.b, b.b) }
+      : b;
+  }
+  root.setCurrentTime(now);
+  if (!wasPaused) root.unpauseAnimations();
+  return u;
+}
+
 function fitViewBoxToContent() {
   if (!root) return;
-  let b;
-  try {
-    b = root.getBBox();
-  } catch (e) {
-    return;
-  }
+  const u = animatedBBox();
+  if (!u) return;
+  const b = { x: u.x, y: u.y, width: u.r - u.x, height: u.b - u.y };
   if (!b.width || !b.height) return;
   root.setAttribute("viewBox", [b.x, b.y, b.width, b.height].map(round).join(" "));
   if (root.hasAttribute("width") && root.hasAttribute("height")) {
@@ -1875,12 +1933,55 @@ function setTimelineActive(on) {
   reportTime();
 }
 
+// Playback speed. SMIL has no rate, so off 1× the drawing stays paused and
+// the playhead is stepped by hand each frame.
+let animSpeed = 1;
+let speedFrame = 0;
+let speedLast = 0;
+
+function speedTick(now) {
+  if (!root || animPaused || animSpeed === 1) {
+    speedFrame = 0;
+    return;
+  }
+  const dt = speedLast ? (now - speedLast) / 1000 : 0;
+  speedLast = now;
+  animTime = root.getCurrentTime() + dt * animSpeed;
+  root.setCurrentTime(animTime);
+  speedFrame = requestAnimationFrame(speedTick);
+}
+
+function applySpeed() {
+  if (!root) return;
+  if (animPaused) return;
+  if (animSpeed === 1) {
+    if (speedFrame) cancelAnimationFrame(speedFrame);
+    speedFrame = 0;
+    root.unpauseAnimations();
+  } else {
+    root.pauseAnimations();
+    speedLast = 0;
+    if (!speedFrame) speedFrame = requestAnimationFrame(speedTick);
+  }
+}
+
+function animSetSpeed(s) {
+  animSpeed = s > 0 ? s : 1;
+  applySpeed();
+}
+
 function animPlay() {
   if (!root) return;
-  root.unpauseAnimations();
   animPaused = false;
+  applySpeed();
   updateTimeReports();
   reportTime();
+}
+
+// Pauses at the start.
+function animStop() {
+  animPause();
+  animSeek(0);
 }
 
 function animPause() {
@@ -1905,6 +2006,9 @@ function restoreAnimationState() {
   if (animPaused) {
     root.pauseAnimations();
     root.setCurrentTime(animTime);
+  } else if (animSpeed !== 1) {
+    root.setCurrentTime(animTime);
+    applySpeed();
   }
 }
 

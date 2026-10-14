@@ -21,6 +21,10 @@ final class CanvasController {
 	/// The animation playhead, in seconds, and whether animations are playing.
 	var animationTime: Double = 0
 	var isPlaying = true
+	/// Playback rate for previewing animations (SMIL itself has none).
+	var animationSpeed: Double = 1 {
+		didSet { call("animSetSpeed(\(animationSpeed))") }
+	}
 	var isExporting = false
 	/// Set when someone double-clicks an element that has no in-place editing.
 	var wantsInspector = false
@@ -140,6 +144,8 @@ final class CanvasController {
 
 	func play() { call("animPlay()") }
 	func pause() { call("animPause()") }
+	/// Pauses and returns to the start.
+	func stop() { call("animStop()") }
 	func seek(to seconds: Double) { call("animSeek(\(seconds))") }
 	func addAnimation(_ preset: AnimationPreset, toOrder order: Int) {
 		call("addAnimation(\(order), \(js(preset.rawValue)))")

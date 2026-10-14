@@ -45,9 +45,14 @@ private struct ElementInspector: View {
 	var body: some View {
 		header
 		quickActions
-		if let bounds = selection.bounds { geometry(bounds) }
-		appearance
-		if tag == "text" { TextCard(selection: selection, controller: controller) }
+		if AnimationTag.contains(tag) {
+			AnimationCard(selection: selection, controller: controller)
+		} else {
+			if let bounds = selection.bounds { geometry(bounds) }
+			appearance
+			if tag == "text" { TextCard(selection: selection, controller: controller) }
+			ElementAnimationsCard(selection: selection, controller: controller)
+		}
 	}
 
 	// MARK: Header

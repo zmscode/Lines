@@ -61,6 +61,10 @@ struct ContentView: View {
 				controller.setDocumentFrame(shown)
 			}
 			.onChange(of: controller.layout) { _, _ in updateInsets() }
+			.onChange(of: controller.showsTimeline, initial: true) { _, shows in
+				controller.setTimelineActive(shows)
+				updateInsets()
+			}
 			.onChange(of: controller.showsInspector) { _, shows in
 				savedShowsInspector = shows
 				updateInsets()
@@ -86,7 +90,9 @@ struct ContentView: View {
 		controller.setInsets(
 			left: paletteSpace + (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
 			right: controller.showsInspector ? Self.inspectorWidth + m * 2 : 0,
-			top: 0, bottom: 0)
+			top: 0,
+			bottom: controller.showsTimeline && controller.layout == .canvas
+				? TimelinePanel.height + m * 2 : 0)
 	}
 
 	// MARK: Editor
@@ -124,6 +130,10 @@ struct ContentView: View {
 			if controller.layout == .canvas {
 				CanvasControls(controller: controller)
 					.padding(
+						.bottom,
+						controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0
+					)
+					.padding(
 						.leading, controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0
 					)
 					.padding(
@@ -159,6 +169,21 @@ struct ContentView: View {
 				.transition(.move(edge: .trailing).combined(with: .opacity))
 			}
 		}
+		.overlay(alignment: .bottom) {
+			if controller.showsTimeline {
+				TimelinePanel(controller: controller, close: { controller.showsTimeline = false })
+					.padding(Self.panelMargin)
+					.padding(
+						.leading, controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0
+					)
+					.padding(
+						.trailing,
+						controller.showsInspector ? Self.inspectorWidth + Self.panelMargin : 0
+					)
+					.transition(.move(edge: .bottom).combined(with: .opacity))
+			}
+		}
+		.animation(Self.panelAnimation, value: controller.showsTimeline)
 		.animation(Self.panelAnimation, value: controller.showsLayers)
 		.animation(Self.panelAnimation, value: controller.showsInspector)
 	}
@@ -209,6 +234,10 @@ struct ContentView: View {
 					Label("Graph", systemImage: EditorLayout.graph.symbol)
 				}
 				.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
+				Toggle(isOn: $controller.showsTimeline) {
+					Label("Timeline", systemImage: "film.stack")
+				}
+				.help(controller.showsTimeline ? "Hide Timeline (⌘4)" : "Show Timeline (⌘4)")
 			} label: {
 				Label("Panels", systemImage: "rectangle.3.group")
 			}
