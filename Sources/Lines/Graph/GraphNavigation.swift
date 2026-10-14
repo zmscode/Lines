@@ -2,9 +2,8 @@ import AppKit
 import SwiftFlow
 import SwiftUI
 
-/// Middle-button drag pans the graph and a mouse wheel zooms around the
-/// pointer, matching the drawing canvas. Trackpad scrolling falls through to
-/// SwiftFlow, which pans.
+/// Middle-button drag pans the graph, and scrolling (mouse wheel or
+/// trackpad) zooms around the pointer. Dragging empty space also pans.
 struct GraphNavigation: NSViewRepresentable {
 	var flow: SwiftFlowInstance
 
@@ -53,8 +52,8 @@ struct GraphNavigation: NSViewRepresentable {
 					self.panning = false
 					NSCursor.pop()
 					return nil
-				case .scrollWheel
-				where !event.hasPreciseScrollingDeltas || event.modifierFlags.contains(.command):
+				// Scrolling zooms around the pointer: wheels in notches, trackpads smoothly.
+				case .scrollWheel:
 					guard self.bounds.contains(point), event.scrollingDeltaY != 0 else {
 						return event
 					}

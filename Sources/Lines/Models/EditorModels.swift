@@ -126,6 +126,9 @@ struct SelectionInfo: Equatable {
 	var tag: String
 	var attributes: [Attribute]
 	var textContent: String?
+	/// The element's box in its parent's coordinates.
+	var bounds: CGRect? = nil
+	var rotation: Double = 0
 	var isRoot: Bool { path.isEmpty }
 
 	func value(_ name: String) -> String? {

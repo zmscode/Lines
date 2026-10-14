@@ -18,11 +18,18 @@
 			</div>
 		</div>
 		<div id="hover" class="box"></div>
+		<input id="text-editor" type="text" spellcheck="false" />
 		<div id="sel" class="box">
-			<div class="knob" style="left: 0; top: 0"></div>
-			<div class="knob" style="left: 100%; top: 0"></div>
-			<div class="knob" style="left: 0; top: 100%"></div>
-			<div class="knob" style="left: 100%; top: 100%"></div>
+			<div class="stem"></div>
+			<div class="knob rotate" data-handle="rot" title="Rotate (Shift snaps to 15°)"></div>
+			<div class="knob" data-handle="nw" style="left: 0; top: 0"></div>
+			<div class="knob edge" data-handle="n" style="left: 50%; top: 0"></div>
+			<div class="knob" data-handle="ne" style="left: 100%; top: 0"></div>
+			<div class="knob edge" data-handle="e" style="left: 100%; top: 50%"></div>
+			<div class="knob" data-handle="se" style="left: 100%; top: 100%"></div>
+			<div class="knob edge" data-handle="s" style="left: 50%; top: 100%"></div>
+			<div class="knob" data-handle="sw" style="left: 0; top: 100%"></div>
+			<div class="knob edge" data-handle="w" style="left: 0; top: 50%"></div>
 		</div>
 		<script>
 			// canvas.js

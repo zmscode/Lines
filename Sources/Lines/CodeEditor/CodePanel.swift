@@ -22,6 +22,17 @@ struct CodePanel: View {
 					.font(.callout.weight(.semibold))
 					.foregroundStyle(.secondary)
 				Spacer()
+				ControlGroup {
+					Button("Smaller Text", systemImage: "textformat.size.smaller") {
+						SourceEditor.adjustFontSize(by: -1)
+					}
+					Button("Larger Text", systemImage: "textformat.size.larger") {
+						SourceEditor.adjustFontSize(by: 1)
+					}
+				}
+				.labelStyle(.iconOnly)
+				.fixedSize()
+				.help("Text size (pinch, or ⌘+ and ⌘− while editing)")
 				Button("Format", systemImage: "text.alignleft") { controller.formatDocument() }
 					.help("Re-indent the markup (⌃I)")
 				Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")

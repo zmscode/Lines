@@ -1,226 +1,577 @@
 import AppKit
 import SwiftUI
 
+/// The inspector panel: friendly controls for the selected element (or the
+/// document when nothing is selected), with the raw attributes tucked away.
 struct InspectorView: View {
 	var controller: CanvasController
 
 	var body: some View {
 		if let selection = controller.selection {
-			Form {
-				header(selection)
-				if !selection.isRoot || selection.value("fill") != nil {
-					appearance(selection)
-				}
-				geometry(selection)
-				if let text = selection.textContent {
-					Section("Text") {
-						AttributeField(title: "Content", value: text, axis: .vertical) {
-							controller.setTextContent($0)
-						}
-						.labelsHidden()
+			ScrollView {
+				VStack(alignment: .leading, spacing: 16) {
+					if selection.isRoot {
+						DocumentInspector(selection: selection, controller: controller)
+					} else {
+						ElementInspector(selection: selection, controller: controller)
 					}
+					AllAttributes(selection: selection, controller: controller)
 				}
-				attributes(selection)
+				.padding(.horizontal, 14)
+				.padding(.top, 14)
+				.padding(.bottom, 18)
 			}
-			.formStyle(.grouped)
 			.id(selection.path)
 		} else {
 			ContentUnavailableView(
-				"No Document", systemImage: "square.dashed",
-				description: Text("Fix the source errors to inspect the drawing.")
+				"Nothing to Inspect", systemImage: "square.dashed",
+				description: Text("Fix the errors in the source to inspect the drawing.")
 			)
 		}
 	}
+}
 
-	// MARK: Sections
+// MARK: - Element
 
-	@ViewBuilder
-	private func header(_ selection: SelectionInfo) -> some View {
-		Section {
-			LabeledContent {
-				if !selection.isRoot {
-					Button("Select Enclosing Group", systemImage: "arrow.up.square") {
-						controller.selectParent()
-					}
-					.labelStyle(.iconOnly)
-					.buttonStyle(.borderless)
-					.help("Select Enclosing Group")
+private struct ElementInspector: View {
+	var selection: SelectionInfo
+	var controller: CanvasController
+
+	@AppStorage("inspector.lockAspect") private var lockAspect = false
+
+	private var tag: String { selection.tag }
+	private var hidden: Bool { selection.value("display") == "none" }
+
+	var body: some View {
+		header
+		quickActions
+		if let bounds = selection.bounds { geometry(bounds) }
+		appearance
+		if tag == "text" { TextCard(selection: selection, controller: controller) }
+	}
+
+	// MARK: Header
+
+	private var header: some View {
+		HStack(spacing: 12) {
+			IconTile(symbol: InspectorView.symbol(for: tag, isRoot: false), tint: tint)
+			VStack(alignment: .leading, spacing: 2) {
+				NameField(selection: selection, controller: controller)
+				Text(subtitle)
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.lineLimit(1)
+			}
+		}
+		.padding(.trailing, 24)  // clear of the panel's close button
+	}
+
+	private var tint: Color {
+		for attribute in ["fill", "stroke"] {
+			if let value = selection.value(attribute), value != "none",
+				let c = CSSColor.parse(value)
+			{
+				return c
+			}
+		}
+		return .accentColor
+	}
+
+	private var subtitle: String {
+		var parts = [InspectorView.elementName(for: tag)]
+		if let b = selection.bounds {
+			parts.append("\(ScrubField.format(b.width)) × \(ScrubField.format(b.height))")
+		}
+		if tag == "polygon" || tag == "polyline", let points = selection.value("points") {
+			let count = points.split(whereSeparator: { $0 == " " || $0 == "," }).count / 2
+			parts.append("\(count) points")
+		}
+		return parts.joined(separator: " · ")
+	}
+
+	private var quickActions: some View {
+		HStack(spacing: 6) {
+			action("Duplicate", "plus.square.on.square") { controller.duplicateSelection() }
+			action("Bring Forward", "square.2.layers.3d.top.filled") {
+				controller.reorder(.forward)
+			}
+			action("Send Backward", "square.2.layers.3d.bottom.filled") {
+				controller.reorder(.backward)
+			}
+			action(hidden ? "Show" : "Hide", hidden ? "eye.slash" : "eye") {
+				controller.toggleHidden(order: selection.order)
+			}
+			action("Select Enclosing Group", "arrow.up.square") { controller.selectParent() }
+			Spacer(minLength: 0)
+			action("Delete", "trash", role: .destructive) { controller.deleteSelection() }
+		}
+	}
+
+	private func action(
+		_ title: String, _ symbol: String, role: ButtonRole? = nil, perform: @escaping () -> Void
+	) -> some View {
+		Button(title, systemImage: symbol, role: role, action: perform)
+			.labelStyle(.iconOnly)
+			.buttonStyle(.glass)
+			.buttonBorderShape(.circle)
+			.help(title)
+	}
+
+	// MARK: Geometry
+
+	private func geometry(_ b: CGRect) -> some View {
+		InspectorCard(title: "Position & Size") {
+			Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+				GridRow {
+					ScrubField(label: "X", value: b.minX) { controller.setBounds(x: $0) }
+					ScrubField(label: "Y", value: b.minY) { controller.setBounds(y: $0) }
 				}
-			} label: {
-				Label {
-					Text(selection.isRoot ? "Document" : "<\(selection.tag)>")
-						.font(selection.isRoot ? .headline : .headline.monospaced())
-				} icon: {
-					Image(systemName: Self.symbol(for: selection.tag, isRoot: selection.isRoot))
-						.foregroundStyle(.tint)
+				GridRow {
+					ScrubField(label: "W", value: b.width, range: 0.01...1_000_000) { w in
+						let h = lockAspect && b.width > 0 ? b.height * w / b.width : nil
+						controller.setBounds(width: w, height: h)
+					}
+					ScrubField(label: "H", value: b.height, range: 0.01...1_000_000) { h in
+						let w = lockAspect && b.height > 0 ? b.width * h / b.height : nil
+						controller.setBounds(width: w, height: h)
+					}
 				}
 			}
-			if !selection.isRoot {
-				AttributeField(title: "ID", value: selection.value("id") ?? "", prompt: "None") {
-					$0.isEmpty
-						? controller.removeAttribute("id") : controller.setAttribute("id", $0)
+			HStack(spacing: 8) {
+				ScrubField(
+					label: "Rotation", systemImage: "rotate.right", value: selection.rotation,
+					unit: "°",
+					range: -360...360
+				) { controller.setRotation($0) }
+				Button("Rotate Left 90°", systemImage: "rotate.left") {
+					controller.setRotation(selection.rotation - 90)
 				}
+				.help("Rotate Left 90°")
+				Button("Rotate Right 90°", systemImage: "rotate.right") {
+					controller.setRotation(selection.rotation + 90)
+				}
+				.help("Rotate Right 90°")
+				Toggle(isOn: $lockAspect) {
+					Label("Lock Aspect Ratio", systemImage: lockAspect ? "lock.fill" : "lock.open")
+				}
+				.toggleStyle(.button)
+				.help(lockAspect ? "Unlock Aspect Ratio" : "Lock Aspect Ratio")
+			}
+			.labelStyle(.iconOnly)
+			.buttonStyle(.borderless)
+		}
+	}
+
+	// MARK: Appearance
+
+	private var appearance: some View {
+		InspectorCard(title: "Appearance") {
+			PaintRow(title: "Fill", attribute: "fill", selection: selection, controller: controller)
+			PaintRow(
+				title: "Stroke", attribute: "stroke", selection: selection, controller: controller)
+			if let stroke = selection.value("stroke"), stroke != "none" {
+				labelled("Stroke Width") {
+					ScrubField(
+						label: "Width", systemImage: "lineweight",
+						value: selection.value("stroke-width").flatMap(Double.init) ?? 1,
+						range: 0...10_000, step: 0.5
+					) {
+						controller.setAttribute(
+							"stroke-width", ScrubField.format($0), coalesce: true)
+					}
+				}
+			}
+			if tag == "rect" {
+				labelled("Corner Radius") {
+					ScrubField(
+						label: "Radius", systemImage: "app",
+						value: selection.value("rx").flatMap(Double.init) ?? 0, range: 0...100_000
+					) { controller.setAttribute("rx", ScrubField.format($0), coalesce: true) }
+				}
+			}
+			OpacitySlider(
+				value: selection.value("opacity").flatMap(Double.init) ?? 1, controller: controller)
+		}
+	}
+
+	private func labelled(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+		HStack {
+			Text(title).foregroundStyle(.secondary)
+			Spacer()
+			content().frame(width: 116)
+		}
+	}
+}
+
+/// A fill or stroke: the colour well, what it's set to, and add/remove.
+private struct PaintRow: View {
+	var title: String
+	var attribute: String
+	var selection: SelectionInfo
+	var controller: CanvasController
+
+	var body: some View {
+		let value = selection.value(attribute) ?? (attribute == "fill" ? "black" : "none")
+		let opacity = selection.value(attribute + "-opacity").flatMap(Double.init) ?? 1
+		HStack(spacing: 10) {
+			ColourWell(
+				title: title, value: value, opacity: opacity, documentColours: documentColours,
+				onPick: { hex, alpha in
+					controller.setPaint(attribute, color: hex, opacity: alpha, coalesce: true)
+				},
+				onNone: { controller.setAttribute(attribute, "none") }
+			)
+			VStack(alignment: .leading, spacing: 1) {
+				Text(title)
+				Text(describe(value, opacity: opacity))
+					.font(.caption.monospaced())
+					.foregroundStyle(.secondary)
+			}
+			Spacer()
+			if value == "none" {
+				Button("Add \(title)", systemImage: "plus.circle") {
+					controller.setPaint(
+						attribute, color: attribute == "fill" ? "#0a84ff" : "#1c1c1e", opacity: 1,
+						coalesce: false)
+					if attribute == "stroke", selection.value("stroke-width") == nil {
+						controller.setAttribute("stroke-width", "2")
+					}
+				}
+				.help("Add \(title.lowercased())")
+			} else {
+				Button("Remove \(title)", systemImage: "minus.circle") {
+					controller.setAttribute(attribute, "none")
+				}
+				.foregroundStyle(.secondary)
+				.help("Remove \(title.lowercased())")
+			}
+		}
+		.labelStyle(.iconOnly)
+		.buttonStyle(.borderless)
+	}
+
+	private func describe(_ value: String, opacity: Double) -> String {
+		if value == "none" { return "None" }
+		if value.hasPrefix("url(") { return "Gradient or pattern" }
+		let hex = CSSColor.parse(value).map(CSSColor.hex)?.uppercased() ?? value
+		return opacity < 1 ? "\(hex) · \(Int((opacity * 100).rounded()))%" : hex
+	}
+
+	private var documentColours: [String] { DocumentColours.of(controller, limit: 16) }
+}
+
+/// The element's name (its `id`), editable in place.
+private struct NameField: View {
+	var selection: SelectionInfo
+	var controller: CanvasController
+	@State private var draft = ""
+	@FocusState private var focused: Bool
+
+	var body: some View {
+		TextField(
+			"Name", text: $draft, prompt: Text(InspectorView.elementName(for: selection.tag))
+		)
+		.textFieldStyle(.plain)
+		.font(.title3.weight(.semibold))
+		.focused($focused)
+		.onAppear { draft = selection.value("id") ?? "" }
+		.onSubmit(commit)
+		.onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+		.help("Name (the element’s id)")
+	}
+
+	private func commit() {
+		guard draft != (selection.value("id") ?? "") else { return }
+		controller.rename(order: selection.order, to: draft)
+	}
+}
+
+private struct OpacitySlider: View {
+	var value: Double
+	var controller: CanvasController
+
+	var body: some View {
+		HStack(spacing: 10) {
+			Image(systemName: "circle.lefthalf.filled")
+				.foregroundStyle(.secondary)
+			Slider(
+				value: Binding(
+					get: { value },
+					set: { new in
+						let rounded = (new * 100).rounded() / 100
+						controller.setAttribute(
+							"opacity", ScrubField.format(rounded), coalesce: true)
+					}
+				), in: 0...1)
+			Text(value, format: .percent.precision(.fractionLength(0)))
+				.monospacedDigit()
+				.foregroundStyle(.secondary)
+				.frame(width: 40, alignment: .trailing)
+		}
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("Opacity")
+	}
+}
+
+private struct IconTile: View {
+	var symbol: String
+	var tint: Color
+
+	var body: some View {
+		Image(systemName: symbol)
+			.font(.title2)
+			.foregroundStyle(tint)
+			.frame(width: 44, height: 44)
+			.background(tint.opacity(0.18), in: .rect(cornerRadius: 10, style: .continuous))
+			.accessibilityHidden(true)
+	}
+}
+
+enum DocumentColours {
+	/// Distinct plain colours used for fills in the drawing.
+	@MainActor
+	static func of(_ controller: CanvasController, limit: Int) -> [String] {
+		var seen = Set<String>()
+		return controller.outline.compactMap { item -> String? in
+			guard let fill = item.fill, fill != "none", let colour = CSSColor.parse(fill) else {
+				return nil
+			}
+			let hex = CSSColor.hex(colour)
+			return seen.insert(hex).inserted ? hex : nil
+		}
+		.prefix(limit).map { $0 }
+	}
+}
+
+// MARK: - Text
+
+private struct TextCard: View {
+	var selection: SelectionInfo
+	var controller: CanvasController
+
+	private static let families: [(name: String, value: String)] = [
+		("System", "-apple-system, Helvetica, sans-serif"),
+		("Helvetica", "Helvetica, Arial, sans-serif"),
+		("Avenir Next", "Avenir Next, sans-serif"),
+		("Futura", "Futura, sans-serif"),
+		("Georgia", "Georgia, serif"),
+		("Times", "Times New Roman, serif"),
+		("Menlo", "Menlo, monospace"),
+		("Courier", "Courier New, monospace"),
+	]
+	private static let weights: [(name: String, value: String)] = [
+		("Light", "300"), ("Regular", "400"), ("Medium", "500"), ("Semibold", "600"),
+		("Bold", "700"),
+	]
+
+	var body: some View {
+		InspectorCard(title: "Text") {
+			AttributeField(title: "Text", value: selection.textContent ?? "", axis: .vertical) {
+				controller.setTextContent($0)
+			}
+			.labelsHidden()
+			.textFieldStyle(.roundedBorder)
+
+			HStack(spacing: 8) {
+				Menu(familyName) {
+					ForEach(Self.families, id: \.value) { family in
+						Button(family.name) { controller.setAttribute("font-family", family.value) }
+					}
+				}
+				.fixedSize()
+				ScrubField(
+					label: "Size", systemImage: "textformat.size", value: fontSize,
+					range: 1...10_000
+				) { controller.setAttribute("font-size", ScrubField.format($0), coalesce: true) }
+			}
+
+			HStack(spacing: 8) {
+				Picker(
+					"Weight",
+					selection: Binding(
+						get: { selection.value("font-weight") ?? "400" },
+						set: { controller.setAttribute("font-weight", $0) })
+				) {
+					ForEach(Self.weights, id: \.value) { Text($0.name).tag($0.value) }
+				}
+				.labelsHidden()
+				.fixedSize()
+
+				Picker(
+					"Alignment",
+					selection: Binding(
+						get: { selection.value("text-anchor") ?? "start" },
+						set: { controller.setAttribute("text-anchor", $0) })
+				) {
+					Image(systemName: "text.alignleft").tag("start")
+					Image(systemName: "text.aligncenter").tag("middle")
+					Image(systemName: "text.alignright").tag("end")
+				}
+				.pickerStyle(.segmented)
+				.labelsHidden()
 			}
 		}
 	}
 
-	@ViewBuilder
-	private func appearance(_ selection: SelectionInfo) -> some View {
-		Section("Fill & Stroke") {
-			PaintRow(
-				title: "Fill", value: selection.value("fill"),
-				opacity: selection.value("fill-opacity"),
-				controller: controller, attribute: "fill")
-			PaintRow(
-				title: "Stroke", value: selection.value("stroke"),
-				opacity: selection.value("stroke-opacity"),
-				controller: controller, attribute: "stroke")
+	private var fontSize: Double {
+		selection.value("font-size").flatMap { Double($0.replacingOccurrences(of: "px", with: "")) }
+			?? 16
+	}
+
+	private var familyName: String {
+		let value = selection.value("font-family") ?? ""
+		if let known = Self.families.first(where: { $0.value == value }) { return known.name }
+		return value.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) }
+			?? "System"
+	}
+}
+
+// MARK: - Document
+
+private struct DocumentInspector: View {
+	var selection: SelectionInfo
+	var controller: CanvasController
+
+	@AppStorage("inspector.lockAspect") private var lockAspect = false
+
+	private var width: Double? { selection.value("width").flatMap(Self.number) ?? viewBox[safe: 2] }
+	private var height: Double? {
+		selection.value("height").flatMap(Self.number) ?? viewBox[safe: 3]
+	}
+	private var viewBox: [Double] {
+		(selection.value("viewBox") ?? "")
+			.split(whereSeparator: { $0 == " " || $0 == "," })
+			.compactMap { Double($0) }
+	}
+
+	var body: some View {
+		HStack(spacing: 12) {
+			IconTile(symbol: "doc.richtext", tint: .accentColor)
+			VStack(alignment: .leading, spacing: 2) {
+				Text(controller.documentName)
+					.font(.title3.weight(.semibold))
+					.lineLimit(1)
+				Text(summary).font(.caption).foregroundStyle(.secondary)
+			}
+		}
+		.padding(.trailing, 24)
+
+		InspectorCard(title: "Canvas") {
+			Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+				GridRow {
+					ScrubField(label: "W", value: width, range: 1...100_000) { w in
+						setSize(width: w, height: lockAspect ? aspect.map { w / $0 } : nil)
+					}
+					ScrubField(label: "H", value: height, range: 1...100_000) { h in
+						setSize(width: lockAspect ? aspect.map { h * $0 } : nil, height: h)
+					}
+				}
+			}
+			HStack {
+				Toggle(isOn: $lockAspect) {
+					Label("Lock Aspect", systemImage: lockAspect ? "lock.fill" : "lock.open")
+				}
+				.toggleStyle(.button)
+				Spacer()
+				Button("Fit to Content", systemImage: "arrow.down.right.and.arrow.up.left") {
+					controller.fitViewBoxToContent()
+				}
+				.help("Set the viewBox to the drawing’s bounds")
+			}
+			.buttonStyle(.borderless)
+			.controlSize(.small)
 			AttributeField(
-				title: "Stroke Width", value: selection.value("stroke-width") ?? "", prompt: "1"
+				title: "View Box", value: selection.value("viewBox") ?? "", prompt: "None"
 			) {
 				$0.isEmpty
-					? controller.removeAttribute("stroke-width")
-					: controller.setAttribute("stroke-width", $0)
+					? controller.removeAttribute("viewBox") : controller.setAttribute("viewBox", $0)
 			}
-			OpacityRow(value: selection.value("opacity"), controller: controller)
+			.textFieldStyle(.roundedBorder)
+		}
+
+		let colours = DocumentColours.of(controller, limit: 24)
+		if !colours.isEmpty {
+			InspectorCard(title: "Colours") {
+				LazyVGrid(
+					columns: Array(repeating: GridItem(.fixed(24), spacing: 8), count: 8),
+					spacing: 8
+				) {
+					ForEach(colours, id: \.self) { hex in
+						Swatch(colour: CSSColor.parse(hex), opacity: 1, isNone: false)
+							.frame(width: 24, height: 24)
+							.help(hex.uppercased())
+					}
+				}
+			}
 		}
 	}
 
-	@ViewBuilder
-	private func geometry(_ selection: SelectionInfo) -> some View {
-		let fields = Self.geometryFields(for: selection.tag, isRoot: selection.isRoot)
-		if !fields.isEmpty {
-			Section(selection.isRoot ? "Canvas" : "Geometry") {
-				Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
-					ForEach(Array(stride(from: 0, to: fields.count, by: 2)), id: \.self) { i in
-						GridRow {
-							ForEach(fields[i..<min(i + 2, fields.count)], id: \.self) { name in
-								NumberField(name: name, value: selection.value(name) ?? "") {
-									$0.isEmpty
-										? controller.removeAttribute(name)
-										: controller.setAttribute(name, $0)
-								}
-							}
+	private var aspect: Double? {
+		guard let width, let height, height > 0 else { return nil }
+		return width / height
+	}
+
+	private func setSize(width w: Double?, height h: Double?) {
+		if let w { controller.setAttribute("width", ScrubField.format(w), coalesce: true) }
+		if let h { controller.setAttribute("height", ScrubField.format(h), coalesce: true) }
+	}
+
+	private var summary: String {
+		let count = controller.outline.count
+		let bytes = Int64(controller.document?.text.utf8.count ?? 0)
+		return
+			"\(count) element\(count == 1 ? "" : "s") · \(bytes.formatted(.byteCount(style: .file)))"
+	}
+
+	static func number(_ s: String) -> Double? {
+		Double(s.trimmingCharacters(in: CharacterSet(charactersIn: "px ")))
+	}
+}
+
+// MARK: - All attributes
+
+private struct AllAttributes: View {
+	var selection: SelectionInfo
+	var controller: CanvasController
+	@AppStorage("inspector.showsAttributes") private var expanded = false
+
+	var body: some View {
+		DisclosureGroup(isExpanded: $expanded) {
+			VStack(alignment: .leading, spacing: 8) {
+				ForEach(selection.attributes) { attribute in
+					HStack(spacing: 6) {
+						Text(attribute.name)
+							.font(.caption.monospaced())
+							.foregroundStyle(.secondary)
+							.frame(width: 84, alignment: .leading)
+							.lineLimit(1)
+							.truncationMode(.middle)
+							.help(attribute.name)
+						AttributeField(title: attribute.name, value: attribute.value) {
+							controller.setAttribute(attribute.name, $0)
 						}
+						.labelsHidden()
+						.textFieldStyle(.roundedBorder)
+						.font(.caption.monospaced())
+						Button("Remove \(attribute.name)", systemImage: "minus.circle") {
+							controller.removeAttribute(attribute.name)
+						}
+						.labelStyle(.iconOnly)
+						.buttonStyle(.borderless)
+						.foregroundStyle(.secondary)
 					}
 				}
-				if selection.isRoot {
-					AttributeField(
-						title: "View Box", value: selection.value("viewBox") ?? "", prompt: "None"
-					) {
-						$0.isEmpty
-							? controller.removeAttribute("viewBox")
-							: controller.setAttribute("viewBox", $0)
-					}
-				} else {
-					AttributeField(
-						title: "Transform", value: selection.value("transform") ?? "",
-						prompt: "None"
-					) {
-						$0.isEmpty
-							? controller.removeAttribute("transform")
-							: controller.setAttribute("transform", $0)
-					}
-				}
+				NewAttributeRow(controller: controller)
 			}
-		}
-	}
-
-	@ViewBuilder
-	private func attributes(_ selection: SelectionInfo) -> some View {
-		Section {
-			ForEach(selection.attributes) { attribute in
-				AttributeField(title: attribute.name, value: attribute.value, monospacedTitle: true)
-				{
-					controller.setAttribute(attribute.name, $0)
-				}
-				.contextMenu {
-					Button("Remove Attribute", systemImage: "minus.circle", role: .destructive) {
-						controller.removeAttribute(attribute.name)
-					}
-				}
-			}
-			NewAttributeRow(controller: controller)
-		} header: {
+			.padding(.top, 8)
+		} label: {
 			Text("All Attributes")
-		} footer: {
-			Text("Control-click an attribute to remove it.")
-				.font(.footnote)
+				.font(.caption.weight(.semibold))
 				.foregroundStyle(.secondary)
 		}
 	}
+}
 
-	// MARK: Helpers
-
-	static func geometryFields(for tag: String, isRoot: Bool) -> [String] {
-		if isRoot { return ["width", "height"] }
-		switch tag {
-		case "rect": return ["x", "y", "width", "height", "rx", "ry"]
-		case "circle": return ["cx", "cy", "r"]
-		case "ellipse": return ["cx", "cy", "rx", "ry"]
-		case "line": return ["x1", "y1", "x2", "y2"]
-		case "image", "use", "foreignObject": return ["x", "y", "width", "height"]
-		case "text": return ["x", "y", "font-size"]
-		default: return []
-		}
-	}
-
-	static func elementName(for tag: String) -> String {
-		switch tag {
-		case "g": "Group"
-		case "rect": "Rectangle"
-		case "circle": "Circle"
-		case "ellipse": "Ellipse"
-		case "line": "Line"
-		case "polyline": "Polyline"
-		case "polygon": "Polygon"
-		case "path": "Path"
-		case "text": "Text"
-		case "tspan": "Text Span"
-		case "image": "Image"
-		case "use": "Instance"
-		case "symbol": "Symbol"
-		case "defs": "Definitions"
-		case "linearGradient": "Linear Gradient"
-		case "radialGradient": "Radial Gradient"
-		case "stop": "Gradient Stop"
-		case "pattern": "Pattern"
-		case "clipPath": "Clipping Path"
-		case "mask": "Mask"
-		case "filter": "Filter"
-		case "marker": "Marker"
-		case "style": "Style Sheet"
-		case "title": "Title"
-		case "desc": "Description"
-		case "metadata": "Metadata"
-		default: tag
-		}
-	}
-
-	static func symbol(for tag: String, isRoot: Bool) -> String {
-		if isRoot { return "doc.richtext" }
-		switch tag {
-		case "rect": return "rectangle"
-		case "circle": return "circle"
-		case "ellipse": return "oval"
-		case "line", "polyline": return "line.diagonal"
-		case "polygon": return "pentagon"
-		case "path": return "scribble"
-		case "text", "tspan": return "textformat"
-		case "g": return "square.on.square.dashed"
-		case "image": return "photo"
-		case "use": return "link"
-		case "defs": return "archivebox"
-		case "linearGradient", "radialGradient", "stop": return "circle.lefthalf.filled"
-		case "pattern": return "square.grid.3x3"
-		case "clipPath": return "scissors"
-		case "mask": return "theatermask.and.paintbrush"
-		case "filter": return "camera.filters"
-		case "symbol": return "square.on.square"
-		case "marker": return "arrowtriangle.right"
-		case "style": return "paintbrush"
-		case "title", "desc", "metadata": return "text.alignleft"
-		default: return "chevron.left.forwardslash.chevron.right"
-		}
-	}
+extension Array {
+	subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }

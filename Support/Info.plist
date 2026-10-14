@@ -10,6 +10,8 @@
 	<string>Lines</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.zms.Lines</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -32,6 +34,19 @@
 	<true />
 	<key>NSSupportsSuddenTermination</key>
 	<false />
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.zms.lines.layer</string>
+			<key>UTTypeDescription</key>
+			<string>Lines Layer</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

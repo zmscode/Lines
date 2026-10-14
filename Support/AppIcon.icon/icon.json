@@ -1,0 +1,79 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "display-p3:0.227,0.231,0.259,1.000",
+      "display-p3:0.078,0.078,0.094,1.000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0.5,
+        "y": 0
+      },
+      "stop": {
+        "x": 0.5,
+        "y": 0.8
+      }
+    }
+  },
+  "groups": [
+    {
+      "name": "Points",
+      "layers": [
+        {
+          "name": "points",
+          "image-name": "3_points.svg",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.1
+      }
+    },
+    {
+      "name": "Handles",
+      "layers": [
+        {
+          "name": "handles",
+          "image-name": "2_handles.svg",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
+      }
+    },
+    {
+      "name": "Curve",
+      "layers": [
+        {
+          "name": "curve",
+          "image-name": "1_curve.svg",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}

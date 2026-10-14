@@ -24,12 +24,35 @@ for bundle in "$BIN_DIR"/*.bundle; do
   [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 
-if [ ! -f build/AppIcon.icns ] || [ Support/MakeIcon.swift -nt build/AppIcon.icns ]; then
-  rm -rf build/AppIcon.iconset
-  swift Support/MakeIcon.swift build/AppIcon.iconset
-  iconutil -c icns build/AppIcon.iconset -o build/AppIcon.icns
+# The app icon is an Icon Composer document. actool compiles it into Assets.car
+# (Liquid Glass, dark and clear variants) plus a fallback AppIcon.icns. If actool
+# can't run (Xcode's first-launch setup not done), render a static .icns with
+# Icon Composer's ictool instead.
+ICON=Support/AppIcon.icon
+if [ ! -f build/icon/AppIcon.icns ] || [ -n "$(find "$ICON" -newer build/icon/AppIcon.icns)" ]; then
+  rm -rf build/icon
+  mkdir -p build/icon
+  if ! xcrun actool "$ICON" --compile build/icon --platform macosx \
+      --minimum-deployment-target 27.0 --app-icon AppIcon \
+      --output-partial-info-plist build/icon/partial.plist >/dev/null 2>build/icon/actool.log; then
+    echo "actool failed (see build/icon/actool.log); rendering a static icon with ictool" >&2
+    rm -f build/icon/Assets.car
+    ICTOOL="${DEVELOPER_DIR:-$(xcode-select -p)}/../Applications/Icon Composer.app/Contents/Executables/ictool"
+    mkdir -p build/icon/AppIcon.iconset
+    for size in 16 32 128 256 512; do
+      for scale in 1 2; do
+        suffix=""
+        [ "$scale" = 2 ] && suffix="@2x"
+        "$ICTOOL" "$ICON" --export-image --platform macOS --rendition Default \
+          --width "$size" --height "$size" --scale "$scale" \
+          --output-file "build/icon/AppIcon.iconset/icon_${size}x${size}${suffix}.png" >/dev/null
+      done
+    done
+    iconutil -c icns build/icon/AppIcon.iconset -o build/icon/AppIcon.icns
+  fi
 fi
-cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp build/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+[ -f build/icon/Assets.car ] && cp build/icon/Assets.car "$APP/Contents/Resources/Assets.car"
 
 codesign --force --sign - "$APP"
 echo "Built $APP"

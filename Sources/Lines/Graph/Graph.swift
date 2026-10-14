@@ -46,7 +46,7 @@ struct Graph {
 				edges.append(
 					FlowEdge(
 						id: "h:\(item.path)", source: parent.path, target: item.path,
-						sourceHandle: "children", targetHandle: "parent", type: .smoothstep,
+						sourceHandle: "children", targetHandle: "parent", type: .default,
 						deletable: false, focusable: false,
 						style: EdgeStyle(strokeColor: .secondary, strokeWidth: 1, opacity: 0.45)
 					))

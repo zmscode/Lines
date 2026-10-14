@@ -59,7 +59,7 @@ struct GraphNodeView: View {
 				nodeId: node.id, id: "parent", type: .target, position: .top, isConnectable: false
 			)
 			.offset(y: -6)
-			.opacity(0.6)
+			.opacity(0)  // Structure edges attach here; the dots themselves are just clutter.
 		}
 		.overlay(alignment: .bottom) {
 			Handle(
@@ -67,7 +67,7 @@ struct GraphNodeView: View {
 				isConnectable: false
 			)
 			.offset(y: 6)
-			.opacity(0.6)
+			.opacity(0)  // Structure edges attach here; the dots themselves are just clutter.
 		}
 		.overlay(alignment: .trailing) {
 			if data.hasOutput {

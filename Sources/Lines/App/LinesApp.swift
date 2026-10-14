@@ -24,7 +24,7 @@ struct LinesApp: App {
 			document.configuration = configuration
 			return document
 		}
-		.defaultSize(width: 760, height: 720)
+		.defaultSize(width: 1280, height: 860)
 		// The document title sits on its own row above the toolbar.
 		.windowToolbarStyle(.expanded)
 		.commands {
@@ -131,7 +131,7 @@ private struct ViewCommands: Commands {
 
 			Divider()
 
-			Button("Actual Size", systemImage: "1.magnifyingglass") { controller?.setZoom(1) }
+			Button("Actual Size", systemImage: "1.magnifyingglass") { controller?.actualSize() }
 				.keyboardShortcut("0", modifiers: .command)
 			Button("Zoom to Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
 				controller?.zoomToFit()

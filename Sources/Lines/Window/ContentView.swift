@@ -22,54 +22,58 @@ struct ContentView: View {
 
 	private var isTransparent: Bool { background == .transparent && controller.layout == .canvas }
 
+	/// Floating panel sizes; the canvas keeps the drawing clear of them.
+	static let panelMargin: CGFloat = 12
+	static let layersWidth: CGFloat = 264
+	static let inspectorWidth: CGFloat = 308
+
 	var body: some View {
-		NavigationSplitView(
-			columnVisibility: Binding(
-				get: { controller.showsLayers ? .all : .detailOnly },
-				set: { controller.showsLayers = $0 != .detailOnly }
-			)
-		) {
-			LayersSidebar(controller: controller)
-				.navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 380)
-				.toolbar(removing: .sidebarToggle)
-		} detail: {
-			editor
-		}
-		.background(WindowTransparency(isTransparent: isTransparent))
-		// A see-through window would otherwise take the toolbar with it.
-		.toolbarBackgroundVisibility(isTransparent ? .visible : .automatic, for: .windowToolbar)
-		.inspector(isPresented: $showInspector) {
-			InspectorView(controller: controller)
-				.inspectorColumnWidth(min: 240, ideal: 280, max: 420)
-		}
-		.toolbar(id: "editor") { toolbar }
-		.toolbarRole(.editor)
-		.focusedSceneValue(controller)
-		.sheet(
-			isPresented: Binding(
-				get: { controller.isExporting }, set: { controller.isExporting = $0 })
-		) {
-			ExportSheet(controller: controller, document: document)
-		}
-		.onAppear {
-			dismissWindow(id: WelcomeView.windowID)
-			controller.document = document
-			controller.layout = defaultLayout
-			controller.showsCode = showsCodeByDefault
-			controller.undoManager = undoManager
-		}
-		.onChange(of: undoManager) { _, new in controller.undoManager = new }
+		editor
+			.background(WindowTransparency(isTransparent: isTransparent))
+			// A see-through window would otherwise take the toolbar with it.
+			.toolbarBackgroundVisibility(isTransparent ? .visible : .automatic, for: .windowToolbar)
+			.toolbar(id: "editor") { toolbar }
+			.toolbarRole(.editor)
+			.focusedSceneValue(controller)
+			.sheet(
+				isPresented: Binding(
+					get: { controller.isExporting }, set: { controller.isExporting = $0 })
+			) {
+				ExportSheet(controller: controller, document: document)
+			}
+			.onAppear {
+				dismissWindow(id: WelcomeView.windowID)
+				controller.document = document
+				controller.layout = defaultLayout
+				controller.showsCode = showsCodeByDefault
+				controller.undoManager = undoManager
+				updateInsets()
+			}
+			.onChange(of: undoManager) { _, new in controller.undoManager = new }
+			.onChange(of: controller.wantsInspector) { _, wants in
+				guard wants else { return }
+				controller.wantsInspector = false
+				withAnimation(Self.panelAnimation) { showInspector = true }
+			}
+			.onChange(of: controller.showsLayers) { _, _ in updateInsets() }
+			.onChange(of: showInspector) { _, _ in updateInsets() }
+	}
+
+	static let panelAnimation = Animation.snappy(duration: 0.28)
+
+	private func updateInsets() {
+		let m = Self.panelMargin
+		controller.setInsets(
+			left: controller.showsLayers ? Self.layersWidth + m * 2 : 0,
+			right: showInspector ? Self.inspectorWidth + m * 2 : 0,
+			top: 0, bottom: 0)
 	}
 
 	// MARK: Editor
 
-	/// The code panel sits beside the main view. One canvas stays alive in
-	/// every layout: it renders the drawing and also reports the element tree
-	/// the layers list and graph are built from.
-	///
-	/// This is a SwiftUI split rather than `HSplitView`: next to the inspector,
-	/// AppKit's split view could fall into an endless constraint-update loop
-	/// (and abort) when it held the canvas alone.
+	/// The code panel sits beside the viewer. One canvas stays alive in every
+	/// layout: it renders the drawing and also reports the element tree the
+	/// layers panel and graph are built from.
 	private var editor: some View {
 		HStack(spacing: 0) {
 			if controller.showsCode {
@@ -80,12 +84,13 @@ struct ContentView: View {
 				.frame(width: codeWidth)
 				SplitDivider(width: $codeWidth)
 			}
-			mainArea
+			viewer
 				.frame(maxWidth: .infinity, maxHeight: .infinity)
 		}
 	}
 
-	private var mainArea: some View {
+	/// The canvas or graph fills the viewer; layers and the inspector float over it.
+	private var viewer: some View {
 		ZStack {
 			canvas
 				.opacity(controller.layout == .graph ? 0 : 1)
@@ -94,7 +99,36 @@ struct ContentView: View {
 			if controller.layout == .graph {
 				GraphView(controller: controller)
 			}
+			if controller.layout == .canvas {
+				CanvasControls(controller: controller)
+					.padding(
+						.leading, controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0
+					)
+					.padding(.trailing, showInspector ? Self.inspectorWidth + Self.panelMargin : 0)
+			}
 		}
+		.overlay(alignment: .topLeading) {
+			if controller.showsLayers {
+				FloatingPanel(title: "Layers", close: { controller.showsLayers = false }) {
+					LayersPanel(controller: controller)
+				}
+				.frame(width: Self.layersWidth)
+				.padding(Self.panelMargin)
+				.transition(.move(edge: .leading).combined(with: .opacity))
+			}
+		}
+		.overlay(alignment: .topTrailing) {
+			if showInspector {
+				FloatingPanel(title: nil, close: { showInspector = false }) {
+					InspectorView(controller: controller)
+				}
+				.frame(width: Self.inspectorWidth)
+				.padding(Self.panelMargin)
+				.transition(.move(edge: .trailing).combined(with: .opacity))
+			}
+		}
+		.animation(Self.panelAnimation, value: controller.showsLayers)
+		.animation(Self.panelAnimation, value: showInspector)
 	}
 
 	private var canvas: some View {

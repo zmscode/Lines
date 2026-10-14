@@ -16,6 +16,9 @@ final class CanvasController {
 	var showsCode = false
 	var showsLayers = false
 	var isExporting = false
+	/// Set when someone double-clicks an element that has no in-place editing.
+	var wantsInspector = false
+	@ObservationIgnored private var lastInsets = ""
 
 	/// Re-indents the source as one undoable step.
 	func formatDocument() {
@@ -80,6 +83,30 @@ final class CanvasController {
 	func ungroupSelection() { call("ungroupSelected()") }
 	func paste(markup: String) { call("pasteMarkup(\(js(markup)))") }
 	func toggleHidden(order: Int) { call("toggleHidden(\(order))") }
+
+	enum DropPosition: String { case before, after, inside }
+
+	/// Moves layers relative to another, in document order.
+	func move(orders: [Int], relativeTo target: Int, position: DropPosition) {
+		call("moveRelative(\(orders), \(target), \(js(position.rawValue)))")
+	}
+
+	/// Exact position, size or rotation from the inspector. Pass nil to keep a value.
+	func setBounds(x: Double? = nil, y: Double? = nil, width: Double? = nil, height: Double? = nil)
+	{
+		func arg(_ v: Double?) -> String { v.map { "\($0)" } ?? "null" }
+		call("setBounds(\(arg(x)), \(arg(y)), \(arg(width)), \(arg(height)))")
+	}
+	func setRotation(_ degrees: Double) { call("setRotation(\(degrees))") }
+	func fitViewBoxToContent() { call("fitViewBoxToContent()") }
+
+	/// Space covered by floating panels, so fitting and centring use what's left.
+	func setInsets(left: CGFloat, right: CGFloat, top: CGFloat, bottom: CGFloat) {
+		let key = "\(left), \(right), \(top), \(bottom)"
+		guard key != lastInsets else { return }
+		lastInsets = key
+		call("setInsets(\(key))")
+	}
 	func move(orders: [Int], intoParent parent: Int, after: Int?) {
 		call("moveElements(\(orders), \(parent), \(after.map(String.init) ?? "null"))")
 	}
@@ -106,7 +133,19 @@ final class CanvasController {
 	/// Whether the canvas is tracking the window size (Zoom to Fit).
 	var isFitted = true
 
-	func zoom(by factor: CGFloat) { setZoom(zoom * factor) }
+	/// View › Zoom In/Out/Actual Size act on whichever has focus: the code
+	/// editor's text size, or the canvas.
+	func zoom(by factor: CGFloat) {
+		if sourceEditor?.isFocused == true {
+			SourceEditor.adjustFontSize(by: factor > 1 ? 1 : -1)
+		} else {
+			setZoom(zoom * factor)
+		}
+	}
+
+	func actualSize() {
+		if sourceEditor?.isFocused == true { SourceEditor.setFontSize(12) } else { setZoom(1) }
+	}
 
 	func zoom(by factor: CGFloat, at point: CGPoint) {
 		call("zoomBy(\(factor), \(point.x), \(point.y))")
@@ -198,6 +237,7 @@ final class CanvasController {
 				UserDefaults.standard.string(forKey: "canvasBackground")
 					.flatMap(CanvasBackground.init(rawValue:)) ?? .checkerboard)
 			setAccentColor(.controlAccentColor)
+			if !lastInsets.isEmpty { call("setInsets(\(lastInsets))") }
 
 		case "changed":
 			guard var svg = body["svg"] as? String, let document else { return }
@@ -251,15 +291,23 @@ final class CanvasController {
 				pair.count == 2 ? Attribute(name: pair[0], value: pair[1]) : nil
 			}
 			let order = body["order"] as? Int ?? 0
+			let b = body["bounds"] as? [Double]
 			let info = SelectionInfo(
 				path: path, order: order, tag: tag, attributes: attributes,
-				textContent: body["text"] as? String
+				textContent: body["text"] as? String,
+				bounds: b.flatMap {
+					$0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil
+				},
+				rotation: body["rotation"] as? Double ?? 0
 			)
 			let moved = selection?.order != order
 			if selection != info { selection = info }
 			if moved, !info.isRoot, body["fromSource"] as? Bool != true {
 				sourceEditor?.revealElement(order: order)
 			}
+
+		case "editElement":
+			wantsInspector = true
 
 		case "png":
 			guard let url = body["data"] as? String,

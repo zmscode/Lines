@@ -205,6 +205,8 @@ function reportSelection(afterEdit, fromSource) {
     tag: el.localName,
     attrs,
     text: textual ? el.textContent : null,
+    bounds: selected ? boundsOf(el) : null,
+    rotation: selected ? rotationOf(el) : 0,
     fromSource: !!fromSource || !!afterEdit,
   });
 }
@@ -227,6 +229,10 @@ function place(box, el) {
 }
 function updateOverlay() {
   place(selBox, selected);
+  if (selected) {
+    const r = selBox.getBoundingClientRect();
+    selBox.classList.toggle("compact", r.width < 28 || r.height < 28);
+  }
 }
 window.addEventListener("resize", () => {
   if (!root) return;
@@ -322,6 +328,8 @@ host.addEventListener("mousedown", (e) => {
 });
 
 document.addEventListener("mousedown", (e) => {
+  // Clicks on the handles or the text editor keep the selection.
+  if (e.target === textEditor || selBox.contains(e.target)) return;
   if (!host.contains(e.target) && e.button === 0) select(null);
 });
 
@@ -798,10 +806,31 @@ function renderNow() {
   render();
 }
 
+// The part of the window not covered by floating panels, set by the app.
+let insets = { left: 0, right: 0, top: 0, bottom: 0 };
+function visibleArea() {
+  const w = Math.max(1, window.innerWidth - insets.left - insets.right);
+  const h = Math.max(1, window.innerHeight - insets.top - insets.bottom);
+  return { x: insets.left, y: insets.top, w, h };
+}
+function setInsets(left, right, top, bottom) {
+  insets = { left, right, top, bottom };
+  minimap.style.left = left + 12 + "px";
+  minimap.style.bottom = bottom + 12 + "px";
+  if (!root) return;
+  if (autoFit) {
+    applyZoom(fitScale(), null, null, true);
+    centerContent();
+  } else {
+    renderNow();
+  }
+}
+
 function fitScale() {
   if (!root || window.innerWidth < 2 || window.innerHeight < 2) return zoom;
   const { w, h } = intrinsicSize();
-  const fit = Math.min((window.innerWidth - PAD * 2) / w, (window.innerHeight - PAD * 2) / h);
+  const area = visibleArea();
+  const fit = Math.min((area.w - PAD * 2) / w, (area.h - PAD * 2) / h);
   return Math.max(MIN_ZOOM, Math.min(fit, 8));
 }
 
@@ -814,8 +843,9 @@ function applyZoom(z, ax, ay, fitting) {
     return;
   }
   if (ax == null) {
-    ax = window.innerWidth / 2;
-    ay = window.innerHeight / 2;
+    const area = visibleArea();
+    ax = area.x + area.w / 2;
+    ay = area.y + area.h / 2;
   }
   const px = (ax - tx) / zoom,
     py = (ay - ty) / zoom;
@@ -843,8 +873,9 @@ function zoomToFit() {
 
 function centerContent() {
   const { W, H } = contentSize();
-  tx = (window.innerWidth - W) / 2;
-  ty = (window.innerHeight - H) / 2;
+  const area = visibleArea();
+  tx = area.x + (area.w - W) / 2;
+  ty = area.y + (area.h - H) / 2;
   clampPan();
   renderNow();
 }
@@ -921,7 +952,7 @@ document.addEventListener("auxclick", (e) => {
 document.addEventListener(
   "keydown",
   (e) => {
-    if (e.code === "Space" && !e.repeat) {
+    if (e.code === "Space" && !e.repeat && e.target !== textEditor) {
       spaceDown = true;
       document.body.classList.add("space");
       e.preventDefault();
@@ -1030,6 +1061,393 @@ minimap.addEventListener("pointerup", () => {
   updateMinimap();
 });
 minimap.addEventListener("mousedown", (e) => e.stopPropagation());
+
+// MARK: Transform — resize and rotate handles, and exact bounds.
+
+const HANDLES = {
+  nw: [-1, -1],
+  n: [0, -1],
+  ne: [1, -1],
+  e: [1, 0],
+  se: [1, 1],
+  s: [0, 1],
+  sw: [-1, 1],
+  w: [-1, 0],
+};
+const GEOMETRY = {
+  rect: ["x", "y", "width", "height", "rx", "ry"],
+  image: ["x", "y", "width", "height"],
+  use: ["x", "y", "width", "height"],
+  foreignObject: ["x", "y", "width", "height"],
+  circle: ["cx", "cy", "r"],
+  ellipse: ["cx", "cy", "rx", "ry"],
+  line: ["x1", "y1", "x2", "y2"],
+  polygon: ["points"],
+  polyline: ["points"],
+  text: ["x", "y", "font-size"],
+};
+let xf = null;
+
+function snapshotShape(el) {
+  const attrs = {};
+  for (const a of GEOMETRY[el.localName] || []) attrs[a] = el.getAttribute(a);
+  return { attrs, transform: el.getAttribute("transform") };
+}
+function restoreShape(el, snap) {
+  for (const [a, v] of Object.entries(snap.attrs)) {
+    if (v == null) el.removeAttribute(a);
+    else el.setAttribute(a, v);
+  }
+  if (snap.transform == null) el.removeAttribute("transform");
+  else el.setAttribute("transform", snap.transform);
+}
+// Attribute edits are only exact when the element isn't rotated or skewed.
+function editsAttributes(el, snap) {
+  if (!GEOMETRY[el.localName]) return false;
+  const t = snap.transform || "";
+  return !t.trim() || /^\s*translate\([^)]*\)\s*$/i.test(t);
+}
+// Replaces a transform chain with one matrix, so repeated edits stay tidy.
+function consolidate(el) {
+  const list = el.transform && el.transform.baseVal;
+  if (!list || list.numberOfItems < 2) return;
+  const m = list.consolidate().matrix;
+  const r = (v) => Math.round(v * 10000) / 10000;
+  el.setAttribute(
+    "transform",
+    `matrix(${r(m.a)} ${r(m.b)} ${r(m.c)} ${r(m.d)} ${r(m.e)} ${r(m.f)})`,
+  );
+}
+
+// Scales `el` by (sx, sy) around a point given in screen coordinates.
+function scaleAround(el, snap, sx, sy, ax, ay) {
+  restoreShape(el, snap);
+  if (editsAttributes(el, snap)) {
+    const a = toLocal(el, ax, ay);
+    const mx = (v) => round(a.x + (parseFloat(v || 0) - a.x) * sx);
+    const my = (v) => round(a.y + (parseFloat(v || 0) - a.y) * sy);
+    const g = snap.attrs;
+    switch (el.localName) {
+      case "rect":
+      case "image":
+      case "use":
+      case "foreignObject": {
+        let x = mx(g.x),
+          y = my(g.y);
+        let w = round(parseFloat(g.width || 0) * sx),
+          h = round(parseFloat(g.height || 0) * sy);
+        if (w < 0) {
+          x = round(x + w);
+          w = -w;
+        }
+        if (h < 0) {
+          y = round(y + h);
+          h = -h;
+        }
+        el.setAttribute("x", x);
+        el.setAttribute("y", y);
+        el.setAttribute("width", w);
+        el.setAttribute("height", h);
+        if (g.rx != null) el.setAttribute("rx", round(parseFloat(g.rx) * Math.abs(sx)));
+        if (g.ry != null) el.setAttribute("ry", round(parseFloat(g.ry) * Math.abs(sy)));
+        return;
+      }
+      case "circle": {
+        const k =
+          Math.abs(sx) === 1
+            ? Math.abs(sy)
+            : Math.abs(sy) === 1
+              ? Math.abs(sx)
+              : Math.max(Math.abs(sx), Math.abs(sy));
+        el.setAttribute("cx", mx(g.cx));
+        el.setAttribute("cy", my(g.cy));
+        el.setAttribute("r", round(parseFloat(g.r || 0) * k));
+        return;
+      }
+      case "ellipse":
+        el.setAttribute("cx", mx(g.cx));
+        el.setAttribute("cy", my(g.cy));
+        el.setAttribute("rx", round(parseFloat(g.rx || 0) * Math.abs(sx)));
+        el.setAttribute("ry", round(parseFloat(g.ry || 0) * Math.abs(sy)));
+        return;
+      case "line":
+        el.setAttribute("x1", mx(g.x1));
+        el.setAttribute("y1", my(g.y1));
+        el.setAttribute("x2", mx(g.x2));
+        el.setAttribute("y2", my(g.y2));
+        return;
+      case "polygon":
+      case "polyline": {
+        const n = (g.points || "")
+          .trim()
+          .split(/[\s,]+/)
+          .map(parseFloat);
+        const out = [];
+        for (let i = 0; i + 1 < n.length; i += 2) out.push(`${mx(n[i])},${my(n[i + 1])}`);
+        el.setAttribute("points", out.join(" "));
+        return;
+      }
+      case "text":
+        if (g.x != null || sx !== 1) el.setAttribute("x", mx(g.x));
+        if (g.y != null || sy !== 1) el.setAttribute("y", my(g.y));
+        el.setAttribute(
+          "font-size",
+          round(parseFloat(g["font-size"] || 16) * Math.abs(sy !== 1 ? sy : sx)),
+        );
+        return;
+    }
+  }
+  // Anything else (paths, groups, rotated shapes) scales with a transform.
+  const p = toLocal(el.parentNode, ax, ay);
+  const prior = snap.transform ? " " + snap.transform : "";
+  el.setAttribute(
+    "transform",
+    `translate(${p.x} ${p.y}) scale(${sx} ${sy}) translate(${-p.x} ${-p.y})${prior}`,
+  );
+  consolidate(el);
+}
+
+function rotateAround(el, snap, degrees, cx, cy) {
+  restoreShape(el, snap);
+  const p = toLocal(el.parentNode, cx, cy);
+  const prior = snap.transform ? " " + snap.transform : "";
+  el.setAttribute("transform", `rotate(${round(degrees)} ${round(p.x)} ${round(p.y)})${prior}`);
+  consolidate(el);
+}
+
+selBox.addEventListener("pointerdown", (e) => {
+  const handle = e.target.dataset && e.target.dataset.handle;
+  if (!handle || !selected || e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  selBox.setPointerCapture(e.pointerId);
+  const r = selected.getBoundingClientRect();
+  xf = {
+    el: selected,
+    handle,
+    rect: r,
+    x0: e.clientX,
+    y0: e.clientY,
+    id: e.pointerId,
+    snap: snapshotShape(selected),
+    moved: false,
+  };
+  if (handle === "rot") {
+    xf.cx = r.left + r.width / 2;
+    xf.cy = r.top + r.height / 2;
+    xf.a0 = Math.atan2(e.clientY - xf.cy, e.clientX - xf.cx);
+    selBox.classList.add("rotating");
+  }
+});
+
+selBox.addEventListener("pointermove", (e) => {
+  if (!xf || e.pointerId !== xf.id) return;
+  xf.moved = true;
+  if (xf.handle === "rot") {
+    let deg = ((Math.atan2(e.clientY - xf.cy, e.clientX - xf.cx) - xf.a0) * 180) / Math.PI;
+    if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+    rotateAround(xf.el, xf.snap, deg, xf.cx, xf.cy);
+    // Keep the box where it started while rotating; it re-fits on release.
+    return;
+  }
+  const [hx, hy] = HANDLES[xf.handle];
+  const r = xf.rect;
+  const fromCenter = e.altKey;
+  const k = fromCenter ? 2 : 1;
+  let sx = hx ? (r.width + hx * k * (e.clientX - xf.x0)) / r.width : 1;
+  let sy = hy ? (r.height + hy * k * (e.clientY - xf.y0)) / r.height : 1;
+  if (e.shiftKey) {
+    // Keep proportions: corners follow the larger change, edges scale both ways.
+    const s = hx && hy ? (Math.abs(sx) > Math.abs(sy) ? sx : sy) : hx ? sx : sy;
+    sx = Math.sign(sx || 1) * Math.abs(s);
+    sy = Math.sign(sy || 1) * Math.abs(s);
+  }
+  const clamp = (v) => (Math.abs(v) < 0.01 ? 0.01 * Math.sign(v || 1) : v);
+  const ax = fromCenter
+    ? r.left + r.width / 2
+    : hx === 1
+      ? r.left
+      : hx === -1
+        ? r.right
+        : r.left + r.width / 2;
+  const ay = fromCenter
+    ? r.top + r.height / 2
+    : hy === 1
+      ? r.top
+      : hy === -1
+        ? r.bottom
+        : r.top + r.height / 2;
+  scaleAround(xf.el, xf.snap, clamp(sx), clamp(sy), ax, ay);
+  updateOverlay();
+});
+
+function endTransform(e) {
+  if (!xf || e.pointerId !== xf.id) return;
+  const { moved, handle } = xf;
+  xf = null;
+  selBox.classList.remove("rotating");
+  updateOverlay();
+  if (moved) commit(handle === "rot" ? "Rotate" : "Resize");
+}
+selBox.addEventListener("pointerup", endTransform);
+selBox.addEventListener("pointercancel", endTransform);
+
+// The element's box in its parent's coordinates (what the inspector shows).
+function boundsOf(el) {
+  if (!el.getBBox) return null;
+  let b;
+  try {
+    b = el.getBBox();
+  } catch (e) {
+    return null;
+  }
+  const parent = el.parentNode;
+  const m = el.getCTM && parent.getCTM ? parent.getCTM().inverse().multiply(el.getCTM()) : null;
+  const pts = [
+    [b.x, b.y],
+    [b.x + b.width, b.y],
+    [b.x, b.y + b.height],
+    [b.x + b.width, b.y + b.height],
+  ].map(([x, y]) => (m ? new DOMPoint(x, y).matrixTransform(m) : { x, y }));
+  const xs = pts.map((p) => p.x),
+    ys = pts.map((p) => p.y);
+  const x = Math.min(...xs),
+    y = Math.min(...ys);
+  return [round(x), round(y), round(Math.max(...xs) - x), round(Math.max(...ys) - y)];
+}
+
+function rotationOf(el) {
+  const list = el.transform && el.transform.baseVal;
+  if (!list || !list.numberOfItems) return 0;
+  const m = list.consolidate().matrix;
+  return round((Math.atan2(m.b, m.a) * 180) / Math.PI);
+}
+
+// Exact position and size from the inspector, in parent coordinates.
+function setBounds(x, y, w, h) {
+  if (!selected) return;
+  const b = boundsOf(selected);
+  if (!b) return;
+  const [bx, by, bw, bh] = b;
+  const snap = snapshotShape(selected);
+  if ((w != null && bw && w !== bw) || (h != null && bh && h !== bh)) {
+    const m = selected.parentNode.getScreenCTM();
+    const anchor = new DOMPoint(bx, by).matrixTransform(m);
+    scaleAround(
+      selected,
+      snap,
+      w != null && bw ? w / bw : 1,
+      h != null && bh ? h / bh : 1,
+      anchor.x,
+      anchor.y,
+    );
+  }
+  const after = boundsOf(selected);
+  const dx = x != null ? x - after[0] : 0,
+    dy = y != null ? y - after[1] : 0;
+  if (dx || dy) applyOffset(selected, snapshotGeometry(selected), dx, dy);
+  updateOverlay();
+  commit(w != null || h != null ? "Change Size" : "Move", "bounds");
+}
+
+function setRotation(degrees) {
+  if (!selected) return;
+  const r = selected.getBoundingClientRect();
+  rotateAround(
+    selected,
+    snapshotShape(selected),
+    degrees - rotationOf(selected),
+    r.left + r.width / 2,
+    r.top + r.height / 2,
+  );
+  updateOverlay();
+  commit("Rotate", "rotation");
+}
+
+// Sets the viewBox to the bounds of everything drawn, trimming empty space.
+function fitViewBoxToContent() {
+  if (!root) return;
+  let b;
+  try {
+    b = root.getBBox();
+  } catch (e) {
+    return;
+  }
+  if (!b.width || !b.height) return;
+  root.setAttribute("viewBox", [b.x, b.y, b.width, b.height].map(round).join(" "));
+  if (root.hasAttribute("width") && root.hasAttribute("height")) {
+    const ratio = b.width / b.height,
+      w = parseFloat(root.getAttribute("width"));
+    if (w) root.setAttribute("height", round(w / ratio));
+  }
+  updateIntrinsicSize();
+  if (autoFit) {
+    applyZoom(fitScale(), null, null, true);
+    centerContent();
+  }
+  commit("Fit to Content");
+}
+
+// MARK: Inline text editing — double-click a text element to type in place.
+
+const textEditor = document.getElementById("text-editor");
+let editingText = null;
+
+function beginTextEdit(el) {
+  const r = el.getBoundingClientRect();
+  editingText = el;
+  textEditor.value = el.textContent;
+  const size = parseFloat(getComputedStyle(el).fontSize) || 16;
+  textEditor.style.display = "block";
+  textEditor.style.left = r.left - 4 + "px";
+  textEditor.style.top = r.top - 3 + "px";
+  textEditor.style.minWidth = Math.max(60, r.width + 8) + "px";
+  textEditor.style.width = Math.max(60, r.width + 24) + "px";
+  textEditor.style.height = r.height + 6 + "px";
+  textEditor.style.fontSize = size * zoom + "px";
+  textEditor.focus();
+  textEditor.select();
+}
+
+function endTextEdit(save) {
+  if (!editingText) return;
+  const el = editingText;
+  editingText = null;
+  textEditor.style.display = "none";
+  if (save && textEditor.value !== el.textContent) {
+    el.textContent = textEditor.value;
+    updateOverlay();
+    commit("Edit Text");
+  }
+}
+
+textEditor.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Enter") {
+    e.preventDefault();
+    endTextEdit(true);
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    endTextEdit(false);
+  }
+});
+textEditor.addEventListener("input", () => {
+  textEditor.style.width = Math.max(60, textEditor.scrollWidth + 8) + "px";
+});
+textEditor.addEventListener("blur", () => endTextEdit(true));
+
+host.addEventListener("dblclick", (e) => {
+  const t = pickTarget(e.target);
+  if (!t) return;
+  const text = t.localName === "text" ? t : t.closest && t.closest("text");
+  if (text) {
+    select(text);
+    beginTextEdit(text);
+  } else if (t.localName !== "g") {
+    post({ type: "editElement" });
+  }
+});
 
 // MARK: Outline — the element tree and references, for the layers list and graph.
 
@@ -1184,6 +1602,25 @@ function moveElements(orders, parentOrder, afterOrder) {
   for (const el of els) {
     if (ref) insert(el, parent, ref);
     else insert(el, parent);
+  }
+  select(els[els.length - 1]);
+  commit(els.length > 1 ? "Move Layers" : "Move Layer");
+}
+
+// Moves elements before or after `targetOrder`, or inside it (as the
+// topmost child), for drops in the layers list.
+function moveRelative(orders, targetOrder, position) {
+  const target = byOrder(targetOrder);
+  if (!target || target === root) return;
+  const parent = position === "inside" ? target : target.parentNode;
+  const els = orders.map(byOrder).filter((el) => el && el !== root && el !== target);
+  if (!els.length || els.some((el) => el === parent || el.contains(parent))) return;
+  for (const el of els) removeWithWhitespace(el);
+  if (position === "inside") {
+    for (const el of els) insert(el, parent);
+  } else {
+    const ref = position === "after" ? target.nextSibling : target;
+    for (const el of els) insert(el, parent, ref);
   }
   select(els[els.length - 1]);
   commit(els.length > 1 ? "Move Layers" : "Move Layer");

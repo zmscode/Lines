@@ -13,8 +13,18 @@ struct SourceEditor: NSViewRepresentable {
 	func makeCoordinator() -> Coordinator { Coordinator(self) }
 
 	func makeNSView(context: Context) -> NSScrollView {
-		let scrollView = NSTextView.scrollableTextView()
-		let textView = scrollView.documentView as! NSTextView
+		let scrollView = NSScrollView()
+		scrollView.hasVerticalScroller = true
+		scrollView.autohidesScrollers = true
+		scrollView.drawsBackground = true
+		let textView = CodeTextView(usingTextLayoutManager: true)
+		textView.isVerticallyResizable = true
+		textView.autoresizingMask = [.width]
+		textView.minSize = NSSize(width: 0, height: 0)
+		textView.maxSize = NSSize(
+			width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+		textView.textContainer?.widthTracksTextView = true
+		scrollView.documentView = textView
 		let coordinator = context.coordinator
 		coordinator.textView = textView
 		controller.sourceEditor = coordinator
@@ -51,6 +61,22 @@ struct SourceEditor: NSViewRepresentable {
 		coordinator.sync(to: document.text)
 	}
 
+	/// Text size for the code editor, shared with Settings.
+	static let fontSizeKey = "editorFontSize"
+	static let fontSizeRange: ClosedRange<Double> = 8...32
+
+	@MainActor
+	static func adjustFontSize(by delta: Double) {
+		let current = UserDefaults.standard.object(forKey: fontSizeKey) as? Double ?? 12
+		setFontSize(current + delta)
+	}
+
+	@MainActor
+	static func setFontSize(_ size: Double) {
+		let clamped = min(max(size.rounded(), fontSizeRange.lowerBound), fontSizeRange.upperBound)
+		UserDefaults.standard.set(clamped, forKey: fontSizeKey)
+	}
+
 	@MainActor
 	final class Coordinator: NSObject, NSTextViewDelegate, @MainActor NSTextStorageDelegate {
 		var parent: SourceEditor
@@ -61,6 +87,12 @@ struct SourceEditor: NSViewRepresentable {
 		private var theme: SyntaxTheme?
 
 		init(_ parent: SourceEditor) { self.parent = parent }
+
+		/// Whether the code editor has keyboard focus, so View › Zoom sizes text instead.
+		var isFocused: Bool {
+			guard let textView else { return false }
+			return textView.window?.firstResponder === textView
+		}
 
 		func apply(fontSize: CGFloat, wrapsLines: Bool, theme: SyntaxTheme) {
 			guard let textView else { return }
@@ -198,5 +230,24 @@ struct SourceEditor: NSViewRepresentable {
 			textView.scrollRangeToVisible(range)
 			isProgrammaticChange = false
 		}
+	}
+}
+
+/// The code editor's text view: pinch to change the text size, like Xcode.
+final class CodeTextView: NSTextView {
+	private var pinch: CGFloat = 0
+
+	override func magnify(with event: NSEvent) {
+		pinch += event.magnification
+		// One point per ~10% of pinch keeps it controllable.
+		while pinch >= 0.1 {
+			SourceEditor.adjustFontSize(by: 1)
+			pinch -= 0.1
+		}
+		while pinch <= -0.1 {
+			SourceEditor.adjustFontSize(by: -1)
+			pinch += 0.1
+		}
+		if event.phase == .ended || event.phase == .cancelled { pinch = 0 }
 	}
 }

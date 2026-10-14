@@ -30,9 +30,9 @@ struct GraphView: View {
 			onNodesChange: handleNodeChanges,
 			onEdgesChange: { changes in handleEdgeChanges(changes, graph: graph) },
 			onConnect: { connect($0, graph: graph) },
-			// Trackpads scroll to pan, as everywhere on the Mac; mouse wheels
-			// zoom and the middle button pans (see GraphNavigation).
-			panOnScroll: true,
+			// Scrolling zooms and the middle button pans; GraphNavigation handles
+			// both ahead of SwiftFlow so they match the canvas.
+			panOnScroll: false,
 			zoomOnScroll: false,
 			zoomOnDoubleClick: false,
 			selectNodesOnDrag: true,
