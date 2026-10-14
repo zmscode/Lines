@@ -84,7 +84,7 @@ final class CanvasController {
 	}
 	/// The animation playhead, in seconds, and whether animations are playing.
 	var animationTime: Double = 0
-	var isPlaying = true
+	var isPlaying = false
 	/// Off in preview mode: the drawing can be viewed but not changed.
 	var isEditing = true {
 		didSet { if isEditing != oldValue { call("setEditable(\(isEditing))") } }

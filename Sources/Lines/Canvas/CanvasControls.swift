@@ -8,8 +8,33 @@ struct CanvasControls: View {
 
 	var body: some View {
 		ZStack {
-			ZoomButtons(controller: controller)
-				.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+			VStack(alignment: .trailing, spacing: 8) {
+				// Drawings open still; this plays their animations.
+				if !controller.animations.isEmpty && !controller.showsTimeline {
+					FloatingStrip {
+						Button(
+							controller.isPlaying ? "Pause" : "Play",
+							systemImage: controller.isPlaying ? "pause.fill" : "play.fill"
+						) {
+							if controller.isPlaying {
+								controller.pause()
+							} else {
+								controller.play()
+							}
+						}
+						.buttonStyle(
+							.icon(size: ToolPalette.buttonSize, selected: controller.isPlaying)
+						)
+						.contentTransition(.symbolEffect(.replace))
+						.help(
+							controller.isPlaying
+								? "Pause the animations (⌥⌘P)" : "Play the animations (⌥⌘P)")
+					}
+					.transition(.opacity)
+				}
+				ZoomButtons(controller: controller)
+			}
+			.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
 		}
 		.padding(12)
 	}

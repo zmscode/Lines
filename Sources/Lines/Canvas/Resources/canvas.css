@@ -405,3 +405,24 @@ body.preview.over-link #host * {
 	background: var(--accent);
 	border-color: #fff;
 }
+
+/* The selection, handles and document frame: one layer that pans with the
+   drawing. It ignores the pointer; its handles take it back. */
+#overlay-layer {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	will-change: transform;
+	z-index: 3;
+}
+#minimap {
+	z-index: 6;
+}
+/* The layer ignores the pointer, and children inherit that: hand it back to
+   the parts you can grab or type in. */
+#overlay-layer .knob,
+#overlay-layer .radius-knob,
+#overlay-layer .gradient-knob,
+#overlay-layer #text-editor {
+	pointer-events: auto;
+}

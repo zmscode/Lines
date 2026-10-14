@@ -4,15 +4,24 @@ const XLINK = "http://www.w3.org/1999/xlink";
 const host = document.getElementById("host");
 const selBox = document.getElementById("sel");
 // The corner-radius knob for a selected rectangle (see Corner radius below).
+// The layer the selection, handles and document frame sit on (see render).
+const overlayLayer = document.createElement("div");
+overlayLayer.id = "overlay-layer";
+document.body.appendChild(overlayLayer);
+for (const id of ["doc", "hover", "sel", "text-editor"]) {
+  const el = document.getElementById(id);
+  if (el) overlayLayer.appendChild(el);
+}
+
 // Gradient handles for a selected shape (see Gradient handles below).
 const gradientLine = document.createElement("div");
 gradientLine.id = "gradient-line";
-document.body.appendChild(gradientLine);
+overlayLayer.appendChild(gradientLine);
 const gradientKnobs = [0, 1].map((i) => {
   const k = document.createElement("div");
   k.className = "gradient-knob";
   k.dataset.index = i;
-  document.body.appendChild(k);
+  overlayLayer.appendChild(k);
   return k;
 });
 // A clip path or mask being edited on the canvas (see below).
@@ -23,7 +32,7 @@ const radiusKnobs = [0, 1, 2, 3].map((corner) => {
   k.className = "radius-knob";
   k.dataset.corner = corner;
   k.title = "Drag to round all corners (⌘ rounds just this one)";
-  document.body.appendChild(k);
+  overlayLayer.appendChild(k);
   return k;
 });
 const hoverBox = document.getElementById("hover");
@@ -350,6 +359,8 @@ function visualRect(el, depth = 0) {
 }
 
 function place(box, el) {
+  // Mid-pan the layer is offset; re-anchor it before placing anything.
+  if (overlayLayer.style.transform) updateOverlay();
   if (!el || !el.getBoundingClientRect) {
     box.style.display = "none";
     return;
@@ -383,6 +394,10 @@ function placeRect(box, r) {
 }
 
 function updateOverlay() {
+  // Positions below are in window coordinates, with the layer at rest.
+  overlayLayer.style.transform = "";
+  overlayBase = { tx, ty, zoom };
+  updateDocFrame();
   // A selected animation outlines the element it animates, without handles.
   const anim = isAnimation(selected);
   const all = selection();
@@ -1573,14 +1588,31 @@ function leaveFit() {
   post({ type: "zoom", value: zoom, fit: false });
 }
 
+// The selection, handles and document frame live on one layer. A pan
+// moves that layer with the drawing by the same transform, in the same
+// frame, so they stay together (repositioning each box separately lagged a
+// frame behind the composited drawing). Anything else re-places them.
+let overlayBase = null;
+let panOnly = false;
+
 function render() {
   frame = 0;
   host.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
-  updateOverlay();
-  updateDocFrame();
+  if (panOnly && overlayBase && overlayBase.zoom === zoom) {
+    overlayLayer.style.transform = `translate3d(${tx - overlayBase.tx}px, ${ty - overlayBase.ty}px, 0)`;
+  } else {
+    updateOverlay();
+  }
+  panOnly = false;
   updateMinimap();
 }
 function scheduleRender() {
+  panOnly = false;
+  if (!frame) frame = requestAnimationFrame(render);
+}
+// A render where only the pan changed.
+function schedulePan() {
+  if (!frame) panOnly = true;
   if (!frame) frame = requestAnimationFrame(render);
 }
 function renderNow() {
@@ -1673,7 +1705,7 @@ function panBy(dx, dy) {
   ty -= dy;
   clampPan();
   hoverBox.style.display = "none";
-  scheduleRender();
+  schedulePan();
 }
 
 // Trackpad scrolling pans (mouse wheels are turned into zoom on the native side).
@@ -1718,7 +1750,7 @@ document.addEventListener(
     tx = pan.tx + (e.clientX - pan.x);
     ty = pan.ty + (e.clientY - pan.y);
     clampPan();
-    scheduleRender();
+    schedulePan();
   },
   true,
 );
@@ -1830,7 +1862,7 @@ function miniMoveTo(e) {
   tx = window.innerWidth / 2 - cx * zoom;
   ty = window.innerHeight / 2 - cy * zoom;
   clampPan();
-  scheduleRender();
+  schedulePan();
 }
 minimap.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return;
@@ -2770,6 +2802,11 @@ function showDocumentFrame(on) {
 }
 
 function updateDocFrame() {
+  // Mid-pan the layer is offset; place everything afresh instead.
+  if (overlayLayer.style.transform) {
+    updateOverlay();
+    return;
+  }
   if (!docFrameShown || !root || !editable) {
     docBox.style.display = "none";
     return;
@@ -2862,7 +2899,8 @@ docBox.addEventListener("pointercancel", endDocDrag);
 
 // MARK: Animation — SMIL animations, played and scrubbed from the timeline.
 
-let animPaused = false;
+// Drawings open still, at the start; Play (on the canvas or timeline) starts them.
+let animPaused = true;
 let animTime = 0;
 let timeTimer = 0;
 let timelineActive = false;
