@@ -121,6 +121,19 @@ struct GraphNodeView: View {
 			}
 		}
 		.contextMenu { menu(data) }
+		.accessibilityElement(children: .contain)
+		.accessibilityLabel("\(data.name), \(InspectorView.elementName(for: data.tag))")
+		.accessibilityValue(
+			data.infoRows.map { "\($0.label) \($0.value)" }.joined(separator: ", ")
+				+ (data.isHidden ? ", hidden" : "")
+		)
+		.accessibilityHint(NodeDescription.of(data))
+		.accessibilityAddTraits(node.selected ? .isSelected : [])
+		.accessibilityAction(named: "Select") { controller?.select(order: data.order) }
+		.accessibilityAction(named: "Show on Canvas") {
+			controller?.select(order: data.order)
+			controller?.layout = .canvas
+		}
 		.shadow(color: .black.opacity(0.08), radius: 3, y: 1)
 		.opacity(data.isHidden ? 0.6 : 1)
 	}

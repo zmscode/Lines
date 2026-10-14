@@ -212,11 +212,13 @@ enum PaletteEffect {
 private struct PaletteEffectModifier: ViewModifier {
 	var effect: PaletteEffect
 	var isActive: Bool
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	func body(content: Content) -> some View {
 		let repeating: SymbolEffectOptions =
 			isActive ? .repeat(.continuous) : .repeat(.periodic(delay: 3.5))
-		switch effect {
+		// Reduce Motion keeps the icons still.
+		switch reduceMotion ? .none : effect {
 		case .none: content
 		case .pulse: content.symbolEffect(.pulse, options: repeating)
 		case .breathe: content.symbolEffect(.breathe, options: repeating)
@@ -317,6 +319,10 @@ private struct FlyoutRow: View {
 /// Photoshop's hint that a tool has more options.
 private struct CornerTriangle: View {
 	var body: some View {
+		triangle.accessibilityHidden(true)  // the slot's "More Options" action says it
+	}
+
+	private var triangle: some View {
 		Path { p in
 			p.move(to: CGPoint(x: 6, y: 0))
 			p.addLine(to: CGPoint(x: 6, y: 6))

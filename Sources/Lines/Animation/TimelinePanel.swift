@@ -436,6 +436,23 @@ private struct AnimationBar: View {
 			if !animation.isCSS && isEditable { durationHandle(x: x) }
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+		.accessibilityElement(children: .ignore)
+		.accessibilityLabel(animation.property)
+		.accessibilityValue(
+			"begins at \(AnimationInfo.format(seconds: begin)), lasts \(AnimationInfo.format(seconds: duration))"
+				+ (animation.repeatsForever ? ", repeats forever" : "")
+		)
+		.accessibilityAddTraits(isSelected ? .isSelected : [])
+		.accessibilityAction { select() }
+		.accessibilityAdjustableAction { direction in
+			// Nudges when it begins, a tenth of a second at a time.
+			guard isEditable, !animation.isCSS else { return }
+			switch direction {
+			case .increment: setBegin(Self.snap(animation.begin + 0.1))
+			case .decrement: setBegin(Self.snap(max(0, animation.begin - 0.1)))
+			@unknown default: break
+			}
+		}
 	}
 
 	private func durationHandle(x: Double) -> some View {

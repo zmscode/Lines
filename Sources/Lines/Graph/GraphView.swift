@@ -285,7 +285,7 @@ struct GraphView: View {
 			laidOut[id] = position
 		}
 		// Tidying glides nodes to their new places, so the rearrangement reads.
-		if force && hasFitted {
+		if force && hasFitted && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
 			withAnimation(.snappy(duration: 0.4)) { positions = laidOut }
 		} else {
 			positions = laidOut

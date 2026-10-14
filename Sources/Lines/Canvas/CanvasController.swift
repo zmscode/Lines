@@ -530,6 +530,11 @@ final class CanvasController {
 				)
 			}
 			if items != outline { outline = items }
+			webView?.setAccessibilityValue(
+				"\(documentName), \(items.count) element\(items.count == 1 ? "" : "s")")
+			webView?.setAccessibilityHelp(
+				"Use the Layers panel (⌘1) to move through the elements, and the inspector to change them."
+			)
 			outlineTruncated = body["truncated"] as? Bool ?? false
 
 		case "definitionEdit":
@@ -572,6 +577,19 @@ final class CanvasController {
 				count: body["count"] as? Int ?? 1
 			)
 			let moved = selection?.order != order
+			// VoiceOver hears what got selected on the canvas.
+			if moved, NSWorkspace.shared.isVoiceOverEnabled, !info.isRoot {
+				let name =
+					outline.first(where: { $0.order == order })?.displayName
+					?? InspectorView.elementName(for: tag)
+				NSAccessibility.post(
+					element: NSApp.mainWindow as Any, notification: .announcementRequested,
+					userInfo: [
+						.announcement: info.count > 1
+							? "\(info.count) selected" : "Selected \(name)",
+						.priority: NSAccessibilityPriorityLevel.medium.rawValue,
+					])
+			}
 			if selection != info { selection = info }
 			if moved, !info.isRoot, body["fromSource"] as? Bool != true {
 				sourceEditor?.revealElement(order: order)

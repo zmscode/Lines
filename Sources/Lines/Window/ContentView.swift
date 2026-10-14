@@ -9,6 +9,7 @@ struct ContentView: View {
 	/// count as the user opening the code or graph.
 	@State private var isLoaded = false
 	@State private var versionTask: Task<Void, Never>?
+	@State private var showsPreviewBadge = true
 	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
 	@Environment(\.undoManager) private var undoManager
@@ -82,7 +83,7 @@ struct ContentView: View {
 			.onChange(of: controller.wantsInspector) { _, wants in
 				guard wants else { return }
 				controller.wantsInspector = false
-				withAnimation(Self.panelAnimation) { controller.showsInspector = true }
+				withAnimation(panelMotion) { controller.showsInspector = true }
 			}
 			.onChange(of: controller.showsLayers) { _, _ in updateInsets() }
 			.onChange(of: documentFrameShown, initial: true) { _, shown in
@@ -126,6 +127,11 @@ struct ContentView: View {
 	}
 
 	static let panelAnimation = Animation.snappy(duration: 0.28)
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	/// Panels slide in, or simply appear with Reduce Motion on.
+	private var panelMotion: Animation {
+		reduceMotion ? .easeInOut(duration: 0.12) : Self.panelAnimation
+	}
 
 	/// Room taken by the floating code panel on the leading edge.
 	private var codeSpace: CGFloat {
@@ -153,7 +159,7 @@ struct ContentView: View {
 	/// The node and code editors want the room: layers and the inspector make
 	/// way when either opens.
 	private func closeSidePanels() {
-		withAnimation(Self.panelAnimation) {
+		withAnimation(panelMotion) {
 			controller.showsLayers = false
 			controller.showsInspector = false
 		}
@@ -198,7 +204,7 @@ struct ContentView: View {
 					.transition(.move(edge: .leading).combined(with: .opacity))
 				}
 			}
-			.animation(Self.panelAnimation, value: controller.showsCode)
+			.animation(panelMotion, value: controller.showsCode)
 	}
 
 	/// The canvas or graph fills the viewer; layers and the inspector float over it.
@@ -277,7 +283,7 @@ struct ContentView: View {
 				.transition(.move(edge: .trailing).combined(with: .opacity))
 			}
 		}
-		.animation(Self.panelAnimation, value: controller.showsChanges)
+		.animation(panelMotion, value: controller.showsChanges)
 		.overlay(alignment: .bottom) {
 			if controller.showsTimeline {
 				TimelinePanel(controller: controller, close: { controller.showsTimeline = false })
@@ -325,18 +331,27 @@ struct ContentView: View {
 				.transition(.move(edge: .top).combined(with: .opacity))
 			}
 		}
-		.animation(Self.panelAnimation, value: controller.definitionEdit?.name)
+		.animation(panelMotion, value: controller.definitionEdit?.name)
 		.overlay(alignment: .top) {
-			if !controller.isEditing {
+			if !controller.isEditing && showsPreviewBadge {
 				PreviewBadge { controller.isEditing = true }
 					.padding(Self.panelMargin)
 					.transition(.move(edge: .top).combined(with: .opacity))
 			}
 		}
-		.animation(Self.panelAnimation, value: controller.isEditing)
-		.animation(Self.panelAnimation, value: controller.showsTimeline)
-		.animation(Self.panelAnimation, value: controller.showsLayers)
-		.animation(Self.panelAnimation, value: controller.showsInspector)
+		.animation(panelMotion, value: controller.isEditing)
+		.animation(.easeInOut(duration: 0.4), value: showsPreviewBadge)
+		// The badge is a reminder, not a fixture: it fades after a few seconds
+		// each time the window locks (the lock button stays).
+		.task(id: controller.isEditing) {
+			guard !controller.isEditing else { return }
+			showsPreviewBadge = true
+			try? await Task.sleep(for: .seconds(4))
+			if !Task.isCancelled { showsPreviewBadge = false }
+		}
+		.animation(panelMotion, value: controller.showsTimeline)
+		.animation(panelMotion, value: controller.showsLayers)
+		.animation(panelMotion, value: controller.showsInspector)
 	}
 
 	private var canvas: some View {
