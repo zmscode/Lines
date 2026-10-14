@@ -1,4 +1,5 @@
 import AppKit
+import SearchBar
 import SwiftUI
 
 enum AppAppearance: String, CaseIterable, Identifiable {
@@ -88,15 +89,17 @@ struct SettingsEntry: Identifiable, Hashable {
 		SettingsEntry(
 			title: "Background behind the drawing only", pane: .canvas,
 			keywords: ["artboard", "page", "area"]),
-		SettingsEntry(title: "Layers button", pane: .toolbar, keywords: ["toolbar", "layers"]),
 		SettingsEntry(
-			title: "Inspector button", pane: .toolbar, keywords: ["toolbar", "inspector"]),
-		SettingsEntry(title: "Code button", pane: .toolbar, keywords: ["toolbar", "source"]),
-		SettingsEntry(title: "Graph button", pane: .toolbar, keywords: ["toolbar", "node editor"]),
+			title: "Window toolbar buttons", pane: .toolbar,
+			keywords: [
+				"reorder", "layers", "inspector", "code", "graph", "changes", "animations", "hide",
+			]),
 		SettingsEntry(
-			title: "Animations button", pane: .toolbar, keywords: ["toolbar", "timeline"]),
+			title: "Tools palette", pane: .toolbar,
+			keywords: ["reorder", "tools", "shapes", "left", "hide"]),
 		SettingsEntry(
-			title: "Changes button", pane: .toolbar, keywords: ["toolbar", "diff", "history"]),
+			title: "Graph palette", pane: .toolbar,
+			keywords: ["reorder", "node editor", "tidy", "hide"]),
 		SettingsEntry(
 			title: "Code font", pane: .editor,
 			keywords: ["typeface", "monospaced", "sf mono", "family"]),
@@ -124,82 +127,22 @@ struct SettingsEntry: Identifiable, Hashable {
 	}
 }
 
-/// Settings, laid out like System Settings: categories in a searchable
-/// sidebar, each opening a grouped form on the right.
+/// Settings, as the HIG describes for macOS: a noncustomizable toolbar of
+/// panes that always shows the active one, the window titled after the
+/// pane and sized to it, and the last pane restored. A search field finds
+/// any setting and opens its pane.
 struct SettingsView: View {
 	@AppStorage("settings.pane") private var pane: SettingsPane = .general
-	@State private var query = ""
-
-	private var results: [SettingsEntry] { SettingsEntry.search(query) }
-	private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
 	var body: some View {
-		NavigationSplitView {
-			List(selection: selection) {
-				if isSearching {
-					Section("Results") {
-						ForEach(results) { entry in
-							VStack(alignment: .leading, spacing: 1) {
-								Text(entry.title)
-								Text(entry.pane.title).font(.caption).foregroundStyle(.secondary)
-							}
-							.tag(entry.pane)
-						}
-					}
-				} else {
-					ForEach(SettingsPane.allCases) { pane in
-						Label {
-							Text(pane.title)
-						} icon: {
-							Image(systemName: pane.symbol)
-								.font(.system(size: 11, weight: .semibold))
-								.foregroundStyle(.white)
-								.frame(width: 20, height: 20)
-								.background(
-									Brand.accent.gradient,
-									in: .rect(cornerRadius: 5, style: .continuous))
-						}
-						.tag(pane)
-					}
+		TabView(selection: $pane) {
+			ForEach(SettingsPane.allCases) { pane in
+				Tab(pane.title, systemImage: pane.symbol, value: pane) {
+					PaneContainer(pane: pane, current: $pane) { detail(for: pane) }
 				}
 			}
-			.navigationSplitViewColumnWidth(210)
-			.searchable(text: $query, placement: .sidebar, prompt: "Search Settings")
-			.overlay {
-				if isSearching && results.isEmpty {
-					ContentUnavailableView.search(text: query)
-				}
-			}
-			.toolbar(removing: .sidebarToggle)
-		} detail: {
-			// The window is always "Settings"; each section has its own header.
-			VStack(alignment: .leading, spacing: 0) {
-				HStack(spacing: 10) {
-					Image(systemName: pane.symbol)
-						.font(.system(size: 15, weight: .semibold))
-						.foregroundStyle(.white)
-						.frame(width: 28, height: 28)
-						.background(
-							Brand.accent.gradient, in: .rect(cornerRadius: 7, style: .continuous))
-					Text(pane.title).font(.title2.weight(.semibold))
-				}
-				.padding(.horizontal, 24)
-				.padding(.top, 18)
-				.padding(.bottom, 2)
-				detail(for: pane)
-			}
-			.navigationTitle("Settings")
 		}
-		.navigationTitle("Settings")
-		.frame(width: 720, height: 540)
 		.tint(Brand.accent)
-		.onChange(of: query) { _, _ in
-			if let first = results.first { pane = first.pane }
-		}
-	}
-
-	private var selection: Binding<SettingsPane?> {
-		Binding(get: { pane }, set: { if let new = $0 { pane = new } })
 	}
 
 	@ViewBuilder
@@ -208,21 +151,99 @@ struct SettingsView: View {
 		case .general: GeneralSettings()
 		case .windows: WindowSettings()
 		case .canvas: CanvasSettings()
-		case .toolbar:
-			Form {
-				Section {
-					ToolbarButtonsSettings()
-				} header: {
-					Text("Buttons")
-				} footer: {
-					SettingsFootnote(
-						"Choose which buttons appear in each window's toolbar. Everything stays available from the View menu and its shortcuts (⌘1–⌘5) either way."
-					)
-				}
-			}
-			.formStyle(.grouped)
+		case .toolbar: ToolbarSettings()
 		case .editor: EditorSettings()
 		}
+	}
+}
+
+/// One pane: the search field, then the pane's form at a fixed width and
+/// its natural height, so the window fits it.
+private struct PaneContainer<Content: View>: View {
+	var pane: SettingsPane
+	@Binding var current: SettingsPane
+	@ViewBuilder var content: Content
+
+	var body: some View {
+		VStack(spacing: 0) {
+			SettingsSearch(current: $current)
+				.padding(.horizontal, 20)
+				.padding(.top, 14)
+			content
+				.scrollDisabled(!isTall)
+		}
+		.frame(width: 560, height: isTall ? 580 : nil)
+		.fixedSize(horizontal: false, vertical: !isTall)
+	}
+
+	/// Panes with more than fits comfortably scroll inside a fixed height.
+	private var isTall: Bool {
+		pane == .editor || pane == .toolbar
+	}
+}
+
+/// Finds a setting by name (fzf-style) and opens its pane.
+private struct SettingsSearch: View {
+	@Binding var current: SettingsPane
+	@State private var query = ""
+
+	var body: some View {
+		SearchBar(text: $query, prompt: "Search Settings")
+			.searchBarSuggestions(
+				SettingsEntry.search(query).prefix(8).map {
+					SearchBarSuggestion(
+						text: $0.title, description: $0.pane.title, systemName: $0.pane.symbol)
+				}
+			)
+			.searchBarChangeAction { text in
+				// Picking a suggestion fills in its exact name: go to its pane.
+				if let entry = SettingsEntry.all.first(where: { $0.title == text }) {
+					current = entry.pane
+				} else if let best = SettingsEntry.search(text).first,
+					!text.trimmingCharacters(in: .whitespaces).isEmpty
+				{
+					current = best.pane
+				}
+			}
+			.searchBarScale(.small)
+			.accessibilityLabel("Search Settings")
+	}
+}
+
+/// The Toolbar pane: reorder and show or hide each toolbar's items.
+private struct ToolbarSettings: View {
+	var body: some View {
+		Form {
+			Section {
+				ToolbarLayoutEditor(
+					key: ToolbarLayout.windowKey, defaults: ToolbarLayout.windowDefaults)
+			} header: {
+				Text("Window Toolbar")
+			} footer: {
+				SettingsFootnote(
+					"Drag to reorder; separators split the buttons into groups. Hidden buttons stay in the View menu with their shortcuts (⌘1–⌘5)."
+				)
+			}
+			Section {
+				ToolbarLayoutEditor(
+					key: ToolbarLayout.paletteKey, defaults: ToolbarLayout.paletteDefaults)
+			} header: {
+				Text("Tools Palette")
+			} footer: {
+				SettingsFootnote(
+					"The tools down the left of the canvas. Tools you hide keep their keyboard shortcuts."
+				)
+			}
+			Section {
+				ToolbarLayoutEditor(
+					key: ToolbarLayout.graphKey, defaults: ToolbarLayout.graphDefaults)
+			} header: {
+				Text("Graph Palette")
+			} footer: {
+				SettingsFootnote("The buttons down the left of the element graph.")
+			}
+		}
+		.formStyle(.grouped)
 	}
 }
 
@@ -597,36 +618,6 @@ private struct ThemePreview: NSViewRepresentable {
 		textView.backgroundColor = theme.background
 		textView.textStorage?.setAttributedString(
 			Highlighter.sample(theme: theme, fontSize: fontSize))
-	}
-}
-
-/// Which buttons the window toolbar shows (instead of right-click customising).
-enum ToolbarButtons {
-	static let layers = "toolbar.layers"
-	static let inspector = "toolbar.inspector"
-	static let code = "toolbar.code"
-	static let graph = "toolbar.graph"
-	static let timeline = "toolbar.timeline"
-	static let changes = "toolbar.changes"
-}
-
-private struct ToolbarButtonsSettings: View {
-	@AppStorage(ToolbarButtons.layers) private var layers = true
-	@AppStorage(ToolbarButtons.inspector) private var inspector = true
-	@AppStorage(ToolbarButtons.code) private var code = true
-	@AppStorage(ToolbarButtons.graph) private var graph = true
-	@AppStorage(ToolbarButtons.timeline) private var timeline = true
-	@AppStorage(ToolbarButtons.changes) private var changes = true
-
-	var body: some View {
-		Toggle(isOn: $layers) { Label("Layers", systemImage: "square.3.layers.3d") }
-		Toggle(isOn: $inspector) { Label("Inspector", systemImage: "slider.horizontal.3") }
-		Toggle(isOn: $code) {
-			Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
-		}
-		Toggle(isOn: $graph) { Label("Graph", systemImage: EditorLayout.graph.symbol) }
-		Toggle(isOn: $timeline) { Label("Animations", systemImage: "film.stack") }
-		Toggle(isOn: $changes) { Label("Changes", systemImage: "plusminus") }
 	}
 }
 

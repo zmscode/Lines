@@ -26,12 +26,8 @@ struct ContentView: View {
 	@AppStorage(CodeFont.key) private var codeFontName = ""
 	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
 	@AppStorage(SyntaxTheme.lightKey) private var lightTheme = SyntaxTheme.defaultLight
-	@AppStorage(ToolbarButtons.layers) private var toolbarShowsLayers = true
-	@AppStorage(ToolbarButtons.inspector) private var toolbarShowsInspector = true
-	@AppStorage(ToolbarButtons.code) private var toolbarShowsCode = true
-	@AppStorage(ToolbarButtons.graph) private var toolbarShowsGraph = true
-	@AppStorage(ToolbarButtons.timeline) private var toolbarShowsTimeline = true
-	@AppStorage(ToolbarButtons.changes) private var toolbarShowsChanges = true
+	@AppStorage(ToolbarLayout.windowKey) private var toolbarLayout = ToolbarLayout.windowDefaults
+		.joined(separator: ",")
 
 	/// Floating panel sizes; the canvas keeps the drawing clear of them.
 	static let panelMargin: CGFloat = 12
@@ -376,56 +372,73 @@ struct ContentView: View {
 
 	@ToolbarContentBuilder
 	private var editingToolbar: some ToolbarContent {
-		ToolbarItemGroup(placement: .navigation) {
-			if toolbarShowsLayers {
-				Toggle(isOn: $controller.showsLayers) {
-					Label("Layers", systemImage: "square.3.layers.3d")
-				}
-				.help(controller.showsLayers ? "Hide Layers (⌘1)" : "Show Layers (⌘1)")
-			}
-			if toolbarShowsInspector {
-				Toggle(isOn: $controller.showsInspector) {
-					Label("Inspector", systemImage: "slider.horizontal.3")
-				}
-				.help(controller.showsInspector ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
+		// The groups and order chosen in Settings › Toolbar.
+		let groups = ToolbarLayout(toolbarLayout, defaults: ToolbarLayout.windowDefaults).groups
+		if groups.count > 0 {
+			ToolbarItemGroup(placement: .navigation) {
+				ForEach(groups[0], id: \.self) { toolbarButton($0) }
 			}
 		}
-		ToolbarSpacer(.fixed, placement: .navigation)
-		ToolbarItemGroup(placement: .navigation) {
-			if toolbarShowsCode {
-				Toggle(isOn: $controller.showsCode) {
-					Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
-				}
-				.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
+		if groups.count > 1 {
+			ToolbarSpacer(.fixed, placement: .navigation)
+			ToolbarItemGroup(placement: .navigation) {
+				ForEach(groups[1], id: \.self) { toolbarButton($0) }
 			}
-			if toolbarShowsGraph {
-				Toggle(
-					isOn: Binding(
-						get: { controller.layout == .graph },
-						set: { controller.layout = $0 ? .graph : .canvas })
-				) {
-					Label("Graph", systemImage: EditorLayout.graph.symbol)
-				}
-				.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
-			}
-			if toolbarShowsChanges {
-				Toggle(isOn: $controller.showsChanges) {
-					Label("Changes", systemImage: "plusminus")
-				}
-				.disabled(!controller.hasChanges)
-				.help(
-					controller.hasChanges
-						? (controller.showsChanges ? "Hide Changes (⌘5)" : "Show Changes (⌘5)")
-						: "No changes since opening")
-			}
-			if toolbarShowsTimeline {
-				Toggle(isOn: $controller.showsTimeline) {
-					Label("Animations", systemImage: "film.stack")
-				}
-				.help(controller.showsTimeline ? "Hide Timeline (⌘4)" : "Show Timeline (⌘4)")
+		}
+		if groups.count > 2 {
+			ToolbarSpacer(.fixed, placement: .navigation)
+			ToolbarItemGroup(placement: .navigation) {
+				ForEach(groups[2...].flatMap { $0 }, id: \.self) { toolbarButton($0) }
 			}
 		}
 	}
+
+	@ViewBuilder
+	private func toolbarButton(_ id: String) -> some View {
+		switch id {
+		case "layers":
+			Toggle(isOn: $controller.showsLayers) {
+				Label("Layers", systemImage: "square.3.layers.3d")
+			}
+			.help(controller.showsLayers ? "Hide Layers (⌘1)" : "Show Layers (⌘1)")
+		case "inspector":
+			Toggle(isOn: $controller.showsInspector) {
+				Label("Inspector", systemImage: "slider.horizontal.3")
+			}
+			.help(controller.showsInspector ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
+		case "code":
+			Toggle(isOn: $controller.showsCode) {
+				Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
+			}
+			.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
+		case "graph":
+			Toggle(
+				isOn: Binding(
+					get: { controller.layout == .graph },
+					set: { controller.layout = $0 ? .graph : .canvas })
+			) {
+				Label("Graph", systemImage: EditorLayout.graph.symbol)
+			}
+			.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
+		case "changes":
+			Toggle(isOn: $controller.showsChanges) {
+				Label("Changes", systemImage: "plusminus")
+			}
+			.disabled(!controller.hasChanges)
+			.help(
+				controller.hasChanges
+					? (controller.showsChanges ? "Hide Changes (⌘5)" : "Show Changes (⌘5)")
+					: "No changes since opening")
+		case "timeline":
+			Toggle(isOn: $controller.showsTimeline) {
+				Label("Animations", systemImage: "film.stack")
+			}
+			.help(controller.showsTimeline ? "Hide Timeline (⌘4)" : "Show Timeline (⌘4)")
+		default:
+			EmptyView()
+		}
+	}
+
 }
 
 /// Shown at the top of the viewer while a file is open for preview.

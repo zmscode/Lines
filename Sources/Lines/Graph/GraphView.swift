@@ -23,6 +23,8 @@ struct GraphView: View {
 	@StateObject private var flow = SwiftFlowInstance()
 	@AppStorage("graph.layout") private var mode: GraphLayoutMode = .flow
 	@State private var chosen: [String: Int] = [:]
+	@AppStorage(ToolbarLayout.graphKey) private var paletteLayout = ToolbarLayout.graphDefaults
+		.joined(separator: ",")
 
 	/// Shift-dragged nodes snap to this grid, which the background dots show.
 	static let snapGrid: CGFloat = 24
@@ -84,37 +86,11 @@ struct GraphView: View {
 		.overlay(alignment: .topLeading) {
 			// A vertical palette in the same place and style as the canvas's tools.
 			FloatingStrip {
-				PaletteSlot(
-					id: "graph.add",
-					options: CanvasController.Definition.allCases.map { kind in
-						PaletteOption(
-							title: "Add \(kind.title)", symbol: kind.symbol,
-							help: "Add a \(kind.title.lowercased()), then connect it to a shape"
-						) { controller.addDefinition(kind) }
-					}, chosen: $chosen, isSelected: false)
-				StripDivider()
-				ForEach(GraphLayoutMode.allCases) { option in
-					Button(option.title, systemImage: option.symbol) {
-						mode = option
-						movedByHand.removeAll()
-						relayout(graph, force: true)
-					}
-					.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: mode == option))
-					.help(option.help)
+				let layout = ToolbarLayout(paletteLayout, defaults: ToolbarLayout.graphDefaults)
+				ForEach(Array(layout.groups.enumerated()), id: \.offset) { index, group in
+					if index > 0 { StripDivider() }
+					ForEach(group, id: \.self) { paletteItem($0, graph: graph) }
 				}
-				StripDivider()
-				Button("Tidy Up", systemImage: "wand.and.rays") {
-					movedByHand.removeAll()
-					relayout(graph, force: true)
-				}
-				.buttonStyle(.icon(size: ToolPalette.buttonSize))
-				.help("Arrange the graph automatically")
-				Button("Select on Canvas", systemImage: "scope") {
-					controller.layout = .canvas
-				}
-				.buttonStyle(.icon(size: ToolPalette.buttonSize))
-				.disabled(!controller.hasElementSelection)
-				.help("Show the selected node's element on the canvas")
 			}
 			.padding(12)
 			.padding(.leading, leadingInset)
@@ -165,6 +141,48 @@ struct GraphView: View {
 		.onAppear { relayout(graph, force: true) }
 		.onChange(of: graph.nodeIDs) { _, _ in relayout(graph, force: false) }
 		.onChange(of: flow.viewSize) { _, _ in fitIfNeeded(graph) }
+	}
+
+	// MARK: Palette
+
+	@ViewBuilder
+	private func paletteItem(_ id: String, graph: Graph) -> some View {
+		switch id {
+		case "add":
+			PaletteSlot(
+				id: "graph.add",
+				options: CanvasController.Definition.allCases.map { kind in
+					PaletteOption(
+						title: "Add \(kind.title)", symbol: kind.symbol,
+						help: "Add a \(kind.title.lowercased()), then connect it to a shape"
+					) { controller.addDefinition(kind) }
+				}, chosen: $chosen, isSelected: false)
+		case "flow", "tree":
+			let option: GraphLayoutMode = id == "flow" ? .flow : .tree
+			Button(option.title, systemImage: option.symbol) {
+				mode = option
+				movedByHand.removeAll()
+				relayout(graph, force: true)
+			}
+			.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: mode == option))
+			.help(option.help)
+		case "tidy":
+			Button("Tidy Up", systemImage: "wand.and.rays") {
+				movedByHand.removeAll()
+				relayout(graph, force: true)
+			}
+			.buttonStyle(.icon(size: ToolPalette.buttonSize))
+			.help("Rearrange the graph neatly (undoes any nodes you've moved)")
+		case "canvas":
+			Button("Select on Canvas", systemImage: "scope") {
+				controller.layout = .canvas
+			}
+			.buttonStyle(.icon(size: ToolPalette.buttonSize))
+			.disabled(!controller.hasElementSelection)
+			.help("Show the selected node's element on the canvas")
+		default:
+			EmptyView()
+		}
 	}
 
 	// MARK: Data

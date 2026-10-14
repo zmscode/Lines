@@ -16,22 +16,35 @@ struct ToolPalette: View {
 	/// The option each slot shows, by slot id.
 	@State private var chosen: [String: Int] = [:]
 	@State private var imageDropShown = false
+	@AppStorage(ToolbarLayout.paletteKey) private var storedLayout = ToolbarLayout.paletteDefaults
+		.joined(separator: ",")
+
+	@ViewBuilder
+	private func item(_ id: String) -> some View {
+		if id.hasPrefix("tool"), let index = Int(id.dropFirst(4)),
+			CanvasTool.groups.indices.contains(index)
+		{
+			let group = CanvasTool.groups[index]
+			PaletteSlot(
+				id: id, options: group.map(toolOption), chosen: $chosen,
+				isSelected: group.contains(controller.tool))
+		} else if let slot = actionSlots.first(where: { $0.id == id }) {
+			PaletteSlot(id: slot.id, options: slot.options, chosen: $chosen, isSelected: false)
+		} else if id == "image" {
+			imageButton
+		} else if id == "background" {
+			BackgroundPill()
+		}
+	}
 
 	var body: some View {
+		// The order and items chosen in Settings › Toolbar.
+		let layout = ToolbarLayout(storedLayout, defaults: ToolbarLayout.paletteDefaults)
 		FloatingStrip {
-			ForEach(Array(CanvasTool.groups.enumerated()), id: \.offset) { index, group in
-				PaletteSlot(
-					id: "tool\(index)", options: group.map(toolOption), chosen: $chosen,
-					isSelected: group.contains(controller.tool))
-				if index == 1 { StripDivider() }  // navigation tools, then drawing tools
+			ForEach(Array(layout.groups.enumerated()), id: \.offset) { index, group in
+				if index > 0 { StripDivider() }
+				ForEach(group, id: \.self) { item($0) }
 			}
-			StripDivider()
-			ForEach(actionSlots, id: \.id) { slot in
-				PaletteSlot(id: slot.id, options: slot.options, chosen: $chosen, isSelected: false)
-			}
-			imageButton
-			StripDivider()
-			BackgroundPill()
 		}
 		.onChange(of: controller.tool) { _, tool in
 			// Keep the slot showing whichever variant was picked (by key or flyout).

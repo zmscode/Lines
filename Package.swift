@@ -9,6 +9,8 @@ let package = Package(
 		.package(path: "Vendor/SwiftFlow"),
 		// Vendored with fixes; see Vendor/ColourPickerMaker/VENDORED.md.
 		.package(path: "Vendor/ColourPickerMaker"),
+		// The search field in Settings.
+		.package(url: "https://github.com/SzpakKamil/SearchBar.git", from: "2.1.5"),
 	],
 	targets: [
 		.executableTarget(
@@ -16,6 +18,7 @@ let package = Package(
 			dependencies: [
 				.product(name: "SwiftFlow", package: "SwiftFlow"),
 				.product(name: "ColourPickerMaker", package: "ColourPickerMaker"),
+				.product(name: "SearchBar", package: "SearchBar"),
 			],
 			path: "Sources/Lines",
 			resources: [.process("Canvas/Resources")],
