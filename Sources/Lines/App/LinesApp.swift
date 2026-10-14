@@ -25,8 +25,8 @@ struct LinesApp: App {
 			return document
 		}
 		.defaultSize(width: 1280, height: 860)
-		// The document title sits on its own row above the toolbar.
-		.windowToolbarStyle(.expanded)
+		// The document title sits in line with the toolbar buttons.
+		.windowToolbarStyle(.unified)
 		.commands {
 			FileCommands()
 			EditCommands()

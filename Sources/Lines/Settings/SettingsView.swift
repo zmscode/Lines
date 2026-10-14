@@ -78,6 +78,10 @@ private struct GeneralSettings: View {
 				Toggle("Show code alongside", isOn: $showsCodeByDefault)
 			}
 
+			Section("Toolbar") {
+				ToolbarButtonsSettings()
+			}
+
 			Section {
 				Picker("Background", selection: $background) {
 					ForEach(CanvasBackground.allCases) { Text($0.title).tag($0) }
@@ -287,5 +291,32 @@ private struct ThemePreview: NSViewRepresentable {
 		textView.backgroundColor = theme.background
 		textView.textStorage?.setAttributedString(
 			Highlighter.sample(theme: theme, fontSize: fontSize))
+	}
+}
+
+/// Which buttons the window toolbar shows (instead of right-click customising).
+enum ToolbarButtons {
+	static let layers = "toolbar.layers"
+	static let inspector = "toolbar.inspector"
+	static let code = "toolbar.code"
+	static let graph = "toolbar.graph"
+	static let timeline = "toolbar.timeline"
+}
+
+private struct ToolbarButtonsSettings: View {
+	@AppStorage(ToolbarButtons.layers) private var layers = true
+	@AppStorage(ToolbarButtons.inspector) private var inspector = true
+	@AppStorage(ToolbarButtons.code) private var code = true
+	@AppStorage(ToolbarButtons.graph) private var graph = true
+	@AppStorage(ToolbarButtons.timeline) private var timeline = true
+
+	var body: some View {
+		Toggle(isOn: $layers) { Label("Layers", systemImage: "square.3.layers.3d") }
+		Toggle(isOn: $inspector) { Label("Inspector", systemImage: "slider.horizontal.3") }
+		Toggle(isOn: $code) {
+			Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
+		}
+		Toggle(isOn: $graph) { Label("Graph", systemImage: EditorLayout.graph.symbol) }
+		Toggle(isOn: $timeline) { Label("Animations", systemImage: "film.stack") }
 	}
 }

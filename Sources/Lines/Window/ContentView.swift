@@ -22,6 +22,11 @@ struct ContentView: View {
 	@AppStorage("wrapsLines") private var wrapsLines = true
 	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
 	@AppStorage(SyntaxTheme.lightKey) private var lightTheme = SyntaxTheme.defaultLight
+	@AppStorage(ToolbarButtons.layers) private var toolbarShowsLayers = true
+	@AppStorage(ToolbarButtons.inspector) private var toolbarShowsInspector = true
+	@AppStorage(ToolbarButtons.code) private var toolbarShowsCode = true
+	@AppStorage(ToolbarButtons.graph) private var toolbarShowsGraph = true
+	@AppStorage(ToolbarButtons.timeline) private var toolbarShowsTimeline = true
 
 	private var isTransparent: Bool { background == .transparent && controller.layout == .canvas }
 
@@ -36,7 +41,7 @@ struct ContentView: View {
 			// A see-through window would otherwise take the toolbar with it.
 			.toolbarBackgroundVisibility(isTransparent ? .visible : .automatic, for: .windowToolbar)
 			.tint(Brand.accent)
-			.toolbar(id: "editor") { toolbar }
+			.toolbar { toolbar }
 			.toolbarRole(.editor)
 			.focusedSceneValue(controller)
 			.sheet(
@@ -261,27 +266,36 @@ struct ContentView: View {
 
 	// MARK: Toolbar
 	//
-	// Two groups (HIG › Toolbars): what the window shows on the leading edge
-	// (the panels and the element graph) and sharing on the trailing edge.
-	// Drawing tools live in the palette on the canvas. Every item is also in
-	// the menu bar.
+	// Two groups on the leading edge (the side panels, then the editors) and
+	// sharing on the trailing edge. Drawing tools live in the palette on the
+	// canvas. Which buttons show is chosen in Settings › General; every item
+	// is also in the menu bar.
 
 	@ToolbarContentBuilder
-	private var toolbar: some CustomizableToolbarContent {
-		ToolbarItem(id: "panels", placement: .navigation) {
-			ControlGroup {
+	private var toolbar: some ToolbarContent {
+		ToolbarItemGroup(placement: .navigation) {
+			if toolbarShowsLayers {
 				Toggle(isOn: $controller.showsLayers) {
 					Label("Layers", systemImage: "square.3.layers.3d")
 				}
 				.help(controller.showsLayers ? "Hide Layers (⌘1)" : "Show Layers (⌘1)")
+			}
+			if toolbarShowsInspector {
 				Toggle(isOn: $controller.showsInspector) {
 					Label("Inspector", systemImage: "slider.horizontal.3")
 				}
 				.help(controller.showsInspector ? "Hide Inspector (⌥⌘I)" : "Show Inspector (⌥⌘I)")
+			}
+		}
+		ToolbarSpacer(.fixed, placement: .navigation)
+		ToolbarItemGroup(placement: .navigation) {
+			if toolbarShowsCode {
 				Toggle(isOn: $controller.showsCode) {
 					Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
 				}
 				.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
+			}
+			if toolbarShowsGraph {
 				Toggle(
 					isOn: Binding(
 						get: { controller.layout == .graph },
@@ -290,40 +304,17 @@ struct ContentView: View {
 					Label("Graph", systemImage: EditorLayout.graph.symbol)
 				}
 				.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
+			}
+			if toolbarShowsTimeline {
 				Toggle(isOn: $controller.showsTimeline) {
-					Label("Timeline", systemImage: "film.stack")
+					Label("Animations", systemImage: "film.stack")
 				}
 				.help(controller.showsTimeline ? "Hide Timeline (⌘4)" : "Show Timeline (⌘4)")
-			} label: {
-				Label("Panels", systemImage: "rectangle.3.group")
 			}
 		}
-		.customizationBehavior(.disabled)
 
-		ToolbarItem(id: "share", placement: .primaryAction) {
-			Menu {
-				Button("Export…", systemImage: "square.and.arrow.down") {
-					controller.isExporting = true
-				}
-				Button("Print…", systemImage: "printer") { controller.printDrawing() }
-				Divider()
-				ShareLink(
-					item: SharedDrawing(name: controller.documentName, controller: controller),
-					preview: SharePreview(
-						controller.documentName, image: Image(systemName: "photo"))
-				) {
-					Label("Share…", systemImage: "square.and.arrow.up")
-				}
-				if let url = document.configuration?.fileURL {
-					ShareLink(item: url) {
-						Label("Share File…", systemImage: "doc")
-					}
-				}
-			} label: {
-				Label("Share", systemImage: "square.and.arrow.up")
-			}
-			.menuIndicator(.hidden)
-			.help("Export, print or share the drawing")
+		ToolbarItem(placement: .primaryAction) {
+			ExportButton(controller: controller, document: document)
 		}
 	}
 }
