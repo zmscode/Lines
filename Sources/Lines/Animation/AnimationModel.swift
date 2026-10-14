@@ -25,12 +25,12 @@ enum AnimationPreset: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .fade: "Fade (Loop)"
-		case .fadeIn: "Fade In"
-		case .spin: "Spin"
-		case .slide: "Slide"
-		case .colour: "Colour Cycle"
-		case .draw: "Draw (Stroke)"
+		case .fade: String(localized: "Fade (Loop)")
+		case .fadeIn: String(localized: "Fade In")
+		case .spin: String(localized: "Spin")
+		case .slide: String(localized: "Slide")
+		case .colour: String(localized: "Colour Cycle")
+		case .draw: String(localized: "Draw (Stroke)")
 		}
 	}
 

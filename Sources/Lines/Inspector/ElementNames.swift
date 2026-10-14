@@ -5,36 +5,36 @@ import SwiftUI
 extension InspectorView {
 	static func elementName(for tag: String) -> String {
 		switch tag {
-		case "g": "Group"
-		case "rect": "Rectangle"
-		case "circle": "Circle"
-		case "ellipse": "Ellipse"
-		case "line": "Line"
-		case "polyline": "Polyline"
-		case "polygon": "Polygon"
-		case "path": "Path"
-		case "text": "Text"
-		case "tspan": "Text Span"
-		case "image": "Image"
-		case "use": "Instance"
-		case "symbol": "Symbol"
-		case "defs": "Definitions"
-		case "linearGradient": "Linear Gradient"
-		case "radialGradient": "Radial Gradient"
-		case "stop": "Gradient Stop"
-		case "pattern": "Pattern"
-		case "clipPath": "Clipping Path"
-		case "mask": "Mask"
-		case "filter": "Filter"
-		case "marker": "Marker"
-		case "style": "Style Sheet"
-		case "title": "Title"
-		case "desc": "Description"
-		case "metadata": "Metadata"
-		case "animate": "Animation"
-		case "animateTransform": "Transform Animation"
-		case "animateMotion": "Motion Path"
-		case "set": "Set"
+		case "g": String(localized: "Group")
+		case "rect": String(localized: "Rectangle")
+		case "circle": String(localized: "Circle")
+		case "ellipse": String(localized: "Ellipse")
+		case "line": String(localized: "Line")
+		case "polyline": String(localized: "Polyline")
+		case "polygon": String(localized: "Polygon")
+		case "path": String(localized: "Path")
+		case "text": String(localized: "Text")
+		case "tspan": String(localized: "Text Span")
+		case "image": String(localized: "Image")
+		case "use": String(localized: "Instance")
+		case "symbol": String(localized: "Symbol")
+		case "defs": String(localized: "Definitions")
+		case "linearGradient": String(localized: "Linear Gradient")
+		case "radialGradient": String(localized: "Radial Gradient")
+		case "stop": String(localized: "Gradient Stop")
+		case "pattern": String(localized: "Pattern")
+		case "clipPath": String(localized: "Clipping Path")
+		case "mask": String(localized: "Mask")
+		case "filter": String(localized: "Filter")
+		case "marker": String(localized: "Marker")
+		case "style": String(localized: "Style Sheet")
+		case "title": String(localized: "Title")
+		case "desc": String(localized: "Description")
+		case "metadata": String(localized: "Metadata")
+		case "animate": String(localized: "Animation")
+		case "animateTransform": String(localized: "Transform Animation")
+		case "animateMotion": String(localized: "Motion Path")
+		case "set": String(localized: "Set")
 		default: tag
 		}
 	}

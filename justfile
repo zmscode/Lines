@@ -56,6 +56,22 @@ run config="release": (build config)
 format:
     DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift-format format -i -r Sources/Lines
 
+# Refresh Support/Localizable.xcstrings with every string the app shows
+strings:
+    #!/usr/bin/env sh
+    set -e
+    export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+    out="$(mktemp -d)"
+    swift build -c debug -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc "$out"
+    # Only Lines's own sources, not the vendored packages.
+    mkdir "$out/lines"
+    find Sources/Lines -name '*.swift' -exec basename {} .swift \; | while read -r name; do
+      [ -f "$out/$name.stringsdata" ] && cp "$out/$name.stringsdata" "$out/lines/"
+    done
+    xcrun xcstringstool sync Support/Localizable.xcstrings --stringsdata "$out"/lines/*.stringsdata
+    rm -rf "$out"
+    echo "Updated Support/Localizable.xcstrings"
+
 # Remove build products
 clean:
     rm -rf build .build

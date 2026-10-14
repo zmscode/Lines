@@ -1,0 +1,1199 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ appearance" : {
+
+    },
+    "%@ only shows where it's installed; elsewhere the text falls back to another font" : {
+
+    },
+    "%@ radius" : {
+
+    },
+    "%@ shadow" : {
+
+    },
+    "%@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%@: %@ — click to change" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ — click to change"
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld fonts" : {
+
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld points" : {
+
+    },
+    "%lld pt" : {
+
+    },
+    "%lld versions" : {
+
+    },
+    "%lld%%" : {
+
+    },
+    "%lld°" : {
+
+    },
+    "%lld×" : {
+
+    },
+    "+%lld" : {
+
+    },
+    "<%@>" : {
+
+    },
+    "<rect width=\"24\"/>" : {
+
+    },
+    "A CSS animation: edit its timing in the stylesheet" : {
+
+    },
+    "A gradient needs at least two stops" : {
+
+    },
+    "A vector PDF at the drawing’s size, rendered by macOS. Filters and some effects may be simplified." : {
+
+    },
+    "Actual Size" : {
+
+    },
+    "Add %@" : {
+
+    },
+    "Add Animation" : {
+
+    },
+    "Add Attribute" : {
+
+    },
+    "Add Shape" : {
+
+    },
+    "Add Stop" : {
+
+    },
+    "Add one to the selected element with the + menu." : {
+
+    },
+    "Alignment" : {
+
+    },
+    "Alignment: left, centre or right" : {
+
+    },
+    "All Attributes" : {
+
+    },
+    "Animation" : {
+
+    },
+    "Animations" : {
+
+    },
+    "Appearance" : {
+
+    },
+    "Apply to Selection" : {
+
+    },
+    "Arrange" : {
+
+    },
+    "Arrow" : {
+
+    },
+    "Attribute name, like stroke-dasharray" : {
+
+    },
+    "Attribute names start with a letter and can’t contain spaces" : {
+
+    },
+    "Attribute value" : {
+
+    },
+    "Back 0.1s" : {
+
+    },
+    "Back to Start" : {
+
+    },
+    "Background" : {
+
+    },
+    "Behind the drawing only" : {
+
+    },
+    "Black" : {
+
+    },
+    "Black: hides what's under this shape. Click to show it instead." : {
+
+    },
+    "Blur" : {
+
+    },
+    "Bring Forward" : {
+
+    },
+    "Bring to Front" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Canvas" : {
+
+    },
+    "Canvas Background" : {
+
+    },
+    "Canvas background" : {
+
+    },
+    "Canvas background: %@" : {
+
+    },
+    "Changes" : {
+
+    },
+    "Checkerboard" : {
+
+    },
+    "Choose %@ colour" : {
+
+    },
+    "Choose File…" : {
+
+    },
+    "Choose the %@ applied to this element" : {
+
+    },
+    "Circle" : {
+
+    },
+    "Click or drag to scrub" : {
+
+    },
+    "Clip Path" : {
+
+    },
+    "Clipping Path" : {
+
+    },
+    "Close" : {
+
+    },
+    "Close Preview" : {
+
+    },
+    "Close Timeline" : {
+
+    },
+    "Code" : {
+
+    },
+    "Code Editor" : {
+
+    },
+    "Code panel width" : {
+
+    },
+    "Collapse" : {
+
+    },
+    "Collapsed" : {
+
+    },
+    "Colour" : {
+
+    },
+    "Colour Cycle" : {
+
+    },
+    "Colours" : {
+
+    },
+    "Common — show almost everywhere" : {
+
+    },
+    "Compare" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Copy of Selection" : {
+
+    },
+    "Corner Radius" : {
+
+    },
+    "Custom Colour" : {
+
+    },
+    "Dark" : {
+
+    },
+    "Default App" : {
+
+    },
+    "Definitions" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete Animation" : {
+
+    },
+    "Delete the selected animation" : {
+
+    },
+    "Delete the selected element" : {
+
+    },
+    "Delete this animation" : {
+
+    },
+    "Description" : {
+
+    },
+    "Deselect All" : {
+
+    },
+    "Direction" : {
+
+    },
+    "Done" : {
+
+    },
+    "Drag through the history; the canvas shows each version" : {
+
+    },
+    "Drag to adjust %@" : {
+
+    },
+    "Drag to an input to use this %@" : {
+
+    },
+    "Drag to change the duration" : {
+
+    },
+    "Drag to change when it begins" : {
+
+    },
+    "Drag to reorder" : {
+
+    },
+    "Drag to scrub" : {
+
+    },
+    "Draw (Stroke)" : {
+
+    },
+    "Drop Images Here" : {
+
+    },
+    "Drop Shadow" : {
+
+    },
+    "Drop an SVG file here to open it" : {
+
+    },
+    "Duplicate" : {
+
+    },
+    "Duplicate (⌘D)" : {
+
+    },
+    "Ease" : {
+
+    },
+    "Ease In" : {
+
+    },
+    "Ease In & Out" : {
+
+    },
+    "Ease Out" : {
+
+    },
+    "Easing" : {
+
+    },
+    "Edit" : {
+
+    },
+    "Edit %@" : {
+
+    },
+    "Edit Shape" : {
+
+    },
+    "Edit Shapes on Canvas" : {
+
+    },
+    "Edit in Inspector" : {
+
+    },
+    "Editing %@ “%@”" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Editing %1$@ “%2$@”"
+          }
+        }
+      }
+    },
+    "Element Graph" : {
+
+    },
+    "Elements and the references between them appear here." : {
+
+    },
+    "Elements in the drawing appear here." : {
+
+    },
+    "Ellipse" : {
+
+    },
+    "Empty Group" : {
+
+    },
+    "Expand" : {
+
+    },
+    "Expanded" : {
+
+    },
+    "Export" : {
+
+    },
+    "Export As" : {
+
+    },
+    "Export as %@…" : {
+
+    },
+    "Export, print or share the drawing (⇧⌘E)" : {
+
+    },
+    "Exports the source as it is, formatted." : {
+
+    },
+    "Export…" : {
+
+    },
+    "Fade (Loop)" : {
+
+    },
+    "Fade In" : {
+
+    },
+    "Fills just the drawing's area, with the window colour around it." : {
+
+    },
+    "Filter" : {
+
+    },
+    "Finish editing (Esc)" : {
+
+    },
+    "Fit to Content" : {
+
+    },
+    "Fix the errors in the source to inspect the drawing." : {
+
+    },
+    "Font" : {
+
+    },
+    "Font size" : {
+
+    },
+    "Fonts that aren't common may not render in browsers or apps without them installed." : {
+
+    },
+    "Forever" : {
+
+    },
+    "Format" : {
+
+    },
+    "Format Document" : {
+
+    },
+    "Format automatically" : {
+
+    },
+    "Forward 0.1s" : {
+
+    },
+    "General" : {
+
+    },
+    "Gradient Stop" : {
+
+    },
+    "Graph" : {
+
+    },
+    "Graph Palette" : {
+
+    },
+    "Grey" : {
+
+    },
+    "Group" : {
+
+    },
+    "Group the selected element (⌥⌘G)" : {
+
+    },
+    "Hand" : {
+
+    },
+    "Hex" : {
+
+    },
+    "Hexagon" : {
+
+    },
+    "Hidden" : {
+
+    },
+    "Hide" : {
+
+    },
+    "Hide Changes" : {
+
+    },
+    "Hide Changes (⌘5)" : {
+
+    },
+    "Hide Code" : {
+
+    },
+    "Hide Code (⌘2)" : {
+
+    },
+    "Hide Element" : {
+
+    },
+    "Hide Inspector" : {
+
+    },
+    "Hide Inspector (⌥⌘I)" : {
+
+    },
+    "Hide Layers" : {
+
+    },
+    "Hide Layers (⌘1)" : {
+
+    },
+    "Hide Preview" : {
+
+    },
+    "Hide Timeline" : {
+
+    },
+    "Hide Timeline (⌘4)" : {
+
+    },
+    "Hide the preview" : {
+
+    },
+    "Hide the raw attributes" : {
+
+    },
+    "Hides" : {
+
+    },
+    "Hold the end state" : {
+
+    },
+    "Hover to preview how this changes the drawing; click to keep it open" : {
+
+    },
+    "Hue and saturation" : {
+
+    },
+    "Image" : {
+
+    },
+    "In This Drawing" : {
+
+    },
+    "Insert" : {
+
+    },
+    "Inspector" : {
+
+    },
+    "Instance" : {
+
+    },
+    "Invert" : {
+
+    },
+    "Keep the final value when the animation finishes (fill=\"freeze\")" : {
+
+    },
+    "Layers" : {
+
+    },
+    "Light" : {
+
+    },
+    "Line" : {
+
+    },
+    "Linear" : {
+
+    },
+    "Linear Gradient" : {
+
+    },
+    "Lines Is the Default" : {
+
+    },
+    "Lines can list the fixed-width fonts installed on your Mac, including ones from other apps. Only fixed-width fonts are shown, so code lines up." : {
+
+    },
+    "Lock" : {
+
+    },
+    "Lock Aspect Ratio" : {
+
+    },
+    "Lock Editing" : {
+
+    },
+    "Lock to preview without changing anything (⇧⌘L)" : {
+
+    },
+    "Make Lines the Default" : {
+
+    },
+    "Make this version current again (undoable)" : {
+
+    },
+    "Marker" : {
+
+    },
+    "Mask" : {
+
+    },
+    "Matches" : {
+
+    },
+    "Metadata" : {
+
+    },
+    "Minify" : {
+
+    },
+    "More Options" : {
+
+    },
+    "Motion Path" : {
+
+    },
+    "Motion path" : {
+
+    },
+    "Move and resize its dashed shapes over the element." : {
+
+    },
+    "Name" : {
+
+    },
+    "Name (the element’s id)" : {
+
+    },
+    "New %@" : {
+
+    },
+    "New Drawing" : {
+
+    },
+    "New Windows" : {
+
+    },
+    "New attribute" : {
+
+    },
+    "No %@ to edit" : {
+
+    },
+    "No Animations" : {
+
+    },
+    "No Changes" : {
+
+    },
+    "No Colour" : {
+
+    },
+    "No Elements" : {
+
+    },
+    "No app" : {
+
+    },
+    "No changes since opening" : {
+
+    },
+    "None" : {
+
+    },
+    "Nothing to Inspect" : {
+
+    },
+    "Now" : {
+
+    },
+    "On This Mac" : {
+
+    },
+    "Once" : {
+
+    },
+    "Only what's inside these shapes is drawn." : {
+
+    },
+    "Opacity" : {
+
+    },
+    "Open File…" : {
+
+    },
+    "Open files locked, for preview" : {
+
+    },
+    "Open in" : {
+
+    },
+    "Opened" : {
+
+    },
+    "Opens SVG files" : {
+
+    },
+    "Or drag the handles on the shape in the canvas." : {
+
+    },
+    "Other Installed Font…" : {
+
+    },
+    "Pad" : {
+
+    },
+    "Page size" : {
+
+    },
+    "Path" : {
+
+    },
+    "Pattern" : {
+
+    },
+    "Pause" : {
+
+    },
+    "Pause Animations" : {
+
+    },
+    "Place an image: drop one here, or right-click to choose a file" : {
+
+    },
+    "Play" : {
+
+    },
+    "Play Animations" : {
+
+    },
+    "Playback speed" : {
+
+    },
+    "Playhead" : {
+
+    },
+    "Polygon" : {
+
+    },
+    "Polyline" : {
+
+    },
+    "Press Return to apply" : {
+
+    },
+    "Preview" : {
+
+    },
+    "Print…" : {
+
+    },
+    "Put back the source as it was then (undoable)" : {
+
+    },
+    "Quality" : {
+
+    },
+    "RRGGBB" : {
+
+    },
+    "Radial Gradient" : {
+
+    },
+    "Re-indents the markup after canvas edits and when you pause typing." : {
+
+    },
+    "Rearrange the graph neatly (undoes any nodes you've moved)" : {
+
+    },
+    "Rectangle" : {
+
+    },
+    "Reflect" : {
+
+    },
+    "Release to Place" : {
+
+    },
+    "Remove %@" : {
+
+    },
+    "Remove Its References" : {
+
+    },
+    "Remove Shape" : {
+
+    },
+    "Remove Stop" : {
+
+    },
+    "Remove this shape" : {
+
+    },
+    "Remove this stop" : {
+
+    },
+    "Removes comments and the whitespace between tags for the smallest file." : {
+
+    },
+    "Rename" : {
+
+    },
+    "Rendered with WebKit, the same engine as the canvas." : {
+
+    },
+    "Repeat" : {
+
+    },
+    "Restore" : {
+
+    },
+    "Restore Defaults" : {
+
+    },
+    "Reverse" : {
+
+    },
+    "Revert" : {
+
+    },
+    "Rotate Left 90°" : {
+
+    },
+    "Rotate Right 90°" : {
+
+    },
+    "Rounded Rectangle" : {
+
+    },
+    "Same for All Corners" : {
+
+    },
+    "Scale" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search Fonts" : {
+
+    },
+    "Search Settings" : {
+
+    },
+    "See this version's code against the current one" : {
+
+    },
+    "Select" : {
+
+    },
+    "Select %@" : {
+
+    },
+    "Select Enclosing Group" : {
+
+    },
+    "Select an element, then add an animation with the + menu." : {
+
+    },
+    "Select it to edit" : {
+
+    },
+    "Select on Canvas" : {
+
+    },
+    "Select this shape to edit it" : {
+
+    },
+    "Select to edit" : {
+
+    },
+    "Send Backward" : {
+
+    },
+    "Send to Back" : {
+
+    },
+    "Separator" : {
+
+    },
+    "Set" : {
+
+    },
+    "Set Each Corner" : {
+
+    },
+    "Set each corner separately (or ⌘-drag a corner knob on the canvas)" : {
+
+    },
+    "Set the viewBox to the drawing’s bounds" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show Canvas" : {
+
+    },
+    "Show Canvas (⌘3)" : {
+
+    },
+    "Show Changes" : {
+
+    },
+    "Show Changes (⌘5)" : {
+
+    },
+    "Show Code" : {
+
+    },
+    "Show Code (⌘2)" : {
+
+    },
+    "Show Element" : {
+
+    },
+    "Show Element Graph" : {
+
+    },
+    "Show Element Graph (⌘3)" : {
+
+    },
+    "Show Inspector" : {
+
+    },
+    "Show Inspector (⌥⌘I)" : {
+
+    },
+    "Show Installed Fonts" : {
+
+    },
+    "Show Layers" : {
+
+    },
+    "Show Layers (⌘1)" : {
+
+    },
+    "Show Timeline" : {
+
+    },
+    "Show Timeline (⌘4)" : {
+
+    },
+    "Show and edit the raw attributes" : {
+
+    },
+    "Show code alongside" : {
+
+    },
+    "Show on Canvas" : {
+
+    },
+    "Show the selected node's element on the canvas" : {
+
+    },
+    "Show the shapes over the element, to move and resize them directly (Esc when done)" : {
+
+    },
+    "Show this version on the canvas" : {
+
+    },
+    "Showing “%@” on the canvas" : {
+
+    },
+    "Shows" : {
+
+    },
+    "Size" : {
+
+    },
+    "Slide" : {
+
+    },
+    "Source" : {
+
+    },
+    "Source error: %@" : {
+
+    },
+    "Speed" : {
+
+    },
+    "Spin" : {
+
+    },
+    "Spread" : {
+
+    },
+    "Star" : {
+
+    },
+    "Step" : {
+
+    },
+    "Step Back" : {
+
+    },
+    "Step Forward" : {
+
+    },
+    "Stop" : {
+
+    },
+    "Stop and return to the start" : {
+
+    },
+    "Style" : {
+
+    },
+    "Style Sheet" : {
+
+    },
+    "Swap the stops end to end" : {
+
+    },
+    "Swap white and black, so what's shown is hidden" : {
+
+    },
+    "Symbol" : {
+
+    },
+    "System" : {
+
+    },
+    "Text" : {
+
+    },
+    "Text Span" : {
+
+    },
+    "The current version" : {
+
+    },
+    "The source matches that version." : {
+
+    },
+    "Tidy Up" : {
+
+    },
+    "Timeline" : {
+
+    },
+    "Times" : {
+
+    },
+    "Title" : {
+
+    },
+    "Toolbar" : {
+
+    },
+    "Tools Palette" : {
+
+    },
+    "Transform Animation" : {
+
+    },
+    "Transparent background" : {
+
+    },
+    "Triangle" : {
+
+    },
+    "Type" : {
+
+    },
+    "Type an attribute name to add it" : {
+
+    },
+    "Ungroup" : {
+
+    },
+    "Unlock" : {
+
+    },
+    "Unlock Aspect Ratio" : {
+
+    },
+    "Unlock Editing" : {
+
+    },
+    "Unlock to edit (⇧⌘L)" : {
+
+    },
+    "Unlock with the toolbar lock or ⇧⌘L. New drawings always open ready to edit." : {
+
+    },
+    "Use Font" : {
+
+    },
+    "Use a Font Installed on This Mac" : {
+
+    },
+    "Use a copy of the selected element's shape" : {
+
+    },
+    "Use one radius for every corner" : {
+
+    },
+    "Value" : {
+
+    },
+    "Version" : {
+
+    },
+    "View" : {
+
+    },
+    "Weight" : {
+
+    },
+    "Welcome to Lines" : {
+
+    },
+    "Where this colour sits along the gradient" : {
+
+    },
+    "White" : {
+
+    },
+    "White areas show what's masked, black areas hide it, greys fade it." : {
+
+    },
+    "White: shows what's under this shape. Click to hide it instead." : {
+
+    },
+    "Window Background" : {
+
+    },
+    "Window Toolbar" : {
+
+    },
+    "Windows" : {
+
+    },
+    "Wrap lines" : {
+
+    },
+    "Zoom In" : {
+
+    },
+    "Zoom Out" : {
+
+    },
+    "Zoom to Fit" : {
+
+    },
+    "lines since opening" : {
+
+    },
+    "lines since “%@”" : {
+
+    },
+    "stops" : {
+
+    },
+    "→ %@" : {
+
+    },
+    "−%lld" : {
+
+    },
+    "⌘-click links to open them" : {
+
+    }
+  },
+  "version" : "1.0"
+}

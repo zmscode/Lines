@@ -10,6 +10,7 @@ Requires macOS 27 and Xcode 27 (`build.sh` uses it even if `xcode-select` points
 just run              # build, quit any running copy, open the new build
 just build            # release build → build/Lines.app (`just build debug` for debug)
 just format           # swift-format with the project's .swift-format
+just strings          # refresh the String Catalog (Support/Localizable.xcstrings)
 ```
 
 `just` wraps `./build.sh [release|debug]`, which you can also run directly.

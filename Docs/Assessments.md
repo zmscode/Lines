@@ -63,3 +63,17 @@ environment (`accessibilityReduceMotion` and others) and
 - Dragging on the canvas (moving, resizing, corner radius, gradient handles)
   has keyboard equivalents for moving (arrow keys) and for exact values (the
   inspector), but not for the handles themselves.
+
+## Translation
+
+Lines uses Apple's String Catalogs: `Support/Localizable.xcstrings` holds
+every string the app shows (about 390). `just strings` refreshes it from the
+sources, and the build compiles it into `<language>.lproj` folders inside the
+app, where SwiftUI finds them.
+
+To add a language, open the catalog in Xcode, add the language and translate
+it. Drawing names and the SVG itself are never translated.
+
+[swift-localization](https://github.com/TelemTobi/swift-localization) adds
+type-safe accessors on top of string catalogs. SwiftUI's string literals
+already look up translations directly, so it isn't needed.

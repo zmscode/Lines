@@ -387,15 +387,15 @@ enum MaskShape: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .rect: "Rectangle"
-		case .roundedRect: "Rounded Rectangle"
-		case .circle: "Circle"
-		case .ellipse: "Ellipse"
-		case .triangle: "Triangle"
-		case .hexagon: "Hexagon"
-		case .star: "Star"
-		case .text: "Text"
-		case .selection: "Copy of Selection"
+		case .rect: String(localized: "Rectangle")
+		case .roundedRect: String(localized: "Rounded Rectangle")
+		case .circle: String(localized: "Circle")
+		case .ellipse: String(localized: "Ellipse")
+		case .triangle: String(localized: "Triangle")
+		case .hexagon: String(localized: "Hexagon")
+		case .star: String(localized: "Star")
+		case .text: String(localized: "Text")
+		case .selection: String(localized: "Copy of Selection")
 		}
 	}
 

@@ -188,13 +188,13 @@ final class CanvasController {
 		var id: String { rawValue }
 		var title: String {
 			switch self {
-			case .linearGradient: "Linear Gradient"
-			case .radialGradient: "Radial Gradient"
-			case .pattern: "Pattern"
-			case .clipPath: "Clip Path"
-			case .mask: "Mask"
-			case .blur: "Blur"
-			case .shadow: "Drop Shadow"
+			case .linearGradient: String(localized: "Linear Gradient")
+			case .radialGradient: String(localized: "Radial Gradient")
+			case .pattern: String(localized: "Pattern")
+			case .clipPath: String(localized: "Clip Path")
+			case .mask: String(localized: "Mask")
+			case .blur: String(localized: "Blur")
+			case .shadow: String(localized: "Drop Shadow")
 			}
 		}
 		var symbol: String {

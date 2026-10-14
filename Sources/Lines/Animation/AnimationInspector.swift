@@ -7,12 +7,12 @@ enum AnimationEasing: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .linear: "Linear"
-		case .ease: "Ease"
-		case .easeIn: "Ease In"
-		case .easeOut: "Ease Out"
-		case .easeInOut: "Ease In & Out"
-		case .discrete: "Step"
+		case .linear: String(localized: "Linear")
+		case .ease: String(localized: "Ease")
+		case .easeIn: String(localized: "Ease In")
+		case .easeOut: String(localized: "Ease Out")
+		case .easeInOut: String(localized: "Ease In & Out")
+		case .discrete: String(localized: "Step")
 		}
 	}
 

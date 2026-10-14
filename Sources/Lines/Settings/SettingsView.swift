@@ -8,9 +8,9 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .system: "System"
-		case .light: "Light"
-		case .dark: "Dark"
+		case .system: String(localized: "System")
+		case .light: String(localized: "Light")
+		case .dark: String(localized: "Dark")
 		}
 	}
 
@@ -39,11 +39,11 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .general: "General"
-		case .windows: "Windows"
-		case .canvas: "Canvas"
-		case .toolbar: "Toolbar"
-		case .editor: "Code Editor"
+		case .general: String(localized: "General")
+		case .windows: String(localized: "Windows")
+		case .canvas: String(localized: "Canvas")
+		case .toolbar: String(localized: "Toolbar")
+		case .editor: String(localized: "Code Editor")
 		}
 	}
 

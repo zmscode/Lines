@@ -7,8 +7,8 @@ enum EditorLayout: String, CaseIterable, Identifiable {
 	var id: String { rawValue }
 	var title: String {
 		switch self {
-		case .canvas: "Canvas"
-		case .graph: "Element Graph"
+		case .canvas: String(localized: "Canvas")
+		case .graph: String(localized: "Element Graph")
 		}
 	}
 	var symbol: String {
@@ -25,12 +25,12 @@ enum CanvasBackground: String, CaseIterable, Identifiable {
 	var id: String { rawValue }
 	var title: String {
 		switch self {
-		case .checkerboard: "Checkerboard"
-		case .white: "White"
-		case .grey: "Grey"
-		case .black: "Black"
-		case .custom: "Custom Colour"
-		case .window: "Window Background"
+		case .checkerboard: String(localized: "Checkerboard")
+		case .white: String(localized: "White")
+		case .grey: String(localized: "Grey")
+		case .black: String(localized: "Black")
+		case .custom: String(localized: "Custom Colour")
+		case .window: String(localized: "Window Background")
 		}
 	}
 
@@ -52,17 +52,17 @@ enum ShapeKind: String, CaseIterable, Identifiable {
 	var id: String { rawValue }
 	var title: String {
 		switch self {
-		case .rect: "Rectangle"
-		case .roundedRect: "Rounded Rectangle"
-		case .circle: "Circle"
-		case .ellipse: "Ellipse"
-		case .triangle: "Triangle"
-		case .hexagon: "Hexagon"
-		case .star: "Star"
-		case .line: "Line"
-		case .arrow: "Arrow"
-		case .text: "Text"
-		case .group: "Empty Group"
+		case .rect: String(localized: "Rectangle")
+		case .roundedRect: String(localized: "Rounded Rectangle")
+		case .circle: String(localized: "Circle")
+		case .ellipse: String(localized: "Ellipse")
+		case .triangle: String(localized: "Triangle")
+		case .hexagon: String(localized: "Hexagon")
+		case .star: String(localized: "Star")
+		case .line: String(localized: "Line")
+		case .arrow: String(localized: "Arrow")
+		case .text: String(localized: "Text")
+		case .group: String(localized: "Empty Group")
 		}
 	}
 	var symbol: String {
@@ -168,17 +168,17 @@ enum CanvasTool: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .select: "Select"
-		case .hand: "Hand"
-		case .rect: "Rectangle"
-		case .roundedRect: "Rounded Rectangle"
-		case .ellipse: "Ellipse"
-		case .line: "Line"
-		case .arrow: "Arrow"
-		case .triangle: "Triangle"
-		case .hexagon: "Hexagon"
-		case .star: "Star"
-		case .text: "Text"
+		case .select: String(localized: "Select")
+		case .hand: String(localized: "Hand")
+		case .rect: String(localized: "Rectangle")
+		case .roundedRect: String(localized: "Rounded Rectangle")
+		case .ellipse: String(localized: "Ellipse")
+		case .line: String(localized: "Line")
+		case .arrow: String(localized: "Arrow")
+		case .triangle: String(localized: "Triangle")
+		case .hexagon: String(localized: "Hexagon")
+		case .star: String(localized: "Star")
+		case .text: String(localized: "Text")
 		}
 	}
 

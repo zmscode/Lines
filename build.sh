@@ -55,6 +55,12 @@ fi
 cp build/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 [ -f build/icon/Assets.car ] && cp build/icon/Assets.car "$APP/Contents/Resources/Assets.car"
 
+# Translations: the String Catalog compiles to <language>.lproj folders in the
+# app's own Resources, where SwiftUI looks them up. `just strings` refreshes it.
+if [ -f Support/Localizable.xcstrings ]; then
+  xcrun xcstringstool compile Support/Localizable.xcstrings --output-directory "$APP/Contents/Resources" >/dev/null
+fi
+
 codesign --force --sign - "$APP"
 # Finder and the Dock cache icons by bundle; touching the bundle and
 # re-registering it makes them pick up a changed icon.
