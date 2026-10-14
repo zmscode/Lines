@@ -60,12 +60,12 @@ final class CanvasWebView: WKWebView {
 		return controller?.handleDroppedFiles(urls) ?? false
 	}
 
-	// Keep the context menu to what makes sense for a document canvas.
+	// The canvas's own context menu: actions on the element under the pointer
+	// (the page selects it on right-click), in place of WebKit's.
 	override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
-		menu.items.removeAll { item in
-			let id = item.identifier?.rawValue ?? ""
-			return id.contains("Reload") || id.contains("Back") || id.contains("Forward")
-		}
+		menu.removeAllItems()
+		guard let controller else { return }
+		for item in CanvasMenu.items(for: controller, editing: self) { menu.addItem(item) }
 		super.willOpenMenu(menu, with: event)
 	}
 

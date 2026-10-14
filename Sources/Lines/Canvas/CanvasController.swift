@@ -406,7 +406,8 @@ final class CanvasController {
 				bounds: b.flatMap {
 					$0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil
 				},
-				rotation: body["rotation"] as? Double ?? 0
+				rotation: body["rotation"] as? Double ?? 0,
+				count: body["count"] as? Int ?? 1
 			)
 			let moved = selection?.order != order
 			if selection != info { selection = info }

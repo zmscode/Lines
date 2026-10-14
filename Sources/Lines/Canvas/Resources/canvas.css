@@ -293,3 +293,24 @@ body[data-tool="text"] #host * {
 #sel.anim-target > * {
 	display: none;
 }
+
+/* Several selected: a box around them all, without handles, and an outline on each. */
+#sel.multi {
+	pointer-events: none;
+}
+#sel.multi > * {
+	display: none;
+}
+.multi-box {
+	border: 1px solid var(--accent);
+	opacity: 0.7;
+	pointer-events: none;
+}
+#marquee {
+	position: fixed;
+	display: none;
+	border: 1px solid var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+	pointer-events: none;
+	z-index: 5;
+}

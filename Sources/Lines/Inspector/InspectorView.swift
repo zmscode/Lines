@@ -84,6 +84,9 @@ private struct ElementInspector: View {
 	}
 
 	private var subtitle: String {
+		if selection.count > 1 {
+			return "\(selection.count) selected · fill and stroke apply to all"
+		}
 		var parts = [InspectorView.elementName(for: tag)]
 		if let b = selection.bounds {
 			parts.append("\(ScrubField.format(b.width)) × \(ScrubField.format(b.height))")

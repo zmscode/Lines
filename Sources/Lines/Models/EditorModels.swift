@@ -149,6 +149,8 @@ struct SelectionInfo: Equatable {
 	/// The element's box in its parent's coordinates.
 	var bounds: CGRect? = nil
 	var rotation: Double = 0
+	/// How many elements are selected (Shift-click or a marquee); this one is the first.
+	var count = 1
 	var isRoot: Bool { path.isEmpty }
 
 	func value(_ name: String) -> String? {

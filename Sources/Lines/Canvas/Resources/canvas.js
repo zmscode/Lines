@@ -174,10 +174,37 @@ function pickTarget(t) {
   return t;
 }
 
+// Further elements selected with Shift-click or a marquee; `selected` stays
+// the primary one the inspector shows.
+let extras = [];
+
+// Everything selected, primary first.
+function selection() {
+  if (!selected) return [];
+  extras = extras.filter((e) => e !== selected && root && root.contains(e));
+  return [selected, ...extras];
+}
+
 function select(el, fromSource) {
   selected = el && el !== root ? el : null;
+  extras = [];
   updateOverlay();
   reportSelection(false, fromSource);
+}
+
+// Several at once; the first becomes the primary selection.
+function selectMany(els) {
+  selected = els[0] || null;
+  extras = els.slice(1);
+  updateOverlay();
+  reportSelection(false);
+}
+
+// Shift-click: add to the selection, or take it out.
+function toggleSelected(el) {
+  const all = selection();
+  if (all.includes(el)) selectMany(all.filter((e) => e !== el));
+  else selectMany([...all, el]);
 }
 
 function selectByOrder(n, fromSource) {
@@ -208,6 +235,7 @@ function reportSelection(afterEdit, fromSource) {
     text: textual ? el.textContent : null,
     bounds: selected ? boundsOf(el) : null,
     rotation: selected ? rotationOf(el) : 0,
+    count: selection().length,
     fromSource: !!fromSource || !!afterEdit,
   });
 }
@@ -231,10 +259,53 @@ function place(box, el) {
 const ANIM_TAGS = new Set(["animate", "animateTransform", "animateMotion", "set"]);
 const isAnimation = (el) => !!el && ANIM_TAGS.has(el.localName);
 
+const multiBoxes = [];
+
+function placeRect(box, r) {
+  if (!r || (r.width === 0 && r.height === 0)) {
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "block";
+  box.style.left = r.left - 1 + "px";
+  box.style.top = r.top - 1 + "px";
+  box.style.width = r.width + 2 + "px";
+  box.style.height = r.height + 2 + "px";
+}
+
 function updateOverlay() {
   // A selected animation outlines the element it animates, without handles.
   const anim = isAnimation(selected);
+  const all = selection();
+  const multi = all.length > 1;
   selBox.classList.toggle("anim-target", anim);
+  selBox.classList.toggle("multi", multi);
+  // Several selected: an outline on each and one box around them all.
+  for (let i = 0; i < Math.max(multiBoxes.length, multi ? all.length : 0); i++) {
+    if (!multiBoxes[i]) {
+      const b = document.createElement("div");
+      b.className = "box multi-box";
+      selBox.parentNode.insertBefore(b, selBox);
+      multiBoxes.push(b);
+    }
+    if (multi && i < all.length) place(multiBoxes[i], all[i]);
+    else multiBoxes[i].style.display = "none";
+  }
+  if (multi) {
+    const rs = all.map((e) => e.getBoundingClientRect()).filter((r) => r.width || r.height);
+    placeRect(
+      selBox,
+      rs.length
+        ? new DOMRect(
+            Math.min(...rs.map((r) => r.left)),
+            Math.min(...rs.map((r) => r.top)),
+            Math.max(...rs.map((r) => r.right)) - Math.min(...rs.map((r) => r.left)),
+            Math.max(...rs.map((r) => r.bottom)) - Math.min(...rs.map((r) => r.top)),
+          )
+        : null,
+    );
+    return;
+  }
   place(selBox, anim ? selected.parentNode : selected);
   if (selected) {
     const r = selBox.getBoundingClientRect();
@@ -317,30 +388,116 @@ host.addEventListener("mousedown", (e) => {
   const t = pickTarget(e.target);
   let target = t;
   // Clicking inside an already-selected group moves the group; double-clicking drills in.
-  if (t && selected && selected.localName === "g" && selected.contains(t) && e.detail < 2)
-    target = selected;
-  select(target);
-  if (!target) return;
-  const parent = target.parentNode;
+  const all = selection();
+  const inGroup = all.find((s) => s.localName === "g" && t && s.contains(t));
+  if (inGroup && e.detail < 2) target = inGroup;
+  if (!target) {
+    if (!e.shiftKey) select(null);
+    beginMarquee(e);
+    e.preventDefault();
+    return;
+  }
+  if (e.shiftKey) {
+    toggleSelected(target);
+    e.preventDefault();
+    return;
+  }
+  // Dragging one of several selected moves them all.
+  if (!all.includes(target)) select(target);
   drag = {
-    el: target,
-    parent,
-    start: toLocal(parent, e.clientX, e.clientY),
+    items: selection().map((el) => ({
+      el,
+      parent: el.parentNode,
+      start: toLocal(el.parentNode, e.clientX, e.clientY),
+      geo: snapshotGeometry(el),
+    })),
     cx: e.clientX,
     cy: e.clientY,
-    geo: snapshotGeometry(target),
     moved: false,
   };
   e.preventDefault();
 });
 
 document.addEventListener("mousedown", (e) => {
-  // Clicks on the handles or the text editor keep the selection.
-  if (e.target === textEditor || selBox.contains(e.target) || docBox.contains(e.target)) return;
-  if (!host.contains(e.target) && e.button === 0) select(null);
+  // Clicks on the handles, the minimap or the text editor keep the selection.
+  if (
+    e.target === textEditor ||
+    selBox.contains(e.target) ||
+    docBox.contains(e.target) ||
+    minimap.contains(e.target)
+  )
+    return;
+  if (!host.contains(e.target) && e.button === 0) {
+    if (!e.shiftKey) select(null);
+    if (tool === "select" && !spaceDown) beginMarquee(e);
+  }
 });
 
+// Right-click selects what's under the pointer (keeping a selection it's part
+// of), so the app's context menu acts on it.
+host.addEventListener("contextmenu", (e) => {
+  if (!root) return;
+  const t = pickTarget(e.target);
+  if (!t) select(null);
+  else if (!selection().includes(t)) select(t);
+});
+
+// MARK: Marquee — drag on empty canvas to select everything it touches.
+
+let marquee = null;
+const marqueeBox = document.createElement("div");
+marqueeBox.id = "marquee";
+document.body.appendChild(marqueeBox);
+
+function beginMarquee(e) {
+  marquee = { x: e.clientX, y: e.clientY, keep: e.shiftKey ? selection() : [], moved: false };
+}
+
+function marqueeRect(e) {
+  const x = Math.min(marquee.x, e.clientX),
+    y = Math.min(marquee.y, e.clientY);
+  return new DOMRect(x, y, Math.abs(e.clientX - marquee.x), Math.abs(e.clientY - marquee.y));
+}
+
+// What a marquee picks from: the drawing's top level, looking through
+// wrapper groups that hold everything.
+function marqueeScope() {
+  let scope = root;
+  for (;;) {
+    const visual = Array.from(scope.children).filter((c) => !nonVisual.has(c.localName));
+    if (visual.length === 1 && visual[0].localName === "g") scope = visual[0];
+    else return visual;
+  }
+}
+
+function updateMarquee(e) {
+  if (!marquee.moved && Math.hypot(e.clientX - marquee.x, e.clientY - marquee.y) < 3) return;
+  marquee.moved = true;
+  const r = marqueeRect(e);
+  placeRect(marqueeBox, r);
+  const hits = marqueeScope().filter((el) => {
+    if (isHidden(el) || ANIM_TAGS.has(el.localName)) return false;
+    const b = el.getBoundingClientRect();
+    if (!b.width && !b.height) return false;
+    return b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top;
+  });
+  const merged = [...marquee.keep, ...hits.filter((h) => !marquee.keep.includes(h))];
+  selected = merged[0] || null;
+  extras = merged.slice(1);
+  updateOverlay();
+}
+
+function endMarquee() {
+  marqueeBox.style.display = "none";
+  if (marquee.moved) reportSelection(false);
+  marquee = null;
+}
+
 window.addEventListener("mousemove", (e) => {
+  if (marquee) {
+    updateMarquee(e);
+    return;
+  }
   if (!drag) {
     const t = pickTarget(e.target);
     if (t && t !== selected) place(hoverBox, t);
@@ -350,18 +507,21 @@ window.addEventListener("mousemove", (e) => {
   if (!drag.moved && Math.hypot(e.clientX - drag.cx, e.clientY - drag.cy) < 3) return;
   drag.moved = true;
   hoverBox.style.display = "none";
-  const p = toLocal(drag.parent, e.clientX, e.clientY);
-  let dx = p.x - drag.start.x,
-    dy = p.y - drag.start.y;
-  if (e.shiftKey) {
-    if (Math.abs(dx) > Math.abs(dy)) dy = 0;
-    else dx = 0;
+  // Lock the axis from the primary element's movement, then move each in
+  // its own parent's coordinates.
+  const first = drag.items[0];
+  const p0 = toLocal(first.parent, e.clientX, e.clientY);
+  const lockX = e.shiftKey && Math.abs(p0.x - first.start.x) <= Math.abs(p0.y - first.start.y);
+  const lockY = e.shiftKey && !lockX;
+  for (const item of drag.items) {
+    const p = toLocal(item.parent, e.clientX, e.clientY);
+    applyOffset(item.el, item.geo, lockX ? 0 : p.x - item.start.x, lockY ? 0 : p.y - item.start.y);
   }
-  applyOffset(drag.el, drag.geo, dx, dy);
   updateOverlay();
 });
 
 window.addEventListener("mouseup", () => {
+  if (marquee) endMarquee();
   if (drag && drag.moved) commit("Move");
   drag = null;
 });
@@ -401,7 +561,7 @@ document.addEventListener("keydown", (e) => {
     ArrowDown: [0, step],
   }[e.key];
   if (d && !e.metaKey) {
-    applyOffset(selected, snapshotGeometry(selected), d[0], d[1]);
+    for (const el of selection()) applyOffset(el, snapshotGeometry(el), d[0], d[1]);
     updateOverlay();
     commit("Nudge", "nudge");
     e.preventDefault();
@@ -422,6 +582,7 @@ function setAttr(name, value, coalesce) {
   if (!el || !name) return;
   try {
     setAttrNS(el, name, value);
+    for (const other of extras) if (root.contains(other)) setAttrNS(other, name, value);
   } catch (e) {
     return;
   }
@@ -432,8 +593,14 @@ function setAttr(name, value, coalesce) {
 
 // Sets a paint and its opacity together (fill + fill-opacity), as one undo step.
 function setPaint(name, color, opacity, coalesce) {
-  const el = selected || root;
-  if (!el) return;
+  if (!root) return;
+  const all = selection().length ? selection() : [root];
+  for (const el of all) paintOne(el, name, color, opacity);
+  updateOverlay();
+  commit(`Change ${label(name)}`, coalesce ? `paint:${name}` : null);
+}
+
+function paintOne(el, name, color, opacity) {
   el.setAttribute(name, color);
   // An inline style wins over the attribute; drop it so the change shows.
   if (el.style) {
@@ -451,8 +618,6 @@ function setPaint(name, color, opacity, coalesce) {
   const opacityAttr = name + "-opacity";
   if (opacity == null || opacity >= 0.999) el.removeAttribute(opacityAttr);
   else el.setAttribute(opacityAttr, Math.round(opacity * 100) / 100);
-  updateOverlay();
-  commit(`Change ${label(name)}`, coalesce ? `paint:${name}` : null);
 }
 
 function removeAttr(name) {
@@ -666,20 +831,25 @@ function addImage(dataURL, width, height) {
 }
 
 function deleteSelected() {
-  if (!selected) return;
+  const all = selection();
+  if (!all.length) return;
   const parent = selected.parentNode;
-  removeWithWhitespace(selected);
-  select(parent !== root ? parent : null);
+  for (const el of all) if (root.contains(el)) removeWithWhitespace(el);
+  select(all.length === 1 && parent !== root && root.contains(parent) ? parent : null);
   commit("Delete");
 }
 
 function duplicateSelected() {
-  if (!selected) return;
-  const copy = selected.cloneNode(true);
-  if (copy.id) copy.removeAttribute("id");
-  insert(copy, selected.parentNode, selected.nextSibling);
-  applyOffset(copy, snapshotGeometry(copy), 10, 10);
-  select(copy);
+  const all = selection();
+  if (!all.length) return;
+  const copies = all.map((el) => {
+    const copy = el.cloneNode(true);
+    if (copy.id) copy.removeAttribute("id");
+    insert(copy, el.parentNode, el.nextSibling);
+    applyOffset(copy, snapshotGeometry(copy), 10, 10);
+    return copy;
+  });
+  selectMany(copies);
   commit("Duplicate");
 }
 
@@ -723,6 +893,21 @@ function reorder(mode) {
 
 function groupSelected() {
   if (!selected) return;
+  const all = selection();
+  if (all.length > 1) {
+    // Group siblings of the primary in document order; others stay put.
+    const parent = selected.parentNode;
+    const members = Array.from(parent.children).filter((c) => all.includes(c));
+    const g = document.createElementNS(NS, "g");
+    insert(g, parent, members[members.length - 1].nextSibling);
+    for (const m of members) {
+      removeWithWhitespace(m);
+      insert(m, g);
+    }
+    select(g);
+    commit("Group");
+    return;
+  }
   const g = document.createElementNS(NS, "g");
   const parent = selected.parentNode,
     next = selected.nextSibling;
@@ -755,10 +940,15 @@ function ungroupSelected() {
 }
 
 function copySelected() {
-  return selected
-    ? new XMLSerializer()
-        .serializeToString(selected)
-        .replace(/ xmlns="http:\/\/www\.w3\.org\/2000\/svg"/, "")
+  const all = selection();
+  return all.length
+    ? all
+        .map((el) =>
+          new XMLSerializer()
+            .serializeToString(el)
+            .replace(/ xmlns="http:\/\/www\.w3\.org\/2000\/svg"/, ""),
+        )
+        .join("\n")
     : null;
 }
 
@@ -2317,7 +2507,8 @@ function cssAnimationsOf(el) {
     try {
       const skip = new Set(["offset", "computedOffset", "easing", "composite"]);
       const keys = new Set();
-      for (const k of a.effect.getKeyframes()) for (const p of Object.keys(k)) if (!skip.has(p)) keys.add(p);
+      for (const k of a.effect.getKeyframes())
+        for (const p of Object.keys(k)) if (!skip.has(p)) keys.add(p);
       props = Array.from(keys);
     } catch (e) {}
     return {
