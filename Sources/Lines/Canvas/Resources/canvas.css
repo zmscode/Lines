@@ -42,9 +42,6 @@ body.grey {
 body.window {
 	background: var(--window);
 }
-body.transparent {
-	background: transparent;
-}
 /* Background behind the drawing only; the window colour around it. */
 body.drawing-only {
 	background: var(--window) !important;

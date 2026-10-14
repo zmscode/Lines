@@ -140,7 +140,7 @@ function commit(action, coalesce) {
 // colour surrounds it.
 function setBackground(kind, color, drawingOnly) {
   document.body.className = kind;
-  document.body.classList.toggle("drawing-only", !!drawingOnly && kind !== "transparent");
+  document.body.classList.toggle("drawing-only", !!drawingOnly);
   document.body.style.setProperty("--custom", color || "#f2a65a");
   document.body.style.background = kind === "custom" && color && !drawingOnly ? color : "";
 }

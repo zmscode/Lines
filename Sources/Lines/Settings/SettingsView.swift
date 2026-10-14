@@ -82,7 +82,7 @@ struct SettingsEntry: Identifiable, Hashable {
 		SettingsEntry(
 			title: "Canvas background", pane: .canvas,
 			keywords: [
-				"checkerboard", "white", "black", "grey", "transparent", "custom", "colour",
+				"checkerboard", "white", "black", "grey", "custom", "colour",
 				"color",
 			]),
 		SettingsEntry(
@@ -172,9 +172,25 @@ struct SettingsView: View {
 			}
 			.toolbar(removing: .sidebarToggle)
 		} detail: {
-			detail(for: pane)
-				.navigationTitle(pane.title)
+			// The window is always "Settings"; each section has its own header.
+			VStack(alignment: .leading, spacing: 0) {
+				HStack(spacing: 10) {
+					Image(systemName: pane.symbol)
+						.font(.system(size: 15, weight: .semibold))
+						.foregroundStyle(.white)
+						.frame(width: 28, height: 28)
+						.background(
+							Brand.accent.gradient, in: .rect(cornerRadius: 7, style: .continuous))
+					Text(pane.title).font(.title2.weight(.semibold))
+				}
+				.padding(.horizontal, 24)
+				.padding(.top, 18)
+				.padding(.bottom, 2)
+				detail(for: pane)
+			}
+			.navigationTitle("Settings")
 		}
+		.navigationTitle("Settings")
 		.frame(width: 720, height: 540)
 		.tint(Brand.accent)
 		.onChange(of: query) { _, _ in
@@ -369,10 +385,9 @@ private struct CanvasSettings: View {
 					Text("Behind the drawing only")
 					Text("Fills just the drawing's area, with the window colour around it.")
 				}
-				.disabled(background == .transparent)
 			} footer: {
 				SettingsFootnote(
-					"The background is only what Lines shows behind your drawing; it's never saved into the file. Transparent lets the desktop show through. Behind the drawing only keeps the window's own colour around the drawing's edges, like a page on a desk."
+					"The background is only what Lines shows behind your drawing; it's never saved into the file. Behind the drawing only keeps the window's own colour around the drawing's edges, like a page on a desk."
 				)
 			}
 		}
@@ -507,13 +522,7 @@ private struct EditorSettings: View {
 	@ViewBuilder
 	private var text: some View {
 		Section {
-			Picker("Font", selection: $fontName) {
-				Text(CodeFont.systemName).tag("")
-				Divider()
-				ForEach(CodeFont.families, id: \.self) { family in
-					Text(family).font(.custom(family, size: 13)).tag(family)
-				}
-			}
+			CodeFontPicker(fontName: $fontName)
 			LabeledContent("Font size") {
 				Stepper(value: $fontSize, in: 9...24, step: 1) {
 					Text("\(Int(fontSize)) pt").monospacedDigit()
@@ -618,5 +627,117 @@ private struct ToolbarButtonsSettings: View {
 		Toggle(isOn: $graph) { Label("Graph", systemImage: EditorLayout.graph.symbol) }
 		Toggle(isOn: $timeline) { Label("Animations", systemImage: "film.stack") }
 		Toggle(isOn: $changes) { Label("Changes", systemImage: "plusminus") }
+	}
+}
+
+/// The code font: a few good defaults, then (if you ask) any fixed-width
+/// font installed on this Mac.
+private struct CodeFontPicker: View {
+	@Binding var fontName: String
+	@State private var choosingOther = false
+
+	/// Picked only to open the installed-fonts sheet.
+	private static let other = "\u{1}other"
+
+	/// Defaults that are on every Mac, then popular coding fonts if installed.
+	private static var defaults: [String] {
+		let builtIn = ["Menlo", "Monaco", "Courier New"]
+		let popular = [
+			"JetBrains Mono", "Fira Code", "Source Code Pro", "Cascadia Code", "IBM Plex Mono",
+			"Hack", "Iosevka", "Berkeley Mono", "Input Mono",
+		]
+		let installed = Set(NSFontManager.shared.availableFontFamilies)
+		return builtIn + popular.filter(installed.contains)
+	}
+
+	var body: some View {
+		Picker(
+			"Font",
+			selection: Binding(
+				get: { fontName },
+				set: { new in
+					if new == Self.other { choosingOther = true } else { fontName = new }
+				})
+		) {
+			Text(CodeFont.systemName).tag("")
+			ForEach(Self.defaults, id: \.self) { family in
+				Text(family).font(.custom(family, size: 13)).tag(family)
+			}
+			if !fontName.isEmpty && !Self.defaults.contains(fontName) {
+				Text(fontName).font(.custom(fontName, size: 13)).tag(fontName)
+			}
+			Divider()
+			Text("Other Installed Font…").tag(Self.other)
+		}
+		.sheet(isPresented: $choosingOther) {
+			InstalledFontSheet(current: fontName) { chosen in
+				if let chosen { fontName = chosen }
+				choosingOther = false
+			}
+		}
+	}
+}
+
+/// Asks before listing the fixed-width fonts on this Mac, then lets you pick one.
+private struct InstalledFontSheet: View {
+	var current: String
+	var done: (String?) -> Void
+
+	@State private var families: [String]?
+	@State private var query = ""
+	@State private var selection: String?
+
+	private var shown: [String] {
+		guard let families else { return [] }
+		let q = query.trimmingCharacters(in: .whitespaces)
+		guard !q.isEmpty else { return families }
+		return families.compactMap { f in FuzzyMatch.match(q, in: f).map { (f, $0.score) } }
+			.sorted { $0.1 > $1.1 }.map(\.0)
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 12) {
+			Text("Use a Font Installed on This Mac").font(.headline)
+			if families == nil {
+				Text(
+					"Lines can list the fixed-width fonts installed on your Mac, including ones from other apps. Only fixed-width fonts are shown, so code lines up."
+				)
+				.foregroundStyle(.secondary)
+				.fixedSize(horizontal: false, vertical: true)
+				Spacer()
+				HStack {
+					Spacer()
+					Button("Cancel") { done(nil) }
+						.keyboardShortcut(.cancelAction)
+					Button("Show Installed Fonts") { families = CodeFont.families }
+						.keyboardShortcut(.defaultAction)
+				}
+			} else {
+				TextField("Search", text: $query)
+					.textFieldStyle(.roundedBorder)
+				List(shown, id: \.self, selection: $selection) { family in
+					VStack(alignment: .leading, spacing: 2) {
+						Text(family).font(.callout.weight(.medium))
+						Text("<rect width=\"24\"/>")
+							.font(.custom(family, size: 12))
+							.foregroundStyle(.secondary)
+					}
+					.tag(family)
+				}
+				.frame(minHeight: 240)
+				HStack {
+					Text("\(shown.count) fonts").font(.caption).foregroundStyle(.secondary)
+					Spacer()
+					Button("Cancel") { done(nil) }
+						.keyboardShortcut(.cancelAction)
+					Button("Use Font") { done(selection) }
+						.keyboardShortcut(.defaultAction)
+						.disabled(selection == nil)
+				}
+			}
+		}
+		.padding(20)
+		.frame(width: 380, height: families == nil ? 200 : 440)
+		.onAppear { selection = current.isEmpty ? nil : current }
 	}
 }

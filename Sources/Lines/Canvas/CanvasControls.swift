@@ -116,7 +116,7 @@ struct BackgroundSwatch: View {
 	var body: some View {
 		ZStack {
 			switch background {
-			case .checkerboard, .transparent:
+			case .checkerboard:
 				Swatch(colour: nil, opacity: 1, isNone: false, showsSlash: false)
 			case .white: Color.white
 			case .grey: Color(white: 0.56)

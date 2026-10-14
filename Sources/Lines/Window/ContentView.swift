@@ -33,8 +33,6 @@ struct ContentView: View {
 	@AppStorage(ToolbarButtons.timeline) private var toolbarShowsTimeline = true
 	@AppStorage(ToolbarButtons.changes) private var toolbarShowsChanges = true
 
-	private var isTransparent: Bool { background == .transparent && controller.layout == .canvas }
-
 	/// Floating panel sizes; the canvas keeps the drawing clear of them.
 	static let panelMargin: CGFloat = 12
 	static let layersWidth: CGFloat = 264
@@ -49,20 +47,6 @@ struct ContentView: View {
 
 	var body: some View {
 		editor
-			.background(WindowTransparency(isTransparent: isTransparent))
-			// A see-through window keeps a solid title bar and toolbar.
-			.background {
-				if isTransparent {
-					// Zero high at the top of the content; ignoring the safe area
-					// stretches it up under the toolbar and title.
-					VStack(spacing: 0) {
-						Rectangle().fill(.bar).frame(height: 0).ignoresSafeArea(edges: .top)
-						Spacer(minLength: 0)
-					}
-				}
-			}
-			// A see-through window would otherwise take the toolbar with it.
-			.toolbarBackgroundVisibility(isTransparent ? .visible : .automatic, for: .windowToolbar)
 			.tint(Brand.accent)
 			.toolbar { toolbar }
 			.toolbarRole(.editor)

@@ -20,7 +20,8 @@ enum EditorLayout: String, CaseIterable, Identifiable {
 }
 
 enum CanvasBackground: String, CaseIterable, Identifiable {
-	case checkerboard, white, grey, black, custom, window, transparent
+	// A saved "transparent" (no longer offered) falls back to the default.
+	case checkerboard, white, grey, black, custom, window
 	var id: String { rawValue }
 	var title: String {
 		switch self {
@@ -30,7 +31,6 @@ enum CanvasBackground: String, CaseIterable, Identifiable {
 		case .black: "Black"
 		case .custom: "Custom Colour"
 		case .window: "Window Background"
-		case .transparent: "Transparent"
 		}
 	}
 
