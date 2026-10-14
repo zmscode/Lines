@@ -66,7 +66,11 @@ struct GraphView: View {
 			GraphNodeView(node: node, controller: controller)
 		} overlay: {
 			Background(variant: .dots, color: .secondary.opacity(0.35))
-			MiniMap(selectedNodeColor: .accentColor, position: .bottomLeft)
+			MiniMap(
+				nodeColor: .secondary.opacity(0.45), selectedNodeColor: Brand.accent,
+				nodeBorderRadius: 2, width: 168, height: 112, position: .bottomLeft
+			)
+			.floating(accent: Brand.accent)
 		}
 		.background(GraphNavigation(flow: flow))
 		.overlay(alignment: .top) {

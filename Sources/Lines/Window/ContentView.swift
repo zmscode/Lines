@@ -5,10 +5,14 @@ struct ContentView: View {
 	var document: SVGDocument
 
 	@State private var controller = CanvasController()
+	/// Set once the window has restored its panels, so restoring them doesn't
+	/// count as the user opening the code or graph.
+	@State private var isLoaded = false
 	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
 	@Environment(\.undoManager) private var undoManager
 	@Environment(\.dismissWindow) private var dismissWindow
+	@Environment(\.openDocument) private var openDocument
 
 	@AppStorage("canvasBackground") private var background: CanvasBackground = .checkerboard
 	@AppStorage(CanvasBackground.customColourKey) private var customColour = "#f2a65a"
@@ -48,7 +52,20 @@ struct ContentView: View {
 				controller.showsCode = showsCodeByDefault
 				controller.showsInspector = savedShowsInspector
 				controller.undoManager = undoManager
+				controller.openDocuments = { urls in
+					for url in urls {
+						Task {
+							do { try await openDocument(at: url) } catch {
+								NSAlert(error: error).runModal()
+							}
+						}
+					}
+				}
 				updateInsets()
+				Task {
+					try? await Task.sleep(for: .milliseconds(300))
+					isLoaded = true
+				}
 			}
 			.onChange(of: undoManager) { _, new in controller.undoManager = new }
 			.onChange(of: controller.wantsInspector) { _, wants in
@@ -60,7 +77,13 @@ struct ContentView: View {
 			.onChange(of: documentFrameShown, initial: true) { _, shown in
 				controller.setDocumentFrame(shown)
 			}
-			.onChange(of: controller.layout) { _, _ in updateInsets() }
+			.onChange(of: controller.layout) { _, layout in
+				if layout == .graph && isLoaded { closeSidePanels() }
+				updateInsets()
+			}
+			.onChange(of: controller.showsCode) { _, shows in
+				if shows && isLoaded { closeSidePanels() }
+			}
 			.onChange(of: controller.showsTimeline, initial: true) { _, shows in
 				controller.setTimelineActive(shows)
 				updateInsets()
@@ -83,6 +106,15 @@ struct ContentView: View {
 	private var documentFrameShown: Bool {
 		controller.showsInspector && controller.layout == .canvas
 			&& (controller.selection?.isRoot ?? false)
+	}
+
+	/// The node and code editors want the room: layers and the inspector make
+	/// way when either opens.
+	private func closeSidePanels() {
+		withAnimation(Self.panelAnimation) {
+			controller.showsLayers = false
+			controller.showsInspector = false
+		}
 	}
 
 	private func updateInsets() {
@@ -126,6 +158,9 @@ struct ContentView: View {
 			if controller.layout == .graph {
 				GraphView(controller: controller)
 					.transition(.opacity)
+					.dropDestination(for: URL.self) { urls, _ in
+						controller.handleDroppedFiles(urls.filter(CanvasController.isSVG))
+					}
 			}
 			if controller.layout == .canvas {
 				CanvasControls(controller: controller)

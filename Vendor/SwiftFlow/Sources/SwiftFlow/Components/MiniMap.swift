@@ -50,6 +50,16 @@ public struct MiniMap<NodeContent: View>: View {
   public var zoomable: Bool
   public var position: PanelPosition
   public var nodeContent: ((MiniMapNodeProps) -> NodeContent)?
+  /// Lines: a floating Liquid Glass card with an accent viewport, a zoom
+  /// badge, and the map hidden while everything fits in view.
+  var floatingAccent: Color?
+
+  /// Draws the map as a floating glass card, matching an app's own overview.
+  public func floating(accent: Color) -> Self {
+    var copy = self
+    copy.floatingAccent = accent
+    return copy
+  }
 
   /// Creates a MiniMap with custom node rendering.
   public init(
@@ -119,24 +129,65 @@ public struct MiniMap<NodeContent: View>: View {
     let rect = currentLayout.bounds
     let b = (minX: rect.minX, minY: rect.minY, maxX: rect.maxX, maxY: rect.maxY)
 
-    ZStack(alignment: .topLeading) {
-      RoundedRectangle(cornerRadius: 6)
-        .fill(maskColor.opacity(0.9))
+    let radius: CGFloat = floatingAccent == nil ? 6 : 8
+    let map = ZStack(alignment: .topLeading) {
+      RoundedRectangle(cornerRadius: radius)
+        .fill(floatingAccent == nil ? maskColor.opacity(0.9) : Color.gray.opacity(0.12))
         .overlay(
-          RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.2), lineWidth: 1))
+          RoundedRectangle(cornerRadius: radius).stroke(Color.gray.opacity(0.2), lineWidth: 1))
 
       edgesLayer(scale: s, bounds: b)
       nodesLayer(scale: s, bounds: b)
       viewportIndicator(scale: s, bounds: b)
     }
     .frame(width: max(width, 1), height: max(height, 1))
-    .clipShape(RoundedRectangle(cornerRadius: 6))
+    .clipShape(RoundedRectangle(cornerRadius: radius))
     .contentShape(Rectangle())
     .gesture(pannable && flowState.isInteractive ? minimapDragGesture(layout: currentLayout) : nil)
     .simultaneousGesture(zoomable && flowState.isInteractive ? minimapZoomGesture : nil)
     .accessibilityLabel("Flow overview")
+
+    Group {
+      if floatingAccent != nil {
+        map
+          .overlay(alignment: .bottomTrailing) {
+            Text("\(Int((flowState.viewport.zoom * 100).rounded()))%")
+              .font(.system(size: 10, weight: .semibold).monospacedDigit())
+              .foregroundStyle(.white)
+              .padding(.horizontal, 5)
+              .padding(.vertical, 1)
+              .background(.black.opacity(0.55), in: .rect(cornerRadius: 5))
+              .padding(4)
+              .allowsHitTesting(false)
+          }
+          .padding(6)
+          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+              .stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
+          .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
+          .opacity(isOverflowing || dragLayout != nil ? 1 : 0)
+          .scaleEffect(isOverflowing || dragLayout != nil ? 1 : 0.96, anchor: .bottomLeading)
+          .allowsHitTesting(isOverflowing || dragLayout != nil)
+          .animation(.easeOut(duration: 0.18), value: isOverflowing)
+      } else {
+        map
+      }
+    }
     .padding(12)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: panelAlignment)
+  }
+
+  /// Whether some node lies outside the visible area.
+  private var isOverflowing: Bool {
+    let zoom = max(flowState.viewport.zoom, Viewport.minZoom)
+    let visible = CGRect(
+      x: -flowState.viewport.x / zoom, y: -flowState.viewport.y / zoom,
+      width: flowState.viewSize.width / zoom, height: flowState.viewSize.height / zoom)
+    return visibleNodes.contains { node in
+      let p = nodeProps(for: node)
+      return !visible.contains(CGRect(x: p.x, y: p.y, width: p.width, height: p.height))
+    }
   }
 
   // MARK: - Subviews
@@ -226,10 +277,32 @@ public struct MiniMap<NodeContent: View>: View {
     let vpW = (flowState.viewSize.width / zoom) * s
     let vpH = (flowState.viewSize.height / zoom) * s
 
-    return RoundedRectangle(cornerRadius: 2)
-      .stroke(Color.blue.opacity(0.6), lineWidth: 1.5)
-      .frame(width: max(vpW, 1), height: max(vpH, 1))
-      .offset(x: vpX, y: vpY)
+    return Group {
+      if let accent = floatingAccent {
+        // The canvas minimap's look: an accent frame with the rest dimmed.
+        Rectangle()
+          .fill(Color.black.opacity(0.18))
+          .reverseMask {
+            RoundedRectangle(cornerRadius: 3)
+              .frame(width: max(vpW, 1), height: max(vpH, 1))
+              .offset(x: vpX, y: vpY)
+              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+          }
+          .overlay(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 3)
+              .fill(accent.opacity(0.14))
+              .overlay(RoundedRectangle(cornerRadius: 3).stroke(accent, lineWidth: 1.5))
+              .frame(width: max(vpW, 1), height: max(vpH, 1))
+              .offset(x: vpX, y: vpY)
+          }
+          .allowsHitTesting(false)
+      } else {
+        RoundedRectangle(cornerRadius: 2)
+          .stroke(Color.blue.opacity(0.6), lineWidth: 1.5)
+          .frame(width: max(vpW, 1), height: max(vpH, 1))
+          .offset(x: vpX, y: vpY)
+      }
+    }
   }
 
   /// Continuous drag gesture for panning the viewport via the minimap.
@@ -326,5 +399,14 @@ internal struct MiniMapLayout {
   func flowPosition(at point: CGPoint) -> CGPoint {
     CGPoint(x: (point.x - padding) / scale + bounds.minX,
       y: (point.y - padding) / scale + bounds.minY)
+  }
+}
+
+extension View {
+  /// Cuts `mask` out of this view.
+  fileprivate func reverseMask<Mask: View>(@ViewBuilder _ mask: () -> Mask) -> some View {
+    self.mask {
+      Rectangle().overlay { mask().blendMode(.destinationOut) }.compositingGroup()
+    }
   }
 }

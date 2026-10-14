@@ -237,6 +237,28 @@ final class CanvasController {
 	}
 
 	/// Embeds an image file, fitted inside the drawing.
+	/// Opens SVG files in their own windows; set by the window.
+	@ObservationIgnored var openDocuments: (([URL]) -> Void)?
+
+	/// Files dropped on the viewer: SVGs open in new windows, images are placed
+	/// in the drawing. Returns whether anything was used.
+	@discardableResult
+	func handleDroppedFiles(_ urls: [URL]) -> Bool {
+		let svgs = urls.filter(Self.isSVG)
+		let images = urls.filter { url in
+			!Self.isSVG(url)
+				&& (UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false)
+		}
+		if !svgs.isEmpty { openDocuments?(svgs) }
+		for url in images { addImage(from: url) }
+		return !svgs.isEmpty || !images.isEmpty
+	}
+
+	static func isSVG(_ url: URL) -> Bool {
+		(try? url.resourceValues(forKeys: [.contentTypeKey]).contentType)?.conforms(to: .svg)
+			?? (url.pathExtension.lowercased() == "svg")
+	}
+
 	func addImage(from url: URL) {
 		guard let data = try? Data(contentsOf: url), let image = NSImage(data: data),
 			let type = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType

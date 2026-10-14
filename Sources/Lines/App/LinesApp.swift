@@ -44,6 +44,8 @@ struct LinesApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
 	func applicationWillFinishLaunching(_ notification: Notification) {
 		AppAppearance.applySaved()
+		// Tooltips appear after a short pause instead of AppKit's default second or so.
+		UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 350])
 	}
 
 	// The welcome window replaces the untitled document AppKit would otherwise open.

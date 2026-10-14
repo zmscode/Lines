@@ -39,6 +39,27 @@ final class CanvasWebView: WKWebView {
 		controller?.toggleSmartZoom(at: viewportPoint(event))
 	}
 
+	// Dropped files never navigate the page: SVGs open in their own window and
+	// images are added to the drawing.
+	private func droppedFiles(_ info: NSDraggingInfo) -> [URL] {
+		info.draggingPasteboard.readObjects(
+			forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+	}
+
+	override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+		droppedFiles(sender).isEmpty ? super.draggingEntered(sender) : .copy
+	}
+
+	override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+		droppedFiles(sender).isEmpty ? super.draggingUpdated(sender) : .copy
+	}
+
+	override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+		let urls = droppedFiles(sender)
+		guard !urls.isEmpty else { return super.performDragOperation(sender) }
+		return controller?.handleDroppedFiles(urls) ?? false
+	}
+
 	// Keep the context menu to what makes sense for a document canvas.
 	override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
 		menu.items.removeAll { item in
