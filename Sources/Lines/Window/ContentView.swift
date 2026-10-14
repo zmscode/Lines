@@ -8,6 +8,7 @@ struct ContentView: View {
 	/// Set once the window has restored its panels, so restoring them doesn't
 	/// count as the user opening the code or graph.
 	@State private var isLoaded = false
+	@State private var versionTask: Task<Void, Never>?
 	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
 	@Environment(\.undoManager) private var undoManager
@@ -113,8 +114,14 @@ struct ContentView: View {
 				if shows { controller.showsInspector = false }
 				updateInsets()
 			}
-			.onChange(of: controller.hasChanges) { _, has in
-				if !has && controller.showsChanges { controller.showsChanges = false }
+			.onChange(of: document.text) { _, text in
+				// A version per pause in editing, named after the undo action.
+				versionTask?.cancel()
+				versionTask = Task {
+					try? await Task.sleep(for: .milliseconds(700))
+					guard !Task.isCancelled else { return }
+					controller.recordVersion(text, title: undoManager?.undoActionName)
+				}
 			}
 			.onChange(of: controller.layout) { _, layout in
 				if layout == .graph && isLoaded { closeSidePanels() }
@@ -274,13 +281,16 @@ struct ContentView: View {
 		.overlay(alignment: .topTrailing) {
 			if controller.showsChanges, let original = controller.originalText {
 				ChangesPanel(
-					original: original, current: document.text,
-					revert: {
+					original: original, current: document.text, controller: controller,
+					restore: { text, name in
+						controller.preview(version: nil)
 						document.replaceText(
-							with: original, actionName: "Revert Changes",
-							undoManager: controller.undoManager)
+							with: text, actionName: name, undoManager: controller.undoManager)
 					},
-					close: { controller.showsChanges = false }
+					close: {
+						controller.preview(version: nil)
+						controller.showsChanges = false
+					}
 				)
 				.frame(width: Self.changesWidth)
 				.padding(Self.panelMargin)

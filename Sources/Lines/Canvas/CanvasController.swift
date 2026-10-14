@@ -23,7 +23,58 @@ final class CanvasController {
 	/// The changes panel, comparing the source with `originalText`.
 	var showsChanges = false
 	/// The source as the window opened it.
-	var originalText: String?
+	var originalText: String? {
+		didSet {
+			if history.isEmpty, let originalText {
+				history = [Snapshot(text: originalText, title: "Opened", date: .now)]
+			}
+		}
+	}
+
+	/// One version of the source in this window's history, like a commit.
+	struct Snapshot: Identifiable, Equatable {
+		let id = UUID()
+		var text: String
+		var title: String
+		var date: Date
+		var added = 0
+		var removed = 0
+	}
+
+	/// Versions of the source since the window opened, oldest first.
+	var history: [Snapshot] = []
+	/// The version being shown on the canvas while scrubbing the history.
+	private(set) var previewedVersion: Snapshot.ID?
+
+	/// Records the source as a new version if it changed.
+	func recordVersion(_ text: String, title: String?) {
+		guard let last = history.last, last.text != text else { return }
+		let diff = LineDiff(from: last.text, to: text)
+		history.append(
+			Snapshot(
+				text: text, title: title.flatMap { $0.isEmpty ? nil : $0 } ?? "Edit", date: .now,
+				added: diff.added, removed: diff.removed))
+		if history.count > 300 { history.remove(at: 1) }  // keep "Opened"
+	}
+
+	/// Shows an older version on the canvas (locked while shown); nil returns
+	/// to the document.
+	func preview(version id: Snapshot.ID?) {
+		guard id != previewedVersion else { return }
+		previewedVersion = id
+		if let id, let snapshot = history.first(where: { $0.id == id }),
+			snapshot.id != history.last?.id
+		{
+			call("setEditable(false)")
+			renderedText = nil
+			call("setSVG(\(js(snapshot.text)))")
+		} else {
+			previewedVersion = nil
+			call("setEditable(\(isEditing))")
+			renderedText = nil
+			if let text = document?.text { render(text) }
+		}
+	}
 	/// Whether the source differs from how it was opened.
 	var hasChanges: Bool {
 		guard let originalText, let document else { return false }
@@ -72,7 +123,8 @@ final class CanvasController {
 	// MARK: Swift -> JS
 
 	func render(_ text: String) {
-		guard text != renderedText else { return }
+		// An older version is on show while the history is scrubbed.
+		guard text != renderedText, previewedVersion == nil else { return }
 		renderedText = text
 		call("setSVG(\(js(text)))")
 	}
