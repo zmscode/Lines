@@ -93,6 +93,8 @@ struct ContentView: View {
 			.onChange(of: codeWidth) { _, _ in updateInsets() }
 			.onChange(of: controller.showsTimeline, initial: true) { _, shows in
 				controller.setTimelineActive(shows)
+				// Opening the timeline stops at the start; Play starts it.
+				if shows { controller.stop() }
 				updateInsets()
 			}
 			.onChange(of: controller.showsInspector) { _, shows in
