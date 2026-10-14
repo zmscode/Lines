@@ -363,6 +363,9 @@
     "Drawing" : {
 
     },
+    "Drawing, with scripts running" : {
+
+    },
     "Drop Images Here" : {
 
     },
@@ -748,6 +751,9 @@
     "Now" : {
 
     },
+    "Offline, and anything they change isn't saved." : {
+
+    },
     "On This Mac" : {
 
     },
@@ -901,6 +907,9 @@
     "Resources (%lld)" : {
 
     },
+    "Restart" : {
+
+    },
     "Restore" : {
 
     },
@@ -925,10 +934,22 @@
     "Rounded Rectangle" : {
 
     },
+    "Run Scripts" : {
+
+    },
+    "Run the drawing's scripts, cut off from the network and the rest of Lines" : {
+
+    },
+    "Run the scripts again from the start" : {
+
+    },
     "Same for All Corners" : {
 
     },
     "Scale" : {
+
+    },
+    "Scripts are running" : {
 
     },
     "Search" : {
@@ -1105,6 +1126,9 @@
     "Stop and return to the start" : {
 
     },
+    "Stop the scripts and show the drawing as it's saved" : {
+
+    },
     "Style" : {
 
     },
@@ -1136,6 +1160,12 @@
 
     },
     "The source matches that version." : {
+
+    },
+    "They're off. Run them to see the drawing as a browser would." : {
+
+    },
+    "This drawing has scripts" : {
 
     },
     "Timeline" : {

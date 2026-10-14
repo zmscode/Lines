@@ -13,6 +13,9 @@ struct ContentView: View {
 	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
 	/// The window's width, for the Layers panel's half.
+	/// The drawing's scripts are running, in preview mode (see ScriptPreview).
+	@State private var runsScripts = false
+	@State private var scriptRun = 0
 	@State private var windowWidth: CGFloat = 1000
 	@Environment(\.undoManager) private var undoManager
 	@Environment(\.dismissWindow) private var dismissWindow
@@ -220,6 +223,10 @@ struct ContentView: View {
 	private var viewer: some View {
 		ZStack {
 			canvas
+			if runsScripts {
+				ScriptPreview(text: document.text, generation: scriptRun)
+					.transition(.opacity)
+			}
 			CanvasControls(controller: controller)
 				.padding(
 					.bottom,
@@ -329,12 +336,24 @@ struct ContentView: View {
 		}
 		.animation(panelMotion, value: controller.definitionEdit?.name)
 		.overlay(alignment: .top) {
-			if !controller.isEditing && showsPreviewBadge {
-				PreviewBadge { controller.isEditing = true }
-					.padding(Self.panelMargin)
-					.transition(.move(edge: .top).combined(with: .opacity))
+			VStack(spacing: 8) {
+				if !controller.isEditing && showsPreviewBadge {
+					PreviewBadge { controller.isEditing = true }
+						.transition(.move(edge: .top).combined(with: .opacity))
+				}
+				if !controller.isEditing && ScriptPreview.hasScripts(document.text) {
+					ScriptBanner(
+						isRunning: runsScripts,
+						run: { runsScripts = true },
+						restart: { scriptRun += 1 },
+						stop: { runsScripts = false })
+				}
 			}
+			.padding(Self.panelMargin)
 		}
+		.animation(panelMotion, value: runsScripts)
+		// Scripts only run to look at the drawing; editing shows it as saved.
+		.onChange(of: controller.isEditing) { _, editing in if editing { runsScripts = false } }
 		.animation(panelMotion, value: controller.isEditing)
 		.animation(.easeInOut(duration: 0.4), value: showsPreviewBadge)
 		// The badge is a reminder, not a fixture: it fades after a few seconds
