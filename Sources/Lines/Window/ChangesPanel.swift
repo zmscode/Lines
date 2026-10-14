@@ -132,24 +132,11 @@ struct ChangesPanel: View {
 
 	private var timeline: some View {
 		VStack(alignment: .leading, spacing: 0) {
-			if history.count > 1 {
-				scrubber
-					.padding(.horizontal, 14)
-					.padding(.bottom, 10)
-			}
 			ScrollView {
-				LazyVStack(alignment: .leading, spacing: 0) {
-					ForEach(Array(history.enumerated().reversed()), id: \.element.id) {
-						index, snapshot in
-						VersionRow(
-							snapshot: snapshot, isLatest: index == history.count - 1,
-							isFirst: index == 0,
-							isSelected: snapshot.id == (selected ?? history.last?.id)
-						) {
-							select(snapshot.id)
-						}
-					}
-				}
+				CommitGraph(
+					history: history, selected: selected ?? history.last?.id,
+					select: select
+				)
 				.padding(.horizontal, 8)
 				.padding(.bottom, 8)
 			}
@@ -174,33 +161,6 @@ struct ChangesPanel: View {
 				.padding(.horizontal, 14)
 				.padding(.vertical, 8)
 			}
-		}
-	}
-
-	/// Drag along the history to watch the drawing change on the canvas.
-	private var scrubber: some View {
-		let count = history.count
-		let index = history.firstIndex { $0.id == selected } ?? (count - 1)
-		return VStack(alignment: .leading, spacing: 6) {
-			HStack {
-				Text(index == count - 1 ? "Now" : history[index].title)
-					.font(.callout.weight(.medium))
-					.lineLimit(1)
-				Spacer()
-				Text(index == count - 1 ? "\(count) versions" : "\(index + 1) of \(count)")
-					.font(.caption.monospacedDigit())
-					.foregroundStyle(.secondary)
-			}
-			VersionScrubber(count: count, index: index) { new in
-				select(history[new].id)
-			}
-			HStack {
-				Text("Opened")
-				Spacer()
-				Text("Now")
-			}
-			.font(.caption2)
-			.foregroundStyle(.tertiary)
 		}
 	}
 
@@ -253,75 +213,6 @@ struct ChangesPanel: View {
 	}
 }
 
-/// One version in the timeline: a dot on a line, like `git log --graph`.
-private struct VersionRow: View {
-	var snapshot: CanvasController.Snapshot
-	var isLatest: Bool
-	var isFirst: Bool
-	var isSelected: Bool
-	var select: () -> Void
-
-	@State private var isHovered = false
-
-	var body: some View {
-		Button(action: select) {
-			HStack(alignment: .center, spacing: 10) {
-				ZStack {
-					// The line through the versions, open at the ends.
-					VStack(spacing: 0) {
-						Rectangle().fill(isLatest ? .clear : Color.secondary.opacity(0.35))
-						Rectangle().fill(isFirst ? .clear : Color.secondary.opacity(0.35))
-					}
-					.frame(width: 2)
-					Circle()
-						.fill(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.background))
-						.overlay {
-							Circle().strokeBorder(
-								isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary),
-								lineWidth: 2)
-						}
-						.frame(width: 11, height: 11)
-				}
-				.frame(width: 14)
-				VStack(alignment: .leading, spacing: 2) {
-					HStack(spacing: 6) {
-						Text(snapshot.title).fontWeight(isSelected ? .semibold : .regular)
-						if isLatest {
-							Text("Now")
-								.font(.caption2.weight(.semibold))
-								.padding(.horizontal, 5)
-								.padding(.vertical, 1)
-								.background(.tint.opacity(0.18), in: .capsule)
-						}
-					}
-					HStack(spacing: 6) {
-						Text(snapshot.date, format: .relative(presentation: .named))
-						if snapshot.added > 0 { Text("+\(snapshot.added)").foregroundStyle(.green) }
-						if snapshot.removed > 0 {
-							Text("−\(snapshot.removed)").foregroundStyle(.red)
-						}
-					}
-					.font(.caption)
-					.foregroundStyle(.secondary)
-				}
-				Spacer(minLength: 0)
-			}
-			.padding(.horizontal, 6)
-			.frame(height: 44)
-			.background(
-				isSelected
-					? AnyShapeStyle(.tint.opacity(0.12))
-					: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
-				in: .rect(cornerRadius: 8, style: .continuous)
-			)
-			.contentShape(.rect)
-		}
-		.buttonStyle(.plain)
-		.onHover { isHovered = $0 }
-		.help(isLatest ? "The current version" : "Show this version on the canvas")
-	}
-}
-
 private struct DiffRow: View {
 	var row: LineDiff.Row
 
@@ -368,75 +259,169 @@ private struct DiffRow: View {
 	}
 }
 
-/// A track of version dots with a marker you drag between them.
-private struct VersionScrubber: View {
-	var count: Int
-	var index: Int
-	var select: (Int) -> Void
+/// The history as `git log --graph`: newest at the top, one continuous rail
+/// with a dot per version. Click a version, or drag along the rail to scrub
+/// through them; the canvas shows each. The stretch from the chosen version
+/// up to Now is tinted.
+private struct CommitGraph: View {
+	var history: [CanvasController.Snapshot]
+	var selected: CanvasController.Snapshot.ID?
+	var select: (CanvasController.Snapshot.ID) -> Void
 
-	@State private var isDragging = false
+	static let rowHeight: CGFloat = 54
+	static let railX: CGFloat = 16
+
+	/// Newest first.
+	private var rows: [CanvasController.Snapshot] { history.reversed() }
+	private var selectedRow: Int { rows.firstIndex { $0.id == selected } ?? 0 }
 
 	var body: some View {
-		GeometryReader { geo in
-			let inset: CGFloat = 8
-			let width = max(1, geo.size.width - inset * 2)
-			let step = count > 1 ? width / CGFloat(count - 1) : 0
-			let x = { (i: Int) in inset + CGFloat(i) * step }
-			ZStack(alignment: .leading) {
-				// The track: done to the marker, still to come after it.
-				Capsule()
-					.fill(.quaternary)
-					.frame(height: 4)
-					.padding(.horizontal, inset)
-				Capsule()
-					.fill(.tint.opacity(0.5))
-					.frame(width: max(0, x(index) - inset), height: 4)
-					.offset(x: inset)
-				// A dot per version, unless there are too many to tell apart.
-				if step >= 6 {
-					ForEach(0..<count, id: \.self) { i in
-						Circle()
-							.fill(
-								i <= index
-									? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary.opacity(0.5))
-							)
-							.frame(width: 6, height: 6)
-							.position(x: x(i), y: geo.size.height / 2)
-					}
-				}
-				// The marker.
-				Circle()
-					.fill(.background)
-					.overlay { Circle().strokeBorder(.tint, lineWidth: 3) }
-					.frame(width: isDragging ? 18 : 15, height: isDragging ? 18 : 15)
-					.shadow(color: .black.opacity(0.2), radius: 2, y: 1)
-					.position(x: x(index), y: geo.size.height / 2)
-					.animation(.snappy(duration: 0.15), value: index)
+		let count = rows.count
+		VStack(spacing: 0) {
+			ForEach(Array(rows.enumerated()), id: \.element.id) { row, snapshot in
+				CommitRow(
+					snapshot: snapshot, isNow: row == 0, isSelected: row == selectedRow,
+					isAhead: row < selectedRow
+				) { select(snapshot.id) }
+				.frame(height: Self.rowHeight)
 			}
-			.contentShape(.rect)
-			.gesture(
-				DragGesture(minimumDistance: 0)
-					.onChanged { value in
-						isDragging = true
-						guard count > 1 else { return }
-						let i = Int(((value.location.x - inset) / step).rounded())
-						let clamped = min(max(i, 0), count - 1)
-						if clamped != index { select(clamped) }
-					}
-					.onEnded { _ in isDragging = false }
-			)
 		}
-		.frame(height: 22)
-		.accessibilityElement()
-		.accessibilityLabel("Version")
-		.accessibilityValue("\(index + 1) of \(count)")
+		.background(alignment: .topLeading) {
+			// The rail: dot to dot, tinted from the chosen version up to Now.
+			if count > 1 {
+				let top = Self.rowHeight / 2
+				let length = CGFloat(count - 1) * Self.rowHeight
+				ZStack(alignment: .top) {
+					Capsule().fill(.quaternary).frame(width: 3, height: length)
+					Capsule().fill(.tint.opacity(0.6))
+						.frame(width: 3, height: CGFloat(selectedRow) * Self.rowHeight)
+				}
+				.offset(x: Self.railX - 1.5, y: top)
+			}
+		}
+		.overlay(alignment: .leading) {
+			// Dragging along the rail scrubs.
+			Color.clear
+				.frame(width: Self.railX * 2)
+				.contentShape(.rect)
+				.gesture(
+					DragGesture(minimumDistance: 0)
+						.onChanged { value in
+							let row = Int(value.location.y / Self.rowHeight)
+							let clamped = min(max(row, 0), count - 1)
+							if clamped != selectedRow { select(rows[clamped].id) }
+						}
+				)
+				.help("Drag along the line to scrub through the versions")
+		}
+		.accessibilityElement(children: .contain)
 		.accessibilityAdjustableAction { direction in
 			switch direction {
-			case .increment: if index < count - 1 { select(index + 1) }
-			case .decrement: if index > 0 { select(index - 1) }
+			case .increment: if selectedRow > 0 { select(rows[selectedRow - 1].id) }
+			case .decrement: if selectedRow < count - 1 { select(rows[selectedRow + 1].id) }
 			@unknown default: break
 			}
 		}
-		.help("Drag through the history; the canvas shows each version")
+	}
+}
+
+/// One version: its dot on the rail, title and short id, when, and a
+/// `git --stat`-style bar of lines added and removed.
+private struct CommitRow: View {
+	var snapshot: CanvasController.Snapshot
+	var isNow: Bool
+	var isSelected: Bool
+	/// Newer than the version being shown.
+	var isAhead: Bool
+	var select: () -> Void
+
+	@State private var isHovered = false
+
+	var body: some View {
+		Button(action: select) {
+			HStack(spacing: 10) {
+				dot.frame(width: CommitGraph.railX * 2)
+				VStack(alignment: .leading, spacing: 3) {
+					HStack(spacing: 6) {
+						Text(snapshot.title)
+							.fontWeight(isSelected ? .semibold : .regular)
+							.lineLimit(1)
+						if isNow {
+							Text("Now")
+								.font(.caption2.weight(.semibold))
+								.padding(.horizontal, 5)
+								.padding(.vertical, 1)
+								.background(.tint.opacity(0.18), in: .capsule)
+						}
+					}
+					HStack(spacing: 6) {
+						Text(snapshot.shortID)
+							.font(.caption.monospaced())
+							.foregroundStyle(.tertiary)
+						Text(snapshot.date, format: .relative(presentation: .named))
+							.font(.caption)
+							.foregroundStyle(.secondary)
+					}
+				}
+				Spacer(minLength: 6)
+				if snapshot.added + snapshot.removed > 0 { stat }
+			}
+			.padding(.trailing, 8)
+			.frame(maxHeight: .infinity)
+			.background(
+				isSelected
+					? AnyShapeStyle(.tint.opacity(0.12))
+					: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
+				in: .rect(cornerRadius: 8, style: .continuous)
+			)
+			.opacity(isAhead ? 0.75 : 1)
+			.contentShape(.rect)
+		}
+		.buttonStyle(.plain)
+		.onHover { isHovered = $0 }
+		.help(isNow ? "The current version" : "Show this version on the canvas")
+		.accessibilityLabel(
+			"\(snapshot.title), \(snapshot.added) lines added, \(snapshot.removed) removed"
+		)
+		.accessibilityAddTraits(isSelected ? .isSelected : [])
+	}
+
+	/// A filled dot for the chosen version, a ringed one for Now, hollow otherwise.
+	private var dot: some View {
+		ZStack {
+			Circle()
+				.fill(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.background))
+				.frame(width: 12, height: 12)
+			Circle()
+				.strokeBorder(
+					isSelected || isNow ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary),
+					lineWidth: 2
+				)
+				.frame(width: 12, height: 12)
+			if isNow && !isSelected {
+				Circle().strokeBorder(.tint.opacity(0.35), lineWidth: 2).frame(
+					width: 20, height: 20)
+			}
+		}
+	}
+
+	/// "+12 −3" and five blocks split between them, like `git diff --stat`.
+	private var stat: some View {
+		let total = snapshot.added + snapshot.removed
+		let green = total == 0 ? 0 : Int((Double(snapshot.added) / Double(total) * 5).rounded())
+		return VStack(alignment: .trailing, spacing: 3) {
+			HStack(spacing: 4) {
+				if snapshot.added > 0 { Text("+\(snapshot.added)").foregroundStyle(.green) }
+				if snapshot.removed > 0 { Text("−\(snapshot.removed)").foregroundStyle(.red) }
+			}
+			.font(.caption.monospacedDigit())
+			HStack(spacing: 1.5) {
+				ForEach(0..<5, id: \.self) { i in
+					RoundedRectangle(cornerRadius: 1)
+						.fill(i < green ? Color.green : Color.red)
+						.frame(width: 5, height: 5)
+				}
+			}
+		}
 	}
 }

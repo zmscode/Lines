@@ -41,12 +41,31 @@ final class CanvasController {
 		var date: Date
 		var added = 0
 		var removed = 0
+		/// A short, git-style id for the version's text.
+		var shortID: String { Self.shortID(of: text) }
+
+		/// FNV-1a over the text, as seven hex digits.
+		static func shortID(of text: String) -> String {
+			var hash: UInt32 = 2_166_136_261
+			for byte in text.utf8 {
+				hash ^= UInt32(byte)
+				hash = hash &* 16_777_619
+			}
+			return String(String(format: "%08x", hash).prefix(7))
+		}
 	}
 
 	/// Versions of the source since the window opened, oldest first.
 	var history: [Snapshot] = []
 	/// The version being shown on the canvas while scrubbing the history.
 	private(set) var previewedVersion: Snapshot.ID?
+
+	/// Starts the history over from `text`, as the file was opened.
+	func resetHistory(to text: String) {
+		originalText = text
+		history = [Snapshot(text: text, title: "Opened", date: .now)]
+		previewedVersion = nil
+	}
 
 	/// Records the source as a new version if it changed.
 	func recordVersion(_ text: String, title: String?) {

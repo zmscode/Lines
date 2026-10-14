@@ -10,6 +10,9 @@ final class SVGDocument: Document {
 	static let readableContentTypes: [UTType] = [.svg]
 
 	var text: String
+	/// The text as opened: the template for a new drawing, or the file's
+	/// contents once they've been read (which happens after the window opens).
+	private(set) var openedText: String
 
 	/// The open file's location, used for sharing and export names.
 	@ObservationIgnored weak var configuration: URLDocumentConfiguration?
@@ -19,6 +22,7 @@ final class SVGDocument: Document {
 
 	init(text: String = SVGDocument.template) {
 		self.text = text
+		self.openedText = text
 	}
 
 	// MARK: Reading and writing
@@ -38,6 +42,8 @@ final class SVGDocument: Document {
 
 	@MainActor
 	func apply(snapshot: sending String, previous: sending String?) async throws {
+		// The first read is the file as opened, not an edit of the template.
+		if previous == nil { openedText = snapshot }
 		text = snapshot
 	}
 

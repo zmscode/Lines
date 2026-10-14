@@ -57,7 +57,7 @@ struct ContentView: View {
 			.onAppear {
 				dismissWindow(id: WelcomeView.windowID)
 				controller.document = document
-				controller.originalText = document.text
+				controller.resetHistory(to: document.openedText)
 				// Files open to look at; new drawings open ready to edit.
 				controller.isEditing = !(opensFilesLocked && document.configuration?.fileURL != nil)
 				controller.layout = defaultLayout
@@ -94,6 +94,11 @@ struct ContentView: View {
 				// The changes panel takes the inspector's place.
 				if shows { controller.showsInspector = false }
 				updateInsets()
+			}
+			// The file's contents arrive after the window opens: that's the
+			// starting point, not an edit.
+			.onChange(of: document.openedText) { _, opened in
+				controller.resetHistory(to: opened)
 			}
 			.onChange(of: document.text) { _, text in
 				// A version per pause in editing, named after the undo action.
