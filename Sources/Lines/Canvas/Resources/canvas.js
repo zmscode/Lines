@@ -3092,6 +3092,232 @@ function previewImage(order, size) {
   });
 }
 
+// MARK: Impact previews — how a node changes the drawing, for the graph.
+//
+// A definition: the shapes using it, without and with it. An animation: its
+// element at the start, middle and end. An element: where it sits in the
+// drawing. Everything else is dimmed and the affected area outlined, so the
+// change stands out. Resolves to { labels, images } (PNG data URLs).
+
+function userBox(els, pad) {
+  const inv = root.getScreenCTM && root.getScreenCTM() ? root.getScreenCTM().inverse() : null;
+  let u = null;
+  for (const el of els) {
+    const r = visualRect(el);
+    if (!r || (!r.width && !r.height)) continue;
+    const pts = [
+      [r.left, r.top],
+      [r.right, r.bottom],
+    ].map(([x, y]) => (inv ? new DOMPoint(x, y).matrixTransform(inv) : { x, y }));
+    const b = {
+      x: Math.min(pts[0].x, pts[1].x),
+      y: Math.min(pts[0].y, pts[1].y),
+      r: Math.max(pts[0].x, pts[1].x),
+      b: Math.max(pts[0].y, pts[1].y),
+    };
+    u = u ? { x: Math.min(u.x, b.x), y: Math.min(u.y, b.y), r: Math.max(u.r, b.r), b: Math.max(u.b, b.b) } : b;
+  }
+  if (!u) return null;
+  const w = u.r - u.x,
+    h = u.b - u.y;
+  const p = Math.max(w, h) * pad + 2;
+  return { x: u.x - p, y: u.y - p, w: w + p * 2, h: h + p * 2 };
+}
+
+// Copies the drawing; `affected` (live elements) stay bright, the rest dims.
+function focusedClone(affected) {
+  const clone = root.cloneNode(true);
+  const keep = new Set([clone]);
+  const inside = new Set();
+  for (const el of affected) {
+    let node = clone;
+    for (const i of pathOf(el)) {
+      node = node && node.children[i];
+      if (node) keep.add(node);
+    }
+    if (node) inside.add(node);
+  }
+  const walk = (n) => {
+    for (const c of Array.from(n.children)) {
+      if (inside.has(c)) continue;
+      if (keep.has(c)) walk(c);
+      else if (!nonVisual.has(c.localName) && !["defs", "style"].includes(c.localName) && !ANIM_TAGS.has(c.localName))
+        c.setAttribute("opacity", "0.18");
+    }
+  };
+  walk(clone);
+  // Previews are still frames.
+  for (const a of Array.from(clone.querySelectorAll("animate, animateTransform, animateMotion, set"))) a.remove();
+  const twin = (el) => {
+    let node = clone;
+    for (const i of pathOf(el)) node = node && node.children[i];
+    return node;
+  };
+  return { clone, twin };
+}
+
+function outlineBox(clone, box) {
+  const r = document.createElementNS(NS, "rect");
+  const inset = Math.max(box.w, box.h) * 0.04;
+  r.setAttribute("x", box.x + inset);
+  r.setAttribute("y", box.y + inset);
+  r.setAttribute("width", Math.max(0, box.w - inset * 2));
+  r.setAttribute("height", Math.max(0, box.h - inset * 2));
+  r.setAttribute("rx", inset);
+  r.setAttribute("fill", "none");
+  r.setAttribute("stroke", getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#d9753f");
+  r.setAttribute("stroke-width", "2");
+  r.setAttribute("stroke-dasharray", "6 4");
+  r.setAttribute("vector-effect", "non-scaling-stroke");
+  clone.appendChild(r);
+}
+
+function renderClone(clone, box, size) {
+  return new Promise((resolve) => {
+    clone.setAttribute("viewBox", [box.x, box.y, box.w, box.h].join(" "));
+    clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    const ratio = box.w > 0 && box.h > 0 ? box.w / box.h : 1;
+    const W = ratio >= 1 ? size : Math.max(1, Math.round(size * ratio)),
+      H = ratio >= 1 ? Math.max(1, Math.round(size / ratio)) : size;
+    clone.setAttribute("width", W);
+    clone.setAttribute("height", H);
+    clone.removeAttribute("style");
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = W * 2;
+        canvas.height = H * 2;
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png"));
+      } catch (e) {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  });
+}
+
+// Interpolates between two values with the same shape: numbers, number
+// lists ("0 50 50") or hex colours.
+function lerpValue(a, b, t) {
+  if (a == null) return b;
+  if (b == null) return a;
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+  if (hex.test(a.trim()) && hex.test(b.trim())) {
+    const rgb = (h) => {
+      h = h.trim().slice(1);
+      if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+      return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    };
+    const x = rgb(a),
+      y = rgb(b);
+    return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  }
+  const na = a.match(/-?[\d.]+(e-?\d+)?/gi),
+    nb = b.match(/-?[\d.]+(e-?\d+)?/gi);
+  if (na && nb && na.length === nb.length) {
+    let i = 0;
+    return a.replace(/-?[\d.]+(e-?\d+)?/gi, () => {
+      const v = parseFloat(na[i]) + (parseFloat(nb[i]) - parseFloat(na[i])) * t;
+      i++;
+      return String(round(v));
+    });
+  }
+  return t < 0.5 ? a : b;
+}
+
+// An animation's value at a fraction of one pass.
+function animationValueAt(anim, t) {
+  const values = anim.getAttribute("values");
+  if (values) {
+    const list = values.split(";").map((v) => v.trim()).filter((v) => v.length);
+    if (!list.length) return null;
+    if (list.length === 1) return list[0];
+    const pos = t * (list.length - 1);
+    const i = Math.min(Math.floor(pos), list.length - 2);
+    return lerpValue(list[i], list[i + 1], pos - i);
+  }
+  const from = anim.getAttribute("from");
+  const to = anim.getAttribute("to") || anim.getAttribute("by");
+  if (from == null) return t < 0.5 ? null : to;
+  return lerpValue(from, to, t);
+}
+
+function impactPreview(order, size) {
+  const el = byOrder(order);
+  if (!root || !el) return Promise.resolve(null);
+  const name = el.localName;
+  const id = el.id;
+
+  // A definition: its users without it, then with it.
+  if (DEFINITION_TAGS.has(name) && id) {
+    const users = Array.from(root.querySelectorAll("*")).filter((u) =>
+      refsOf(u).some(([, target]) => target === id),
+    );
+    if (!users.length) {
+      return previewImage(order, size).then((img) => (img ? { labels: ["Sample — nothing uses it yet"], images: [img] } : null));
+    }
+    const box = userBox(users, name === "filter" ? 0.3 : 0.12);
+    if (!box) return Promise.resolve(null);
+    const without = focusedClone(users);
+    for (const u of users) {
+      const t = without.twin(u);
+      if (!t) continue;
+      for (const [attr, target] of refsOf(u)) {
+        if (target !== id) continue;
+        if (attr === "fill" || attr === "stroke") t.setAttribute(attr, "#c7c7cc");
+        else t.removeAttribute(attr);
+      }
+    }
+    const withIt = focusedClone(users);
+    outlineBox(without.clone, box);
+    outlineBox(withIt.clone, box);
+    return Promise.all([renderClone(without.clone, box, size), renderClone(withIt.clone, box, size)]).then(
+      (images) => ({ labels: ["Without", "With"], images }),
+    );
+  }
+
+  // An animation: its element at the start, middle and end of a pass.
+  if (ANIM_TAGS.has(name)) {
+    const href = el.getAttribute("href") || el.getAttributeNS(XLINK, "href");
+    const target = href && href[0] === "#" ? root.querySelector(`[id="${href.slice(1)}"]`) : el.parentNode;
+    if (!target || target === root) return Promise.resolve(null);
+    const frames = [0, 0.5, 1].map((t) => {
+      const f = focusedClone([target]);
+      const tw = f.twin(target);
+      const v = animationValueAt(el, t);
+      if (tw && v != null) {
+        if (name === "animateTransform") {
+          const type = el.getAttribute("type") || "translate";
+          const base = tw.getAttribute("transform") || "";
+          tw.setAttribute("transform", `${base} ${type}(${v})`.trim());
+        } else if (name !== "animateMotion") {
+          const attr = el.getAttribute("attributeName");
+          if (attr) tw.setAttribute(attr, v);
+        }
+      }
+      return f.clone;
+    });
+    const box = userBox([target], 0.45);
+    if (!box) return Promise.resolve(null);
+    frames.forEach((c) => outlineBox(c, box));
+    return Promise.all(frames.map((c) => renderClone(c, box, Math.round(size * 0.7)))).then((images) => ({
+      labels: ["Start", "Middle", "End"],
+      images,
+    }));
+  }
+
+  // An element: where it is, the rest dimmed.
+  const f = focusedClone([el]);
+  const tight = userBox([el], 0.04);
+  const area = userBox([root], 0.02) || tight;
+  if (!tight || !area) return Promise.resolve(null);
+  outlineBox(f.clone, tight);
+  return renderClone(f.clone, area, size).then((img) => (img ? { labels: ["In the drawing"], images: [img] } : null));
+}
+
 function rasterize(scale, background, type, quality) {
   return new Promise((resolve, reject) => {
     if (!root) {

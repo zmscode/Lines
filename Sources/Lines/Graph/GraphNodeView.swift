@@ -515,55 +515,93 @@ struct NodeValue: View {
 	}
 }
 
-/// After a short hover, a popover shows what the node does: the element on
-/// its own, or a sample shape using the definition, with a sentence about it.
+/// After a short hover, the graph shows how this node changes the drawing
+/// (see `NodeImpactCard`).
 private struct NodeHoverPreview: ViewModifier {
 	var data: GraphNodeData
 	var controller: CanvasController?
 
-	@State private var isShown = false
-	@State private var image: NSImage?
 	@State private var task: Task<Void, Never>?
 
 	func body(content: Content) -> some View {
-		content
-			.onHover { inside in
-				task?.cancel()
-				if inside {
-					task = Task { @MainActor in
-						try? await Task.sleep(for: .milliseconds(650))
-						guard !Task.isCancelled, let controller else { return }
-						image = await controller.previewImage(order: data.order)
-						guard !Task.isCancelled else { return }
-						isShown = true
-					}
-				} else {
-					isShown = false
+		content.onHover { inside in
+			task?.cancel()
+			guard let controller else { return }
+			if inside {
+				task = Task { @MainActor in
+					try? await Task.sleep(for: .milliseconds(500))
+					guard !Task.isCancelled else { return }
+					controller.hoveredNode = data.order
 				}
+			} else if controller.hoveredNode == data.order {
+				controller.hoveredNode = nil
 			}
-			.popover(isPresented: $isShown, arrowEdge: .trailing) {
-				VStack(alignment: .leading, spacing: 8) {
-					if let image {
-						Image(nsImage: image)
-							.resizable()
-							.interpolation(.high)
-							.aspectRatio(contentMode: .fit)
-							.frame(maxWidth: 200, maxHeight: 140)
-							.frame(maxWidth: .infinity)
-							.padding(8)
-							.background(
-								PreviewBacking(),
-								in: .rect(cornerRadius: 8, style: .continuous))
+		}
+	}
+}
+
+/// How a hovered node changes the drawing: the shapes using a definition
+/// without and with it, an animation's frames, or an element in place, with
+/// the rest of the drawing dimmed and the affected area outlined.
+struct NodeImpactCard: View {
+	var data: GraphNodeData
+	var controller: CanvasController
+
+	@State private var pictures: [(label: String, image: NSImage)] = []
+	@State private var isLoading = true
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 10) {
+			HStack(spacing: 8) {
+				Image(systemName: InspectorView.symbol(for: data.tag, isRoot: false))
+					.foregroundStyle(.tint)
+				Text(data.name).font(.headline).lineLimit(1)
+				Spacer()
+			}
+			if isLoading {
+				ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 80)
+			} else if !pictures.isEmpty {
+				HStack(alignment: .top, spacing: 8) {
+					ForEach(Array(pictures.enumerated()), id: \.offset) { index, picture in
+						if index > 0 && pictures.count == 2 {
+							Image(systemName: "arrow.right")
+								.font(.caption.weight(.semibold))
+								.foregroundStyle(.secondary)
+								.frame(maxHeight: .infinity)
+						}
+						VStack(spacing: 4) {
+							Image(nsImage: picture.image)
+								.resizable()
+								.interpolation(.high)
+								.aspectRatio(contentMode: .fit)
+								.frame(maxWidth: pictures.count > 2 ? 104 : 150, maxHeight: 130)
+								.background(
+									Color.gray.opacity(0.12),
+									in: .rect(cornerRadius: 8, style: .continuous))
+							Text(picture.label)
+								.font(.caption)
+								.foregroundStyle(
+									picture.label == "With"
+										? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+						}
 					}
-					Text(data.name).font(.headline)
-					Text(NodeDescription.of(data))
-						.font(.callout)
-						.foregroundStyle(.secondary)
-						.fixedSize(horizontal: false, vertical: true)
 				}
-				.frame(width: 232)
-				.padding(12)
+				.frame(maxWidth: .infinity)
 			}
+			Text(NodeDescription.of(data))
+				.font(.callout)
+				.foregroundStyle(.secondary)
+				.fixedSize(horizontal: false, vertical: true)
+		}
+		.padding(14)
+		.frame(width: 360)
+		.floatingPanelChrome()
+		.task(id: data) {
+			isLoading = true
+			pictures = await controller.impactPreview(order: data.order)
+			isLoading = false
+		}
+		.allowsHitTesting(false)
 	}
 }
 

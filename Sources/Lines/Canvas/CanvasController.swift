@@ -309,6 +309,28 @@ final class CanvasController {
 	}
 
 	/// Renders the drawing with WebKit, the same renderer as the canvas.
+	/// The graph node the pointer is resting on, for its impact preview.
+	var hoveredNode: Int?
+
+	/// How a node changes the drawing: labelled pictures (without/with a
+	/// definition, an animation's frames, or an element in place).
+	func impactPreview(order: Int, size: Double = 200) async -> [(label: String, image: NSImage)] {
+		guard isReady, let webView,
+			let result = try? await webView.callAsyncJavaScript(
+				"return await impactPreview(order, size)",
+				arguments: ["order": order, "size": size], contentWorld: .page),
+			let dict = result as? [String: Any],
+			let labels = dict["labels"] as? [String], let urls = dict["images"] as? [Any]
+		else { return [] }
+		return zip(labels, urls).compactMap { label, value in
+			guard let url = value as? String, let comma = url.firstIndex(of: ","),
+				let data = Data(base64Encoded: String(url[url.index(after: comma)...])),
+				let image = NSImage(data: data)
+			else { return nil }
+			return (label, image)
+		}
+	}
+
 	/// A small picture of an element on its own, or a sample shape using a
 	/// definition, for the graph's hover previews.
 	func previewImage(order: Int, size: Double = 180) async -> NSImage? {

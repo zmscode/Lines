@@ -117,6 +117,17 @@ struct GraphView: View {
 			.padding(12)
 			.padding(.leading, leadingInset)
 		}
+		.overlay(alignment: .topTrailing) {
+			if let order = controller.hoveredNode,
+				let item = graph.items.first(where: { $0.order == order })
+			{
+				NodeImpactCard(data: graph.data(for: item), controller: controller)
+					.padding(12)
+					.transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topTrailing)))
+			}
+		}
+		.animation(.easeOut(duration: 0.15), value: controller.hoveredNode)
+		.onDisappear { controller.hoveredNode = nil }
 		.overlay(alignment: .bottomTrailing) {
 			// The same zoom strip as the canvas.
 			FloatingStrip {
