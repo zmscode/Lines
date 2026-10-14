@@ -52,9 +52,11 @@ struct LayersPanel: View {
 	var body: some View {
 		if isWide {
 			HStack(spacing: 0) {
-				layers.frame(width: min(360, max(260, width * 0.45)))
+				// Half and half: the layers, and what applies to the selected one.
+				layers.frame(maxWidth: .infinity)
 				Divider()
 				LayerDetails(controller: controller) { kind in filter.kinds = [kind] }
+					.frame(maxWidth: .infinity)
 			}
 		} else {
 			layers

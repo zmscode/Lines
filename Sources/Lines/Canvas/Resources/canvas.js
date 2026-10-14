@@ -1772,9 +1772,20 @@ window.addEventListener(
 );
 
 // MARK: Panning — middle-button drag, or Space-drag like other design apps.
+// A tap of Space, without a drag, plays or pauses the animations.
 
 let pan = null,
-  spaceDown = false;
+  spaceDown = false,
+  spaceAt = 0,
+  spacePanned = false;
+
+function hasAnimations() {
+  return (
+    !!root &&
+    (!!root.querySelector("animate, animateTransform, animateMotion, set") ||
+      cssAnimations().length > 0)
+  );
+}
 
 document.addEventListener(
   "pointerdown",
@@ -1784,6 +1795,7 @@ document.addEventListener(
     // events, so selection and dragging don't react to a pan.
     e.preventDefault();
     e.stopImmediatePropagation();
+    if (spaceDown) spacePanned = true;
     pan = { id: e.pointerId, x: e.clientX, y: e.clientY, tx, ty };
     document.documentElement.setPointerCapture(e.pointerId);
     document.body.classList.add("panning");
@@ -1825,6 +1837,8 @@ document.addEventListener(
   (e) => {
     if (e.code === "Space" && !e.repeat && e.target !== textEditor) {
       spaceDown = true;
+      spaceAt = performance.now();
+      spacePanned = false;
       document.body.classList.add("space");
       e.preventDefault();
     }
@@ -1835,8 +1849,13 @@ document.addEventListener(
   "keyup",
   (e) => {
     if (e.code === "Space") {
+      const tapped = spaceDown && !spacePanned && performance.now() - spaceAt < 400;
       spaceDown = false;
       document.body.classList.remove("space");
+      if (tapped && e.target !== textEditor && hasAnimations()) {
+        if (animPaused) animPlay();
+        else animPause();
+      }
     }
   },
   true,
