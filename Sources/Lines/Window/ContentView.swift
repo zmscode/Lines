@@ -365,6 +365,17 @@ struct ContentView: View {
 
 	@ToolbarContentBuilder
 	private var toolbar: some ToolbarContent {
+		// Locked windows are for looking: just the title and Export.
+		if controller.isEditing {
+			editingToolbar
+		}
+		ToolbarItem(placement: .primaryAction) {
+			ExportButton(controller: controller, document: document)
+		}
+	}
+
+	@ToolbarContentBuilder
+	private var editingToolbar: some ToolbarContent {
 		ToolbarItemGroup(placement: .navigation) {
 			if toolbarShowsLayers {
 				Toggle(isOn: $controller.showsLayers) {
@@ -413,10 +424,6 @@ struct ContentView: View {
 				}
 				.help(controller.showsTimeline ? "Hide Timeline (⌘4)" : "Show Timeline (⌘4)")
 			}
-		}
-
-		ToolbarItem(placement: .primaryAction) {
-			ExportButton(controller: controller, document: document)
 		}
 	}
 }

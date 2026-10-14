@@ -8,7 +8,8 @@ enum TidyTreeLayout {
 	static let horizontalGap: CGFloat = 28
 	static let levelGap: CGFloat = 64
 	static let rowGap: CGFloat = 20
-	static let wrapColumns = 4
+	/// Rows of siblings wrap past about four nodes' width.
+	static let maxRowWidth: CGFloat = 1000
 	static let treeGap: CGFloat = 72
 
 	static func positions(for items: [OutlineItem], size: (OutlineItem) -> CGSize) -> [String:
@@ -35,9 +36,47 @@ enum TidyTreeLayout {
 		for item in items { sizes[item.order] = size(item) }
 		var blocks: [Int: CGSize] = [:]
 
+		/// Sibling subtrees go left to right, wrapping into rows past `width`
+		/// so a wide level becomes a compact block instead of a long strip.
+		struct Rows {
+			var rows: [[Int]] = []  // indices into the siblings
+			var size: CGSize = .zero
+		}
+		func wrap(_ sizes: [CGSize], width: CGFloat) -> Rows {
+			var result = Rows()
+			var row: [Int] = []
+			var rowWidth: CGFloat = 0
+			var rowHeights: [CGFloat] = []
+			var widest: CGFloat = 0
+			func close() {
+				guard !row.isEmpty else { return }
+				result.rows.append(row)
+				rowHeights.append(row.map { sizes[$0].height }.max()!)
+				widest = max(widest, rowWidth)
+				row = []
+				rowWidth = 0
+			}
+			for (i, s) in sizes.enumerated() {
+				let added = row.isEmpty ? s.width : rowWidth + horizontalGap + s.width
+				if !row.isEmpty && added > width { close() }
+				rowWidth = row.isEmpty ? s.width : rowWidth + horizontalGap + s.width
+				row.append(i)
+			}
+			close()
+			result.size = CGSize(
+				width: widest,
+				height: rowHeights.reduce(0, +) + CGFloat(max(0, rowHeights.count - 1)) * rowGap)
+			return result
+		}
+		/// Wide enough for a few nodes, or for the widest subtree.
+		func rowLimit(_ sizes: [CGSize], minimum: CGFloat) -> CGFloat {
+			max(minimum, sizes.map(\.width).max() ?? 0)
+		}
 		func isLeaf(_ item: OutlineItem) -> Bool { (children[item.order] ?? []).isEmpty }
-		func wraps(_ kids: [OutlineItem]) -> Bool {
-			kids.count > wrapColumns && kids.allSatisfy(isLeaf)
+		/// Children wrap only when they're all leaves; subtrees stay in one
+		/// row, so lines from a parent never pass through a row above.
+		func childLimit(_ kids: [OutlineItem], _ kidBlocks: [CGSize]) -> CGFloat {
+			kids.allSatisfy(isLeaf) ? rowLimit(kidBlocks, minimum: maxRowWidth) : .infinity
 		}
 
 		func measure(_ item: OutlineItem) -> CGSize {
@@ -48,28 +87,36 @@ enum TidyTreeLayout {
 				return own
 			}
 			let kidBlocks = kids.map(measure)
-			var width: CGFloat
-			var height: CGFloat
-			if wraps(kids) {
-				let columns = wrapColumns
-				let cellW = kidBlocks.map(\.width).max()!
-				let rows = (kids.count + columns - 1) / columns
-				let rowHeights = stride(from: 0, to: kids.count, by: columns).map { start in
-					kidBlocks[start..<min(start + columns, kids.count)].map(\.height).max()!
-				}
-				width = CGFloat(columns) * cellW + CGFloat(columns - 1) * horizontalGap
-				height = rowHeights.reduce(0, +) + CGFloat(rows - 1) * rowGap
-			} else {
-				width =
-					kidBlocks.map(\.width).reduce(0, +) + CGFloat(kids.count - 1) * horizontalGap
-				height = kidBlocks.map(\.height).max()!
-			}
-			let block = CGSize(width: max(own.width, width), height: own.height + levelGap + height)
+			let laid = wrap(kidBlocks, width: childLimit(kids, kidBlocks))
+			let block = CGSize(
+				width: max(own.width, laid.size.width),
+				height: own.height + levelGap + laid.size.height)
 			blocks[item.order] = block
 			return block
 		}
 
 		var result: [String: XYPosition] = [:]
+
+		/// Places rows of sibling blocks, each row centred in `width`.
+		func placeRows(
+			_ kids: [OutlineItem], x: CGFloat, y: CGFloat, width: CGFloat, limit: CGFloat,
+			gap: CGFloat = rowGap
+		) {
+			let kidBlocks = kids.map { blocks[$0.order]! }
+			let laid = wrap(kidBlocks, width: limit)
+			var rowY = y
+			for row in laid.rows {
+				let rowWidth =
+					row.map { kidBlocks[$0].width }.reduce(0, +) + CGFloat(row.count - 1)
+					* horizontalGap
+				var cx = x + (width - rowWidth) / 2
+				for i in row {
+					place(kids[i], x: cx, y: rowY)
+					cx += kidBlocks[i].width + horizontalGap
+				}
+				rowY += row.map { kidBlocks[$0].height }.max()! + gap
+			}
+		}
 
 		func place(_ item: OutlineItem, x: CGFloat, y: CGFloat) {
 			let own = sizes[item.order]!
@@ -77,39 +124,19 @@ enum TidyTreeLayout {
 			result[item.path] = XYPosition(x: x + (block.width - own.width) / 2, y: y)
 			let kids = children[item.order] ?? []
 			guard !kids.isEmpty else { return }
-			let top = y + own.height + levelGap
-			if wraps(kids) {
-				let cellW = kids.map { blocks[$0.order]!.width }.max()!
-				let rowWidth =
-					CGFloat(wrapColumns) * cellW + CGFloat(wrapColumns - 1) * horizontalGap
-				var rowY = top
-				for start in stride(from: 0, to: kids.count, by: wrapColumns) {
-					let row = kids[start..<min(start + wrapColumns, kids.count)]
-					var cx = x + (block.width - rowWidth) / 2
-					for kid in row {
-						place(kid, x: cx, y: rowY)
-						cx += cellW + horizontalGap
-					}
-					rowY += row.map { blocks[$0.order]!.height }.max()! + rowGap
-				}
-			} else {
-				let total =
-					kids.map { blocks[$0.order]!.width }.reduce(0, +) + CGFloat(kids.count - 1)
-					* horizontalGap
-				var cx = x + (block.width - total) / 2
-				for kid in kids {
-					place(kid, x: cx, y: top)
-					cx += blocks[kid.order]!.width + horizontalGap
-				}
-			}
+			let kidBlocks = kids.map { blocks[$0.order]! }
+			placeRows(
+				kids, x: x, y: y + own.height + levelGap, width: block.width,
+				limit: childLimit(kids, kidBlocks))
 		}
 
-		var x: CGFloat = 0
-		for root in roots {
-			let block = measure(root)
-			place(root, x: x, y: 0)
-			x += block.width + treeGap
-		}
+		// The top level wraps too, aiming for a landscape block overall.
+		let rootBlocks = roots.map(measure)
+		let area = rootBlocks.map { $0.width * $0.height }.reduce(0, +)
+		let limit = rowLimit(rootBlocks, minimum: max(maxRowWidth, (area * 1.8).squareRoot()))
+		let laid = wrap(rootBlocks, width: limit)
+		// Top-level rows have no parent lines, so they can sit further apart.
+		placeRows(roots, x: 0, y: 0, width: laid.size.width, limit: limit, gap: treeGap)
 		return result
 	}
 }
