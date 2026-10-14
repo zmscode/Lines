@@ -387,6 +387,10 @@ final class CanvasController {
 	/// Renders the drawing with WebKit, the same renderer as the canvas.
 	/// The graph node the pointer is resting on, for its impact preview.
 	var hoveredNode: Int?
+	/// Inputs ("nodeID:attribute") a connection being dragged in the graph
+	/// could validly end on, to highlight them.
+	var validConnectionTargets: Set<String> = []
+
 	/// A graph node whose preview stays up until it's closed.
 	var pinnedPreviewNode: Int?
 

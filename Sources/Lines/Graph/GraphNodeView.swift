@@ -152,13 +152,26 @@ struct GraphNodeView: View {
 	/// An input port with its current value.
 	private func inputRow(_ input: String, data: GraphNodeData) -> some View {
 		HStack(spacing: 6) {
+			let isTarget =
+				controller?.validConnectionTargets.contains("\(node.id):\(input)") ?? false
 			Handle(
 				nodeId: node.id, id: input, type: .target, position: .left,
-				color: data.connected.contains(input) ? Graph.color(for: input) : .gray,
+				color: data.connected.contains(input) || isTarget ? Graph.color(for: input) : .gray,
 				// Inputs only receive: connections start from an output.
 				isConnectable: false
 			)
+			// While an output is being connected, inputs that accept it glow.
+			.overlay {
+				if isTarget {
+					Circle()
+						.strokeBorder(Graph.color(for: input), lineWidth: 2)
+						.frame(width: 20, height: 20)
+						.shadow(color: Graph.color(for: input).opacity(0.8), radius: 4)
+						.allowsHitTesting(false)
+				}
+			}
 			.offset(x: -6)
+			.animation(.easeOut(duration: 0.15), value: isTarget)
 			Text(input).font(.caption.monospaced()).foregroundStyle(.secondary)
 			Spacer(minLength: 4)
 			let value = data.props[input]

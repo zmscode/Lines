@@ -23,6 +23,7 @@ struct GraphView: View {
 	@StateObject private var flow = SwiftFlowInstance()
 	@AppStorage("graph.layout") private var mode: GraphLayoutMode = .flow
 	@State private var chosen: [String: Int] = [:]
+	@State private var clearTargets: Task<Void, Never>?
 	@AppStorage(ToolbarLayout.graphKey) private var paletteLayout = ToolbarLayout.graphDefaults
 		.joined(separator: ",")
 
@@ -58,6 +59,29 @@ struct GraphView: View {
 			connectionLineType: .default,
 			colorMode: .system,
 			isValidConnection: { graph.isValid($0) },
+			onConnectStart: { start in
+				// Light up every input this output could connect to.
+				clearTargets?.cancel()
+				guard start.handleType == .source else { return }
+				var targets: Set<String> = []
+				for item in graph.items {
+					for input in Graph.inputs(for: item.tag) {
+						let connection = Connection(
+							source: start.nodeId, target: item.path,
+							sourceHandle: start.handleId, targetHandle: input)
+						if graph.isValid(connection) { targets.insert("\(item.path):\(input)") }
+					}
+				}
+				controller.validConnectionTargets = targets
+			},
+			onConnectEnd: {
+				// Linger a moment, so a click on an output still shows them.
+				clearTargets = Task { @MainActor in
+					try? await Task.sleep(for: .seconds(1.5))
+					guard !Task.isCancelled else { return }
+					controller.validConnectionTargets = []
+				}
+			},
 			onNodesDelete: { nodes in
 				// Delete from the end of the document first so earlier indices stay valid.
 				for node in nodes.sorted(by: { $0.data.order > $1.data.order }) {
@@ -260,7 +284,12 @@ struct GraphView: View {
 		for (id, position) in tidy where force || !movedByHand.contains(id) {
 			laidOut[id] = position
 		}
-		positions = laidOut
+		// Tidying glides nodes to their new places, so the rearrangement reads.
+		if force && hasFitted {
+			withAnimation(.snappy(duration: 0.4)) { positions = laidOut }
+		} else {
+			positions = laidOut
+		}
 		if force || firstLayout {
 			needsFit = true
 			fitIfNeeded(graph)
