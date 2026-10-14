@@ -4,6 +4,19 @@ const XLINK = "http://www.w3.org/1999/xlink";
 const host = document.getElementById("host");
 const selBox = document.getElementById("sel");
 // The corner-radius knob for a selected rectangle (see Corner radius below).
+// Gradient handles for a selected shape (see Gradient handles below).
+const gradientLine = document.createElement("div");
+gradientLine.id = "gradient-line";
+document.body.appendChild(gradientLine);
+const gradientKnobs = [0, 1].map((i) => {
+  const k = document.createElement("div");
+  k.className = "gradient-knob";
+  k.dataset.index = i;
+  document.body.appendChild(k);
+  return k;
+});
+// A clip path or mask being edited on the canvas (see below).
+let defEdit = null;
 // Top left, top right, bottom right, bottom left.
 const radiusKnobs = [0, 1, 2, 3].map((corner) => {
   const k = document.createElement("div");
@@ -49,6 +62,10 @@ function setSVG(text) {
   prefix = start > 0 ? text.slice(0, start) : "";
   suffix = end >= 0 ? text.slice(end + 6) : (text.match(/\s*$/) || ["\n"])[0];
   const node = document.importNode(doc.documentElement, true);
+  if (defEdit) {
+    defEdit = null;
+    post({ type: "definitionEdit", active: false });
+  }
   host.replaceChildren(node);
   root = node;
   restoreAnimationState();
@@ -102,7 +119,11 @@ function updateIntrinsicSize() {
 }
 
 function serialize() {
-  return prefix + new XMLSerializer().serializeToString(root) + suffix;
+  // While a clip path or mask is edited on the canvas, save it as it belongs.
+  if (defEdit) stashDefinitionEdit(true);
+  const text = prefix + new XMLSerializer().serializeToString(root) + suffix;
+  if (defEdit) stashDefinitionEdit(false);
+  return text;
 }
 
 function commit(action, coalesce) {
@@ -204,6 +225,7 @@ function selection() {
 }
 
 function select(el, fromSource) {
+  if (defEdit && (!el || !defEdit.group.contains(el))) endDefinitionEdit(false);
   selected = el && el !== root ? el : null;
   extras = [];
   updateOverlay();
@@ -280,7 +302,9 @@ function visualRect(el, depth = 0) {
           }
         : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     }
-    return u ? new DOMRect(u.left, u.top, u.right - u.left, u.bottom - u.top) : el.getBoundingClientRect();
+    return u
+      ? new DOMRect(u.left, u.top, u.right - u.left, u.bottom - u.top)
+      : el.getBoundingClientRect();
   }
   const r = el.getBoundingClientRect();
   if (!r.width && !r.height && name !== "line" && name !== "path" && name !== "polyline") return r;
@@ -368,10 +392,12 @@ function updateOverlay() {
         : null,
     );
     hideRadiusKnobs();
+    hideGradientHandles();
     return;
   }
   place(selBox, anim ? selected.parentNode : selected);
   updateRadiusKnob();
+  updateGradientHandles();
   if (selected) {
     const r = selBox.getBoundingClientRect();
     selBox.classList.toggle("compact", r.width < 28 || r.height < 28);
@@ -530,7 +556,10 @@ function cornerInfo(el) {
     return { x: n("x"), y: n("y"), w, h, radii: [r, r, r, r] };
   }
   if (el.localName === "path" && el.hasAttribute(CORNER_RECT)) {
-    const [x, y, w, h] = el.getAttribute(CORNER_RECT).split(/[\s,]+/).map(Number);
+    const [x, y, w, h] = el
+      .getAttribute(CORNER_RECT)
+      .split(/[\s,]+/)
+      .map(Number);
     const radii = (el.getAttribute(CORNER_RADII) || "0 0 0 0").split(/[\s,]+/).map(Number);
     if ([x, y, w, h].some((v) => !isFinite(v))) return null;
     return { x, y, w, h, radii: [0, 1, 2, 3].map((i) => radii[i] || 0) };
@@ -542,7 +571,8 @@ function roundedRectPath({ x, y, w, h, radii }) {
   const m = Math.min(w, h) / 2;
   const [tl, tr, br, bl] = radii.map((r) => Math.max(0, Math.min(r, m)));
   const R = round;
-  const arc = (r, ex, ey) => (r ? `A${R(r)} ${R(r)} 0 0 1 ${R(ex)} ${R(ey)}` : `L${R(ex)} ${R(ey)}`);
+  const arc = (r, ex, ey) =>
+    r ? `A${R(r)} ${R(r)} 0 0 1 ${R(ex)} ${R(ey)}` : `L${R(ex)} ${R(ey)}`;
   return [
     `M${R(x + tl)} ${R(y)}`,
     `H${R(x + w - tr)}`,
@@ -675,6 +705,231 @@ for (const knob of radiusKnobs) {
   knob.addEventListener("pointercancel", end);
 }
 
+// MARK: Editing a clip path or mask on the canvas
+//
+// Its shapes move into a temporary group drawn over the element that uses
+// it, in that element's coordinates, where they select, move and resize like
+// anything else. Saving puts them back in place (see serialize), and Done or
+// Esc returns them for good.
+
+function definitionUser(def) {
+  if (!def.id) return null;
+  return Array.from(root.querySelectorAll("*")).find((u) =>
+    refsOf(u).some(
+      ([attr, target]) => target === def.id && (attr === "clip-path" || attr === "mask"),
+    ),
+  );
+}
+
+function editDefinitionOnCanvas(order) {
+  const def = byOrder(order);
+  if (!root || !editable || !def || !["clipPath", "mask"].includes(def.localName)) return;
+  if (defEdit) endDefinitionEdit(false);
+  const user = definitionUser(def);
+  const attr = def.localName === "mask" ? "mask" : "clip-path";
+  const group = document.createElementNS(NS, "g");
+  group.setAttribute("data-lines-temp", "1");
+  group.setAttribute("class", "lines-def-edit");
+  // The shapes live in the user's coordinates (or its box, for bounding-box units).
+  if (user && user.getCTM && root.getCTM) {
+    let m = root.getCTM().inverse().multiply(user.getCTM());
+    const units = def.getAttribute(def.localName === "mask" ? "maskContentUnits" : "clipPathUnits");
+    if (units === "objectBoundingBox") {
+      try {
+        const b = user.getBBox();
+        m = m.translate(b.x, b.y).scale(b.width, b.height);
+      } catch (e) {}
+    }
+    group.setAttribute(
+      "transform",
+      `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].map(round).join(" ")})`,
+    );
+  }
+  root.appendChild(group);
+  for (const k of Array.from(def.childNodes)) group.appendChild(k);
+  const saved = user ? user.getAttribute(attr) : null;
+  if (user) user.removeAttribute(attr);
+  defEdit = { def, user, attr, saved, group };
+  selected = Array.from(group.children)[0] || null;
+  extras = [];
+  updateOverlay();
+  reportSelection(false);
+  post({
+    type: "definitionEdit",
+    active: true,
+    kind: def.localName,
+    name: def.id || def.localName,
+  });
+}
+
+// Puts the shapes back (stash) or out again (unstash), around a save.
+function stashDefinitionEdit(stash) {
+  const d = defEdit;
+  if (stash) {
+    for (const k of Array.from(d.group.childNodes)) d.def.appendChild(k);
+    if (d.user && d.saved != null) d.user.setAttribute(d.attr, d.saved);
+    d.group.remove();
+  } else {
+    root.appendChild(d.group);
+    for (const k of Array.from(d.def.childNodes)) d.group.appendChild(k);
+    if (d.user) d.user.removeAttribute(d.attr);
+  }
+}
+
+function endDefinitionEdit(reselect) {
+  const d = defEdit;
+  if (!d) return;
+  defEdit = null;
+  for (const k of Array.from(d.group.childNodes)) d.def.appendChild(k);
+  if (d.user && d.saved != null) d.user.setAttribute(d.attr, d.saved);
+  d.group.remove();
+  post({ type: "definitionEdit", active: false });
+  scheduleOutline();
+  if (reselect) select(d.user || null);
+  else updateOverlay();
+}
+
+// MARK: Gradient handles — drag where a selected shape's gradient starts and
+// ends (or, for a radial one, its centre and radius).
+
+let gradientDrag = null;
+
+function gradientOf(el) {
+  if (!el || !root || !el.getAttribute) return null;
+  const m = (el.getAttribute("fill") || "").match(/url\(\s*['"]?#([^'")\s]+)/);
+  if (!m) return null;
+  const g = root.querySelector(`[id="${m[1]}"]`);
+  return g && (g.localName === "linearGradient" || g.localName === "radialGradient") ? g : null;
+}
+
+function fraction(v, fallback) {
+  if (v == null || v === "") return fallback;
+  return v.trim().endsWith("%") ? parseFloat(v) / 100 : parseFloat(v);
+}
+
+// The gradient's two handle points in the shape's own coordinates.
+function gradientPoints(el, g) {
+  const bbox = g.getAttribute("gradientUnits") !== "userSpaceOnUse";
+  let b = { x: 0, y: 0, width: 1, height: 1 };
+  if (bbox) {
+    try {
+      b = el.getBBox();
+    } catch (e) {
+      return null;
+    }
+  }
+  const P = (u, v) => (bbox ? [b.x + u * b.width, b.y + v * b.height] : [u, v]);
+  if (g.localName === "linearGradient") {
+    return {
+      box: b,
+      bbox,
+      points: [
+        P(fraction(g.getAttribute("x1"), 0), fraction(g.getAttribute("y1"), 0)),
+        P(fraction(g.getAttribute("x2"), 1), fraction(g.getAttribute("y2"), 0)),
+      ],
+    };
+  }
+  const cx = fraction(g.getAttribute("cx"), 0.5),
+    cy = fraction(g.getAttribute("cy"), 0.5),
+    r = fraction(g.getAttribute("r"), 0.5);
+  return { box: b, bbox, points: [P(cx, cy), P(cx + r, cy)] };
+}
+
+function hideGradientHandles() {
+  gradientLine.style.display = "none";
+  for (const k of gradientKnobs) k.style.display = "none";
+}
+
+function updateGradientHandles() {
+  const el = selected;
+  const g = editable && el && extras.length === 0 && !defEdit ? gradientOf(el) : null;
+  const info = g && gradientPoints(el, g);
+  const m = info && el.getScreenCTM && el.getScreenCTM();
+  if (!info || !m) {
+    hideGradientHandles();
+    return;
+  }
+  const pts = info.points.map(([x, y]) => new DOMPoint(x, y).matrixTransform(m));
+  const linear = g.localName === "linearGradient";
+  const titles = linear
+    ? [
+        "Drag where the gradient starts (Shift keeps it level or diagonal)",
+        "Drag where the gradient ends",
+      ]
+    : ["Drag the gradient's centre", "Drag to change the gradient's radius"];
+  pts.forEach((p, i) => {
+    const k = gradientKnobs[i];
+    k.style.display = "block";
+    k.style.left = p.x + "px";
+    k.style.top = p.y + "px";
+    k.title = titles[i];
+  });
+  const dx = pts[1].x - pts[0].x,
+    dy = pts[1].y - pts[0].y;
+  gradientLine.style.display = "block";
+  gradientLine.style.left = pts[0].x + "px";
+  gradientLine.style.top = pts[0].y + "px";
+  gradientLine.style.width = Math.hypot(dx, dy) + "px";
+  gradientLine.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+}
+
+for (const knob of gradientKnobs) {
+  knob.addEventListener("pointerdown", (e) => {
+    if (!selected || e.button !== 0) return;
+    const g = gradientOf(selected);
+    if (!g) return;
+    e.preventDefault();
+    e.stopPropagation();
+    knob.setPointerCapture(e.pointerId);
+    gradientDrag = { el: selected, g, index: +knob.dataset.index, id: e.pointerId, moved: false };
+  });
+  knob.addEventListener("mousedown", (e) => e.stopPropagation());
+  knob.addEventListener("pointermove", (e) => {
+    const d = gradientDrag;
+    if (!d || e.pointerId !== d.id) return;
+    const info = gradientPoints(d.el, d.g);
+    if (!info) return;
+    const p = toLocal(d.el, e.clientX, e.clientY);
+    const b = info.box;
+    const toUnit = (pt) =>
+      info.bbox ? [(pt[0] - b.x) / (b.width || 1), (pt[1] - b.y) / (b.height || 1)] : pt;
+    let [u, v] = toUnit([p.x, p.y]);
+    const scale = info.bbox ? 1000 : 100;
+    const fmt = (n) => String(Math.round(n * scale) / scale);
+    if (e.shiftKey && d.g.localName === "linearGradient") {
+      // Shift keeps the line level, upright or diagonal.
+      const [ou, ov] = toUnit(info.points[1 - d.index]);
+      const a = Math.round(Math.atan2(v - ov, u - ou) / (Math.PI / 4)) * (Math.PI / 4);
+      const len = Math.hypot(u - ou, v - ov);
+      u = ou + Math.cos(a) * len;
+      v = ov + Math.sin(a) * len;
+    }
+    if (d.g.localName === "linearGradient") {
+      d.g.setAttribute(d.index === 0 ? "x1" : "x2", fmt(u));
+      d.g.setAttribute(d.index === 0 ? "y1" : "y2", fmt(v));
+    } else if (d.index === 0) {
+      d.g.setAttribute("cx", fmt(u));
+      d.g.setAttribute("cy", fmt(v));
+      d.g.removeAttribute("fx");
+      d.g.removeAttribute("fy");
+    } else {
+      const cx = fraction(d.g.getAttribute("cx"), 0.5),
+        cy = fraction(d.g.getAttribute("cy"), 0.5);
+      d.g.setAttribute("r", fmt(Math.max(0.001, Math.hypot(u - cx, v - cy))));
+    }
+    d.moved = true;
+    updateGradientHandles();
+  });
+  const end = (e) => {
+    if (!gradientDrag || e.pointerId !== gradientDrag.id) return;
+    const moved = gradientDrag.moved;
+    gradientDrag = null;
+    if (moved) commit("Move Gradient");
+  };
+  knob.addEventListener("pointerup", end);
+  knob.addEventListener("pointercancel", end);
+}
+
 // MARK: Marquee — drag on empty canvas to select everything it touches.
 
 let marquee = null;
@@ -773,6 +1028,11 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape" && tool !== "select") {
     setTool("select", true);
+    e.preventDefault();
+    return;
+  }
+  if (e.key === "Escape" && defEdit) {
+    endDefinitionEdit(true);
     e.preventDefault();
     return;
   }
@@ -1576,7 +1836,8 @@ let xf = null;
 
 // The attributes that hold an element's geometry; corner paths keep their box.
 function geometryKeys(el) {
-  if (el.localName === "path" && el.hasAttribute(CORNER_RECT)) return ["d", CORNER_RECT, CORNER_RADII];
+  if (el.localName === "path" && el.hasAttribute(CORNER_RECT))
+    return ["d", CORNER_RECT, CORNER_RADII];
   return GEOMETRY[el.localName];
 }
 
@@ -2380,10 +2641,12 @@ function addDefinitionShape(order, kind) {
       el.setAttribute("r", round(Math.min(b.width, b.height) / 3));
     } else {
       const tag =
-        { rect: "rect", roundedRect: "rect", ellipse: "ellipse", line: "line", arrow: "path" }[kind] ||
-        "polygon";
+        { rect: "rect", roundedRect: "rect", ellipse: "ellipse", line: "line", arrow: "path" }[
+          kind
+        ] || "polygon";
       el = document.createElementNS(NS, tag);
-      for (const [k, v] of Object.entries(shapeGeometry(kind, x0, y0, x1, y1))) el.setAttribute(k, v);
+      for (const [k, v] of Object.entries(shapeGeometry(kind, x0, y0, x1, y1)))
+        el.setAttribute(k, v);
     }
   }
   if (isMask) {
@@ -2997,7 +3260,9 @@ function sendOutline() {
         css: cssAnimationsOf(el),
       });
     }
-    Array.from(el.children).forEach((c, i) => walk(c, order, depth + 1, path.concat(i)));
+    Array.from(el.children).forEach((c, i) => {
+      if (!c.hasAttribute("data-lines-temp")) walk(c, order, depth + 1, path.concat(i));
+    });
   })(root, -1, -1, []);
   post({ type: "outline", items, truncated: items.length >= OUTLINE_LIMIT });
 }
@@ -3150,11 +3415,13 @@ function previewImage(order, size) {
     const clone = root.cloneNode(true);
     const vb = root.viewBox && root.viewBox.baseVal;
     const { w, h } = intrinsicSize();
-    const area = vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
+    const area =
+      vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
     const defsOnly = () => {
       // Keep the definitions (and styles); drop the artwork.
       for (const c of Array.from(clone.children))
-        if (!["defs", "style"].includes(c.localName) && !DEFINITION_TAGS.has(c.localName)) c.remove();
+        if (!["defs", "style"].includes(c.localName) && !DEFINITION_TAGS.has(c.localName))
+          c.remove();
     };
     const add = (tag, attrs) => {
       const n = document.createElementNS(NS, tag);
@@ -3171,13 +3438,28 @@ function previewImage(order, size) {
     } else if (name === "filter" && id) {
       defsOnly();
       clone.setAttribute("viewBox", "0 0 160 100");
-      add("rect", { x: 40, y: 20, width: 80, height: 60, rx: 12, fill: "#f09157", filter: `url(#${id})` });
+      add("rect", {
+        x: 40,
+        y: 20,
+        width: 80,
+        height: 60,
+        rx: 12,
+        fill: "#f09157",
+        filter: `url(#${id})`,
+      });
     } else if ((name === "clipPath" || name === "mask") && id) {
       defsOnly();
       clone.setAttribute("viewBox", [area.x, area.y, area.w, area.h].join(" "));
       // A striped sample, so what's kept and what's cut both read.
       const attr = name === "mask" ? "mask" : "clip-path";
-      add("rect", { x: area.x, y: area.y, width: area.w, height: area.h, fill: "#f09157", [attr]: `url(#${id})` });
+      add("rect", {
+        x: area.x,
+        y: area.y,
+        width: area.w,
+        height: area.h,
+        fill: "#f09157",
+        [attr]: `url(#${id})`,
+      });
     } else if ((name === "symbol" || name === "marker") && id) {
       defsOnly();
       clone.setAttribute("viewBox", "0 0 100 100");
@@ -3187,7 +3469,8 @@ function previewImage(order, size) {
       const target = ANIM_TAGS.has(name) ? el.parentNode : el;
       try {
         const b = target.getBBox();
-        const m = root.getCTM && target.getCTM ? root.getCTM().inverse().multiply(target.getCTM()) : null;
+        const m =
+          root.getCTM && target.getCTM ? root.getCTM().inverse().multiply(target.getCTM()) : null;
         const pts = [
           [b.x, b.y],
           [b.x + b.width, b.y],
@@ -3196,11 +3479,19 @@ function previewImage(order, size) {
         ].map(([x, y]) => (m ? new DOMPoint(x, y).matrixTransform(m) : { x, y }));
         const xs = pts.map((p) => p.x),
           ys = pts.map((p) => p.y);
-        box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+        box = {
+          x: Math.min(...xs),
+          y: Math.min(...ys),
+          w: Math.max(...xs) - Math.min(...xs),
+          h: Math.max(...ys) - Math.min(...ys),
+        };
       } catch (e) {}
       if (!box || !(box.w || box.h)) box = area;
       const pad = Math.max(box.w, box.h) * 0.08 || 1;
-      clone.setAttribute("viewBox", [box.x - pad, box.y - pad, box.w + pad * 2, box.h + pad * 2].join(" "));
+      clone.setAttribute(
+        "viewBox",
+        [box.x - pad, box.y - pad, box.w + pad * 2, box.h + pad * 2].join(" "),
+      );
       // Hide everything not on the path to the target or inside it.
       const path = pathOf(target);
       let node = clone;
@@ -3214,7 +3505,10 @@ function previewImage(order, size) {
         for (const c of Array.from(n.children)) {
           if (keep.has(c)) {
             if (c !== node) walk(c);
-          } else if (!["defs", "style"].includes(c.localName) && !DEFINITION_TAGS.has(c.localName)) {
+          } else if (
+            !["defs", "style"].includes(c.localName) &&
+            !DEFINITION_TAGS.has(c.localName)
+          ) {
             c.setAttribute("visibility", "hidden");
           }
         }
@@ -3222,7 +3516,10 @@ function previewImage(order, size) {
       walk(clone);
     }
     const ratio = (() => {
-      const v = clone.getAttribute("viewBox").split(/[\s,]+/).map(Number);
+      const v = clone
+        .getAttribute("viewBox")
+        .split(/[\s,]+/)
+        .map(Number);
       return v[2] > 0 && v[3] > 0 ? v[2] / v[3] : 1;
     })();
     const W = ratio >= 1 ? size : Math.max(1, Math.round(size * ratio)),
@@ -3273,7 +3570,14 @@ function userBox(els, pad) {
       r: Math.max(pts[0].x, pts[1].x),
       b: Math.max(pts[0].y, pts[1].y),
     };
-    u = u ? { x: Math.min(u.x, b.x), y: Math.min(u.y, b.y), r: Math.max(u.r, b.r), b: Math.max(u.b, b.b) } : b;
+    u = u
+      ? {
+          x: Math.min(u.x, b.x),
+          y: Math.min(u.y, b.y),
+          r: Math.max(u.r, b.r),
+          b: Math.max(u.b, b.b),
+        }
+      : b;
   }
   if (!u) return null;
   const w = u.r - u.x,
@@ -3299,13 +3603,20 @@ function focusedClone(affected) {
     for (const c of Array.from(n.children)) {
       if (inside.has(c)) continue;
       if (keep.has(c)) walk(c);
-      else if (!nonVisual.has(c.localName) && !["defs", "style"].includes(c.localName) && !ANIM_TAGS.has(c.localName))
+      else if (
+        !nonVisual.has(c.localName) &&
+        !["defs", "style"].includes(c.localName) &&
+        !ANIM_TAGS.has(c.localName)
+      )
         c.setAttribute("opacity", "0.18");
     }
   };
   walk(clone);
   // Previews are still frames.
-  for (const a of Array.from(clone.querySelectorAll("animate, animateTransform, animateMotion, set"))) a.remove();
+  for (const a of Array.from(
+    clone.querySelectorAll("animate, animateTransform, animateMotion, set"),
+  ))
+    a.remove();
   const twin = (el) => {
     let node = clone;
     for (const i of pathOf(el)) node = node && node.children[i];
@@ -3323,7 +3634,10 @@ function outlineBox(clone, box) {
   r.setAttribute("height", Math.max(0, box.h - inset * 2));
   r.setAttribute("rx", inset);
   r.setAttribute("fill", "none");
-  r.setAttribute("stroke", getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#d9753f");
+  r.setAttribute(
+    "stroke",
+    getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#d9753f",
+  );
   r.setAttribute("stroke-width", "2");
   r.setAttribute("stroke-dasharray", "6 4");
   r.setAttribute("vector-effect", "non-scaling-stroke");
@@ -3353,7 +3667,9 @@ function renderClone(clone, box, size) {
       }
     };
     img.onerror = () => resolve(null);
-    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+    img.src =
+      "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(new XMLSerializer().serializeToString(clone));
   });
 }
 
@@ -3366,12 +3682,25 @@ function lerpValue(a, b, t) {
   if (hex.test(a.trim()) && hex.test(b.trim())) {
     const rgb = (h) => {
       h = h.trim().slice(1);
-      if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+      if (h.length === 3)
+        h = h
+          .split("")
+          .map((c) => c + c)
+          .join("");
       return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
     };
     const x = rgb(a),
       y = rgb(b);
-    return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("");
+    return (
+      "#" +
+      x
+        .map((v, i) =>
+          Math.round(v + (y[i] - v) * t)
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")
+    );
   }
   const na = a.match(/-?[\d.]+(e-?\d+)?/gi),
     nb = b.match(/-?[\d.]+(e-?\d+)?/gi);
@@ -3390,7 +3719,10 @@ function lerpValue(a, b, t) {
 function animationValueAt(anim, t) {
   const values = anim.getAttribute("values");
   if (values) {
-    const list = values.split(";").map((v) => v.trim()).filter((v) => v.length);
+    const list = values
+      .split(";")
+      .map((v) => v.trim())
+      .filter((v) => v.length);
     if (!list.length) return null;
     if (list.length === 1) return list[0];
     const pos = t * (list.length - 1);
@@ -3415,7 +3747,9 @@ function impactPreview(order, size) {
       refsOf(u).some(([, target]) => target === id),
     );
     if (!users.length) {
-      return previewImage(order, size).then((img) => (img ? { labels: ["Sample — nothing uses it yet"], images: [img] } : null));
+      return previewImage(order, size).then((img) =>
+        img ? { labels: ["Sample — nothing uses it yet"], images: [img] } : null,
+      );
     }
     const box = userBox(users, name === "filter" ? 0.3 : 0.12);
     if (!box) return Promise.resolve(null);
@@ -3432,15 +3766,17 @@ function impactPreview(order, size) {
     const withIt = focusedClone(users);
     outlineBox(without.clone, box);
     outlineBox(withIt.clone, box);
-    return Promise.all([renderClone(without.clone, box, size), renderClone(withIt.clone, box, size)]).then(
-      (images) => ({ labels: ["Without", "With"], images }),
-    );
+    return Promise.all([
+      renderClone(without.clone, box, size),
+      renderClone(withIt.clone, box, size),
+    ]).then((images) => ({ labels: ["Without", "With"], images }));
   }
 
   // An animation: its element at the start, middle and end of a pass.
   if (ANIM_TAGS.has(name)) {
     const href = el.getAttribute("href") || el.getAttributeNS(XLINK, "href");
-    const target = href && href[0] === "#" ? root.querySelector(`[id="${href.slice(1)}"]`) : el.parentNode;
+    const target =
+      href && href[0] === "#" ? root.querySelector(`[id="${href.slice(1)}"]`) : el.parentNode;
     if (!target || target === root) return Promise.resolve(null);
     const frames = [0, 0.5, 1].map((t) => {
       const f = focusedClone([target]);
@@ -3461,10 +3797,12 @@ function impactPreview(order, size) {
     const box = userBox([target], 0.45);
     if (!box) return Promise.resolve(null);
     frames.forEach((c) => outlineBox(c, box));
-    return Promise.all(frames.map((c) => renderClone(c, box, Math.round(size * 0.7)))).then((images) => ({
-      labels: ["Start", "Middle", "End"],
-      images,
-    }));
+    return Promise.all(frames.map((c) => renderClone(c, box, Math.round(size * 0.7)))).then(
+      (images) => ({
+        labels: ["Start", "Middle", "End"],
+        images,
+      }),
+    );
   }
 
   // An element: where it is, the rest dimmed.
@@ -3473,7 +3811,9 @@ function impactPreview(order, size) {
   const area = userBox([root], 0.02) || tight;
   if (!tight || !area) return Promise.resolve(null);
   outlineBox(f.clone, tight);
-  return renderClone(f.clone, area, size).then((img) => (img ? { labels: ["In the drawing"], images: [img] } : null));
+  return renderClone(f.clone, area, size).then((img) =>
+    img ? { labels: ["In the drawing"], images: [img] } : null,
+  );
 }
 
 function rasterize(scale, background, type, quality) {
@@ -3571,6 +3911,8 @@ const EDITING_FUNCTIONS = [
   "addStop",
   "addDefinitionShape",
   "invertMask",
+  "setCornerRadii",
+  "editDefinitionOnCanvas",
 ];
 for (const name of EDITING_FUNCTIONS) {
   const f = window[name];

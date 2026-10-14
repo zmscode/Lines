@@ -218,6 +218,15 @@ final class CanvasController {
 		call("addDefinitionShape(\(order), \(js(kind)))")
 	}
 	func invertMask(order: Int) { call("invertMask(\(order))") }
+
+	/// A clip path or mask being edited on the canvas: its kind and name.
+	var definitionEdit: (kind: String, name: String)?
+	/// Shows a clip path's or mask's shapes over the element that uses it, to edit directly.
+	func editOnCanvas(definition order: Int) {
+		layout = .canvas
+		call("editDefinitionOnCanvas(\(order))")
+	}
+	func endDefinitionEdit() { call("endDefinitionEdit(true)") }
 	/// Corner radii for the selected rectangle: top left, top right, bottom right, bottom left.
 	func setCornerRadii(_ radii: [Double]) {
 		guard radii.count == 4 else { return }
@@ -513,6 +522,12 @@ final class CanvasController {
 			}
 			if items != outline { outline = items }
 			outlineTruncated = body["truncated"] as? Bool ?? false
+
+		case "definitionEdit":
+			definitionEdit =
+				body["active"] as? Bool == true
+				? (body["kind"] as? String ?? "clipPath", body["name"] as? String ?? "")
+				: nil
 
 		case "openLink":
 			// ⌘-click on a link in preview mode; only web and mail links leave the app.

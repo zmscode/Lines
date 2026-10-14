@@ -343,11 +343,11 @@ body[data-tool="text"] #host * {
 /* Preview mode: no editing cursors; ⌘ over a link shows it can be followed. */
 body.preview #host,
 body.preview #host * {
-  cursor: default !important;
+	cursor: default !important;
 }
 body.preview.over-link #host,
 body.preview.over-link #host * {
-  cursor: pointer !important;
+	cursor: pointer !important;
 }
 
 /* The corner-radius knob inside a selected rectangle. */
@@ -367,4 +367,44 @@ body.preview.over-link #host * {
 }
 .radius-knob:hover {
 	background: var(--accent);
+}
+
+/* A clip path's or mask's shapes, while edited on the canvas. */
+.lines-def-edit {
+	opacity: 0.6;
+}
+.lines-def-edit * {
+	stroke: var(--accent);
+	stroke-width: 2px;
+	stroke-dasharray: 6 4;
+	vector-effect: non-scaling-stroke;
+}
+
+/* Gradient handles: start and end (or centre and radius), joined by a line. */
+#gradient-line {
+	position: fixed;
+	display: none;
+	height: 0;
+	border-top: 1.5px dashed #fff;
+	box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
+	transform-origin: 0 50%;
+	pointer-events: none;
+	z-index: 4;
+}
+.gradient-knob {
+	position: fixed;
+	display: none;
+	width: 12px;
+	height: 12px;
+	margin: -6px 0 0 -6px;
+	border-radius: 50%;
+	background: #fff;
+	border: 2px solid var(--accent);
+	box-sizing: border-box;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+	z-index: 5;
+}
+.gradient-knob[data-index="0"] {
+	background: var(--accent);
+	border-color: #fff;
 }

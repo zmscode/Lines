@@ -335,6 +335,16 @@ struct ContentView: View {
 				controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0)
 		}
 		.overlay(alignment: .top) {
+			if let edit = controller.definitionEdit {
+				DefinitionEditBanner(
+					kind: edit.kind == "mask" ? "mask" : "clip path", name: edit.name
+				) { controller.endDefinitionEdit() }
+				.padding(Self.panelMargin)
+				.transition(.move(edge: .top).combined(with: .opacity))
+			}
+		}
+		.animation(Self.panelAnimation, value: controller.definitionEdit?.name)
+		.overlay(alignment: .top) {
 			if !controller.isEditing {
 				PreviewBadge { controller.isEditing = true }
 					.padding(Self.panelMargin)
@@ -443,6 +453,34 @@ private struct PreviewBadge: View {
 		.padding(.leading, 12)
 		.padding(.trailing, 6)
 		.padding(.vertical, 5)
+		.glassEffect(.regular, in: .capsule)
+		.shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+	}
+}
+
+/// Shown while a clip path's or mask's shapes are edited on the canvas.
+private struct DefinitionEditBanner: View {
+	var kind: String
+	var name: String
+	var done: () -> Void
+
+	var body: some View {
+		HStack(spacing: 10) {
+			Image(systemName: "hand.draw").foregroundStyle(.tint)
+			VStack(alignment: .leading, spacing: 0) {
+				Text("Editing \(kind) “\(name)”").font(.callout.weight(.medium))
+				Text("Move and resize its dashed shapes over the element.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			Button("Done", action: done)
+				.buttonStyle(.borderedProminent)
+				.controlSize(.small)
+				.help("Finish editing (Esc)")
+		}
+		.padding(.leading, 12)
+		.padding(.trailing, 6)
+		.padding(.vertical, 6)
 		.glassEffect(.regular, in: .capsule)
 		.shadow(color: .black.opacity(0.12), radius: 8, y: 3)
 	}

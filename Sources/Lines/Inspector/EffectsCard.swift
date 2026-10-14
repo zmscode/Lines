@@ -114,24 +114,63 @@ private struct FilterParameters: View {
 
 	var body: some View {
 		ForEach(primitives) { primitive in
+			if primitive.tag == "feDropShadow" {
+				ShadowPresets(primitive: primitive, controller: controller)
+				HStack {
+					Text("Colour").foregroundStyle(.secondary).padding(.leading, 22)
+					Spacer()
+					ColourWell(
+						title: "Shadow", value: primitive.prop("flood-color") ?? "#000000",
+						opacity: Double(primitive.prop("flood-opacity") ?? "") ?? 1,
+						documentColours: DocumentColours.of(controller, limit: 16),
+						onPick: { hex, alpha in
+							controller.setAttribute(
+								"flood-color", hex, onOrder: primitive.order, coalesce: true)
+							controller.setAttribute(
+								"flood-opacity", ScrubField.format(alpha), onOrder: primitive.order,
+								coalesce: true)
+						}, onNone: {}
+					)
+				}
+			}
 			ForEach(Self.parameters(for: primitive.tag), id: \.name) { parameter in
 				HStack {
 					Text(parameter.title)
 						.foregroundStyle(.secondary)
 						.padding(.leading, 22)
 					Spacer()
-					ScrubField(
-						label: parameter.title, systemImage: parameter.symbol,
-						value: primitive.prop(parameter.name).flatMap {
+					let value =
+						primitive.prop(parameter.name).flatMap {
 							Double($0.split(separator: " ").first ?? "")
-						} ?? parameter.fallback,
+						} ?? parameter.fallback
+					// A slider for feel, a field for exact numbers.
+					Slider(
+						value: Binding(
+							get: {
+								min(
+									max(value, parameter.sliderRange.lowerBound),
+									parameter.sliderRange.upperBound)
+							},
+							set: {
+								controller.setAttribute(
+									parameter.name,
+									ScrubField.format(
+										($0 / parameter.step).rounded() * parameter.step),
+									onOrder: primitive.order, coalesce: true)
+							}),
+						in: parameter.sliderRange
+					)
+					.controlSize(.mini)
+					.frame(width: 70)
+					ScrubField(
+						label: parameter.title, systemImage: parameter.symbol, value: value,
 						range: parameter.range, step: parameter.step
 					) {
 						controller.setAttribute(
 							parameter.name, ScrubField.format($0), onOrder: primitive.order,
 							coalesce: true)
 					}
-					.frame(width: 116)
+					.frame(width: 84)
 				}
 			}
 		}
@@ -144,6 +183,15 @@ private struct FilterParameters: View {
 		var fallback: Double
 		var range: ClosedRange<Double>
 		var step: Double
+		/// What the slider covers; the field takes anything in `range`.
+		var sliderRange: ClosedRange<Double> {
+			switch name {
+			case "flood-opacity": 0...1
+			case "dx", "dy": -40...40
+			case "radius": 0...20
+			default: 0...30
+			}
+		}
 	}
 
 	static func parameters(for tag: String) -> [Parameter] {
@@ -181,6 +229,42 @@ private struct FilterParameters: View {
 					range: 0...200, step: 0.5)
 			]
 		default: return []
+		}
+	}
+}
+
+/// One-click looks for a drop shadow.
+private struct ShadowPresets: View {
+	var primitive: OutlineItem
+	var controller: CanvasController
+
+	private static let presets: [(String, String, [String: String])] = [
+		("Soft", "cloud", ["dx": "0", "dy": "4", "stdDeviation": "8", "flood-opacity": "0.25"]),
+		(
+			"Hard", "square.fill",
+			["dx": "4", "dy": "4", "stdDeviation": "0", "flood-opacity": "0.5"]
+		),
+		(
+			"Long", "arrow.down.right",
+			["dx": "12", "dy": "12", "stdDeviation": "4", "flood-opacity": "0.3"]
+		),
+		("Glow", "sun.max", ["dx": "0", "dy": "0", "stdDeviation": "10", "flood-opacity": "0.7"]),
+	]
+
+	var body: some View {
+		HStack(spacing: 4) {
+			Text("Style").foregroundStyle(.secondary).padding(.leading, 22)
+			Spacer()
+			ForEach(Self.presets, id: \.0) { name, symbol, values in
+				Button(name, systemImage: symbol) {
+					for (key, value) in values {
+						controller.setAttribute(
+							key, value, onOrder: primitive.order, coalesce: true)
+					}
+				}
+				.buttonStyle(.icon(size: 24))
+				.help("\(name) shadow")
+			}
 		}
 	}
 }

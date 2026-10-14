@@ -30,6 +30,23 @@ struct GradientEditor: View {
 			}
 			.controlSize(.small)
 			Divider()
+			if isLinear && usesBoundingBox {
+				// Quick directions, then the exact angle.
+				HStack(spacing: 2) {
+					Text("Direction").foregroundStyle(.secondary)
+					Spacer()
+					ForEach([0.0, 45, 90, 135, 180, 225, 270, 315], id: \.self) { degrees in
+						Button("\(Int(degrees))°", systemImage: "arrow.right") { setAngle(degrees) }
+							.labelStyle(.iconOnly)
+							.rotationEffect(.degrees(degrees))
+							.buttonStyle(.icon(size: 20, selected: Int(angle) == Int(degrees)))
+							.help("\(Int(degrees))°")
+					}
+				}
+				Text("Or drag the handles on the shape in the canvas.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
 			if isLinear {
 				if usesBoundingBox {
 					row("Angle") {
@@ -238,6 +255,20 @@ struct MaskEditor: View {
 			)
 			.font(.caption)
 			.foregroundStyle(.secondary)
+			// Editing on the canvas is the easy way: drag and resize the shapes
+			// right over the element they cut.
+			Button {
+				controller.editOnCanvas(definition: definition.order)
+			} label: {
+				Label("Edit Shapes on Canvas", systemImage: "hand.draw")
+					.frame(maxWidth: .infinity)
+			}
+			.buttonStyle(.borderedProminent)
+			.controlSize(.regular)
+			.disabled(shapes.isEmpty || !controller.isEditing)
+			.help(
+				"Show the shapes over the element, to move and resize them directly (Esc when done)"
+			)
 			ForEach(shapes) { shape in
 				HStack(spacing: 8) {
 					Image(systemName: InspectorView.symbol(for: shape.tag, isRoot: false))

@@ -71,9 +71,11 @@ struct GraphNodeView: View {
 		}
 		.frame(width: Self.width, alignment: .leading)
 		.frame(height: Self.size(for: data).height, alignment: .top)
-		.background(.background, in: .rect(cornerRadius: 10, style: .continuous))
-		.overlay {
+		// The border sits behind the content, so the input handles on the
+		// edge stay on top of the selection highlight.
+		.background {
 			RoundedRectangle(cornerRadius: 10, style: .continuous)
+				.fill(.background)
 				.strokeBorder(
 					node.selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator),
 					lineWidth: node.selected ? 2 : 1)
