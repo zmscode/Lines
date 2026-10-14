@@ -373,6 +373,7 @@ final class CanvasController {
 						let iterations = (a["iterations"] as? Double) ?? 1
 						return OutlineItem.CSSAnimation(
 							name: a["name"] as? String ?? "animation",
+							properties: a["props"] as? [String] ?? [],
 							duration: a["duration"] as? Double ?? 0,
 							delay: a["delay"] as? Double ?? 0,
 							iterations: iterations < 0 ? nil : iterations,

@@ -2313,8 +2313,16 @@ function cssAnimationsOf(el) {
   return list.map((a) => {
     const t = a.effect ? a.effect.getTiming() : {};
     const dur = typeof t.duration === "number" ? t.duration / 1000 : 0;
+    let props = [];
+    try {
+      const skip = new Set(["offset", "computedOffset", "easing", "composite"]);
+      const keys = new Set();
+      for (const k of a.effect.getKeyframes()) for (const p of Object.keys(k)) if (!skip.has(p)) keys.add(p);
+      props = Array.from(keys);
+    } catch (e) {}
     return {
       name: a.animationName,
+      props,
       duration: dur,
       delay: (t.delay || 0) / 1000,
       iterations: t.iterations === Infinity ? -1 : t.iterations || 1,

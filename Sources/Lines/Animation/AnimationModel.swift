@@ -55,7 +55,10 @@ struct AnimationInfo: Identifiable {
 
 	/// What's animated: an attribute, a transform type, a motion path, or a keyframes name.
 	var property: String {
-		if let css { return "@keyframes \(css.name)" }
+		if let css {
+			return css.properties.isEmpty
+				? css.name : css.properties.map(Self.cssName).joined(separator: ", ")
+		}
 		switch item.tag {
 		case "animateTransform": return item.prop("type").map { "transform: \($0)" } ?? "transform"
 		case "animateMotion": return "motion path"
@@ -85,7 +88,7 @@ struct AnimationInfo: Identifiable {
 
 	/// "1 → 0", the values list, or a CSS animation's easing, for summaries.
 	var change: String {
-		if let css { return "CSS · \(css.easing)" }
+		if let css { return "@keyframes \(css.name)" }
 		if let values = item.prop("values") {
 			return values.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
 				.joined(separator: " → ")
@@ -96,6 +99,11 @@ struct AnimationInfo: Identifiable {
 	}
 
 	var name: String { target.map(\.displayName) ?? "Animation" }
+
+	/// "strokeDashoffset" → "stroke-dashoffset", as written in CSS.
+	static func cssName(_ property: String) -> String {
+		property.replacing(#/[A-Z]/#) { "-" + $0.output.lowercased() }
+	}
 
 	/// SMIL clock values: "2s", "500ms", "1.5", "0:01.5". nil for "indefinite" or unparseable.
 	static func seconds(_ value: String?) -> Double? {

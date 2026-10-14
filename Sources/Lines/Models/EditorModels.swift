@@ -122,6 +122,8 @@ struct OutlineItem: Identifiable, Equatable, Sendable {
 
 	struct CSSAnimation: Equatable, Sendable {
 		var name: String
+		/// The properties its keyframes change, like "translate" or "opacity".
+		var properties: [String] = []
 		var duration: Double
 		var delay: Double
 		/// nil repeats forever.
