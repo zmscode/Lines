@@ -30,14 +30,21 @@ struct FloatingPanel<Content: View>: View {
 			}
 		}
 		.frame(maxHeight: .infinity, alignment: .top)
-		.clipShape(.rect(cornerRadius: 18, style: .continuous))
-		.glassEffect(.regular, in: .rect(cornerRadius: 18, style: .continuous))
-		.shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+		.floatingPanelChrome()
 	}
 
 	private var closeButton: some View {
 		Button("Close", systemImage: "xmark", action: close)
 			.buttonStyle(.icon(size: 24))
 			.help("Close")
+	}
+}
+
+extension View {
+	/// The rounded Liquid Glass card every floating panel sits on.
+	func floatingPanelChrome() -> some View {
+		clipShape(.rect(cornerRadius: 18, style: .continuous))
+			.glassEffect(.regular, in: .rect(cornerRadius: 18, style: .continuous))
+			.shadow(color: .black.opacity(0.18), radius: 16, y: 6)
 	}
 }

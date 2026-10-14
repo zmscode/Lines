@@ -5,12 +5,14 @@ import SwiftUI
 struct SplitDivider: View {
 	@Binding var width: Double
 	var range: ClosedRange<Double> = 220...900
+	/// Draws the line; off for a panel edge that is its own boundary.
+	var showsLine = true
 
 	@State private var startWidth: Double?
 
 	var body: some View {
 		Rectangle()
-			.fill(.separator)
+			.fill(showsLine ? AnyShapeStyle(.separator) : AnyShapeStyle(.clear))
 			.frame(width: 1)
 			.padding(.horizontal, 3)
 			.contentShape(.rect)

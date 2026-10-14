@@ -17,7 +17,10 @@ struct SourceEditor: NSViewRepresentable {
 		scrollView.hasVerticalScroller = true
 		scrollView.autohidesScrollers = true
 		scrollView.drawsBackground = true
-		let textView = CodeTextView(usingTextLayoutManager: true)
+		// TextKit 1, for folding long values and highlighting matching tags.
+		let textView = CodeTextView(usingTextLayoutManager: false)
+		textView.layoutManager?.delegate = context.coordinator.folding
+		textView.layoutManager?.allowsNonContiguousLayout = true
 		textView.isVerticallyResizable = true
 		textView.autoresizingMask = [.width]
 		textView.minSize = NSSize(width: 0, height: 0)
@@ -85,6 +88,9 @@ struct SourceEditor: NSViewRepresentable {
 		private var fontSize: CGFloat = 0
 		private var wrapsLines: Bool?
 		private var theme: SyntaxTheme?
+		let folding = FoldingLayoutDelegate()
+		/// The folded value the insertion point is in, shown in full.
+		private var expandedFold: NSRange?
 
 		init(_ parent: SourceEditor) { self.parent = parent }
 
@@ -105,9 +111,7 @@ struct SourceEditor: NSViewRepresentable {
 				textView.insertionPointColor = theme.insertionPoint
 				textView.selectedTextAttributes = [.backgroundColor: theme.selection]
 				textView.enclosingScrollView?.backgroundColor = theme.background
-				if let storage = textView.textStorage {
-					Highlighter.highlight(storage, fontSize: fontSize, theme: theme)
-				}
+				if let storage = textView.textStorage { restyle(storage) }
 			}
 			if wrapsLines != self.wrapsLines {
 				self.wrapsLines = wrapsLines
@@ -203,13 +207,60 @@ struct SourceEditor: NSViewRepresentable {
 				theme
 				?? SyntaxTheme.pair(light: SyntaxTheme.defaultLight, dark: SyntaxTheme.defaultDark)
 			// Attribute changes must happen outside the editing transaction.
-			DispatchQueue.main.async {
+			DispatchQueue.main.async { [weak self] in
 				Highlighter.highlight(textStorage, fontSize: size, theme: theme)
+				CodeFolding.apply(to: textStorage, expanded: self?.expandedFold)
+				self?.highlightMatchingTags()
+			}
+		}
+
+		/// Colours, folds and the matching-tag highlight, after a theme or text change.
+		private func restyle(_ storage: NSTextStorage) {
+			guard let theme else { return }
+			Highlighter.highlight(storage, fontSize: fontSize, theme: theme)
+			CodeFolding.apply(to: storage, expanded: expandedFold)
+			highlightMatchingTags()
+		}
+
+		/// Unfolds the value the caret is in, and folds the one it left.
+		private func updateFolds() {
+			guard let textView, let storage = textView.textStorage else { return }
+			let selection = textView.selectedRange()
+			let inside =
+				selection.length == 0
+				? CodeFolding.fold(containing: selection.location, in: textView.string) : nil
+			guard inside != expandedFold else { return }
+			expandedFold = inside
+			CodeFolding.apply(to: storage, expanded: inside)
+		}
+
+		/// Tints the names of the tag at the caret and its partner, like
+		/// `<defs` and `</defs>`.
+		func highlightMatchingTags() {
+			guard let textView, let layout = textView.layoutManager else { return }
+			let full = NSRange(location: 0, length: (textView.string as NSString).length)
+			layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+			guard full.length < 400_000, textView.selectedRange().length == 0 else { return }
+			let tags = TagScanner.tags(in: textView.string)
+			guard
+				let (tag, partner) = TagScanner.pair(
+					at: textView.selectedRange().location, in: tags)
+			else { return }
+			let colour = (theme?.keyword ?? .controlAccentColor).withAlphaComponent(0.22)
+			for t in [tag, partner].compactMap({ $0 }) {
+				// The "<" or "</", the name, and a closing ">" right after it.
+				var range = NSRange(
+					location: t.range.location, length: NSMaxRange(t.nameRange) - t.range.location)
+				if t.kind == .end { range = t.range }
+				layout.addTemporaryAttribute(
+					.backgroundColor, value: colour, forCharacterRange: range)
 			}
 		}
 
 		/// Moving the insertion point into a start tag selects that element on the canvas.
 		func textViewDidChangeSelection(_ notification: Notification) {
+			updateFolds()
+			highlightMatchingTags()
 			guard !isProgrammaticChange, let textView,
 				textView.window?.firstResponder === textView
 			else { return }
@@ -239,6 +290,11 @@ struct SourceEditor: NSViewRepresentable {
 final class CodeTextView: NSTextView {
 	private var pinch: CGFloat = 0
 
+	override func insertText(_ string: Any, replacementRange: NSRange) {
+		super.insertText(string, replacementRange: replacementRange)
+		if let typed = string as? String { autoClose(after: typed) }
+	}
+
 	/// ⌘-scroll changes the text size, like ⌘+ and ⌘−.
 	override func scrollWheel(with event: NSEvent) {
 		guard event.modifierFlags.contains(.command), event.scrollingDeltaY != 0 else {
@@ -258,6 +314,7 @@ final class CodeTextView: NSTextView {
 			return super.performKeyEquivalent(with: event)
 		}
 		switch event.charactersIgnoringModifiers {
+		case "/" where flags == .command: toggleComment()
 		case "=", "+": SourceEditor.adjustFontSize(by: 1)
 		case "-": SourceEditor.adjustFontSize(by: -1)
 		case "0": SourceEditor.setFontSize(12)

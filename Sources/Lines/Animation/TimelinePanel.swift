@@ -24,9 +24,7 @@ struct TimelinePanel: View {
 			}
 		}
 		.frame(height: Self.height)
-		.clipShape(.rect(cornerRadius: 18, style: .continuous))
-		.glassEffect(.regular, in: .rect(cornerRadius: 18, style: .continuous))
-		.shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+		.floatingPanelChrome()
 	}
 
 	private var empty: some View {

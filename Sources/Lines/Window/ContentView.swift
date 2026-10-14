@@ -83,7 +83,9 @@ struct ContentView: View {
 			}
 			.onChange(of: controller.showsCode) { _, shows in
 				if shows && isLoaded { closeSidePanels() }
+				updateInsets()
 			}
+			.onChange(of: codeWidth) { _, _ in updateInsets() }
 			.onChange(of: controller.showsTimeline, initial: true) { _, shows in
 				controller.setTimelineActive(shows)
 				updateInsets()
@@ -95,6 +97,16 @@ struct ContentView: View {
 	}
 
 	static let panelAnimation = Animation.snappy(duration: 0.28)
+
+	/// Room taken by the floating code panel on the leading edge.
+	private var codeSpace: CGFloat {
+		controller.showsCode ? codeWidth + Self.panelMargin : 0
+	}
+
+	/// Room taken by the code and layers panels, for things placed after them.
+	private var leadingPanelsSpace: CGFloat {
+		codeSpace + (controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0)
+	}
 
 	/// Room taken by the tools palette on the canvas's leading edge.
 	private var paletteSpace: CGFloat {
@@ -120,7 +132,8 @@ struct ContentView: View {
 	private func updateInsets() {
 		let m = Self.panelMargin
 		controller.setInsets(
-			left: paletteSpace + (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
+			left: codeSpace + paletteSpace
+				+ (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
 			right: controller.showsInspector ? Self.inspectorWidth + m * 2 : 0,
 			top: 0,
 			bottom: controller.showsTimeline && controller.layout == .canvas
@@ -129,23 +142,30 @@ struct ContentView: View {
 
 	// MARK: Editor
 
-	/// The code panel sits beside the viewer. One canvas stays alive in every
-	/// layout: it renders the drawing and also reports the element tree the
-	/// layers panel and graph are built from.
+	/// One canvas stays alive in every layout: it renders the drawing and also
+	/// reports the element tree the layers panel and graph are built from.
 	private var editor: some View {
-		HStack(spacing: 0) {
-			if controller.showsCode {
-				CodePanel(
-					document: document, controller: controller, fontSize: fontSize,
-					wrapsLines: wrapsLines,
-					theme: SyntaxTheme.pair(light: lightTheme, dark: darkTheme)
-				)
-				.frame(width: codeWidth)
-				SplitDivider(width: $codeWidth)
+		viewer
+			.frame(maxWidth: .infinity, maxHeight: .infinity)
+			.overlay(alignment: .leading) {
+				if controller.showsCode {
+					CodePanel(
+						document: document, controller: controller, fontSize: fontSize,
+						wrapsLines: wrapsLines,
+						theme: SyntaxTheme.pair(light: lightTheme, dark: darkTheme),
+						close: { controller.showsCode = false }
+					)
+					.frame(width: codeWidth)
+					.overlay(alignment: .trailing) {
+						SplitDivider(width: $codeWidth, showsLine: false)
+							.padding(.vertical, 24)
+							.offset(x: 4)
+					}
+					.padding(Self.panelMargin)
+					.transition(.move(edge: .leading).combined(with: .opacity))
+				}
 			}
-			viewer
-				.frame(maxWidth: .infinity, maxHeight: .infinity)
-		}
+			.animation(Self.panelAnimation, value: controller.showsCode)
 	}
 
 	/// The canvas or graph fills the viewer; layers and the inspector float over it.
@@ -169,7 +189,7 @@ struct ContentView: View {
 						controller.showsTimeline ? TimelinePanel.height + Self.panelMargin : 0
 					)
 					.padding(
-						.leading, controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0
+						.leading, leadingPanelsSpace
 					)
 					.padding(
 						.trailing,
@@ -180,6 +200,7 @@ struct ContentView: View {
 			if controller.layout == .canvas {
 				ToolPalette(controller: controller)
 					.padding(Self.panelMargin)
+					.padding(.leading, codeSpace)
 					.transition(.opacity)
 			}
 		}
@@ -190,7 +211,7 @@ struct ContentView: View {
 				}
 				.frame(width: Self.layersWidth)
 				.padding(Self.panelMargin)
-				.padding(.leading, paletteSpace)
+				.padding(.leading, paletteSpace + codeSpace)
 				.transition(.move(edge: .leading).combined(with: .opacity))
 			}
 		}
@@ -209,7 +230,7 @@ struct ContentView: View {
 				TimelinePanel(controller: controller, close: { controller.showsTimeline = false })
 					.padding(Self.panelMargin)
 					.padding(
-						.leading, controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0
+						.leading, leadingPanelsSpace
 					)
 					.padding(
 						.trailing,
