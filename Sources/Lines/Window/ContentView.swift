@@ -22,6 +22,7 @@ struct ContentView: View {
 	@AppStorage("opensFilesLocked") private var opensFilesLocked = true
 	@AppStorage("editorFontSize") private var fontSize: Double = 12
 	@AppStorage("wrapsLines") private var wrapsLines = true
+	@AppStorage(CodeFont.key) private var codeFontName = ""
 	@AppStorage(SyntaxTheme.darkKey) private var darkTheme = SyntaxTheme.defaultDark
 	@AppStorage(SyntaxTheme.lightKey) private var lightTheme = SyntaxTheme.defaultLight
 	@AppStorage(ToolbarButtons.layers) private var toolbarShowsLayers = true
@@ -195,6 +196,7 @@ struct ContentView: View {
 						document: document, controller: controller, fontSize: fontSize,
 						wrapsLines: wrapsLines,
 						theme: SyntaxTheme.pair(light: lightTheme, dark: darkTheme),
+						fontName: codeFontName,
 						close: { controller.showsCode = false }
 					)
 					.frame(width: codeWidth)

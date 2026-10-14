@@ -8,6 +8,7 @@ struct CodePanel: View {
 	var fontSize: Double
 	var wrapsLines: Bool
 	var theme: SyntaxTheme
+	var fontName = ""
 
 	@State private var copied = false
 
@@ -54,7 +55,7 @@ struct CodePanel: View {
 
 			SourceEditor(
 				document: document, controller: controller, fontSize: fontSize,
-				wrapsLines: wrapsLines, theme: theme
+				wrapsLines: wrapsLines, theme: theme, fontName: fontName
 			)
 			.clipShape(.rect(cornerRadius: 12, style: .continuous))
 			.padding([.horizontal, .bottom], 6)

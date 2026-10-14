@@ -9,6 +9,7 @@ struct SourceEditor: NSViewRepresentable {
 	var fontSize: CGFloat
 	var wrapsLines: Bool
 	var theme: SyntaxTheme
+	var fontName = ""
 
 	func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -50,7 +51,8 @@ struct SourceEditor: NSViewRepresentable {
 		textView.setAccessibilityLabel("SVG Source")
 		textView.textStorage?.delegate = coordinator
 
-		coordinator.apply(fontSize: fontSize, wrapsLines: wrapsLines, theme: theme)
+		coordinator.apply(
+			fontSize: fontSize, wrapsLines: wrapsLines, theme: theme, fontName: fontName)
 		textView.string = document.text
 		scrollView.hasHorizontalScroller = !wrapsLines
 		return scrollView
@@ -59,7 +61,8 @@ struct SourceEditor: NSViewRepresentable {
 	func updateNSView(_ scrollView: NSScrollView, context: Context) {
 		let coordinator = context.coordinator
 		coordinator.parent = self
-		coordinator.apply(fontSize: fontSize, wrapsLines: wrapsLines, theme: theme)
+		coordinator.apply(
+			fontSize: fontSize, wrapsLines: wrapsLines, theme: theme, fontName: fontName)
 		scrollView.hasHorizontalScroller = !wrapsLines
 		coordinator.sync(to: document.text)
 		(scrollView.documentView as? NSTextView)?.isEditable = controller.isEditing
@@ -89,6 +92,7 @@ struct SourceEditor: NSViewRepresentable {
 		private var fontSize: CGFloat = 0
 		private var wrapsLines: Bool?
 		private var theme: SyntaxTheme?
+		private var fontName: String?
 		let folding = FoldingLayoutDelegate()
 		/// The folded value the insertion point is in, shown in full.
 		private var expandedFold: NSRange?
@@ -101,12 +105,16 @@ struct SourceEditor: NSViewRepresentable {
 			return textView.window?.firstResponder === textView
 		}
 
-		func apply(fontSize: CGFloat, wrapsLines: Bool, theme: SyntaxTheme) {
+		func apply(
+			fontSize: CGFloat, wrapsLines: Bool, theme: SyntaxTheme,
+			fontName: String = CodeFont.name
+		) {
 			guard let textView else { return }
-			if fontSize != self.fontSize || theme != self.theme {
+			if fontSize != self.fontSize || theme != self.theme || fontName != self.fontName {
 				self.fontSize = fontSize
 				self.theme = theme
-				textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+				self.fontName = fontName
+				textView.font = CodeFont.regular(size: fontSize, name: fontName)
 				textView.typingAttributes = [.font: textView.font!, .foregroundColor: theme.plain]
 				textView.backgroundColor = theme.background
 				textView.insertionPointColor = theme.insertionPoint

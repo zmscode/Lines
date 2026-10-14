@@ -33,7 +33,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
 /// A page of Settings, listed in the sidebar like System Settings.
 enum SettingsPane: String, CaseIterable, Identifiable {
-	case general, windows, canvas, toolbar, editor, themes
+	case general, windows, canvas, toolbar, editor
 	var id: String { rawValue }
 
 	var title: String {
@@ -43,7 +43,6 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 		case .canvas: "Canvas"
 		case .toolbar: "Toolbar"
 		case .editor: "Code Editor"
-		case .themes: "Code Themes"
 		}
 	}
 
@@ -54,43 +53,74 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 		case .canvas: "square.on.square.dashed"
 		case .toolbar: "menubar.rectangle"
 		case .editor: "chevron.left.forwardslash.chevron.right"
-		case .themes: "paintpalette"
 		}
 	}
+}
 
-	var tint: Color {
-		switch self {
-		case .general: .gray
-		case .windows: .blue
-		case .canvas: Brand.accent
-		case .toolbar: .indigo
-		case .editor: .teal
-		case .themes: .pink
+/// One setting, for search: what it's called and words people might use.
+struct SettingsEntry: Identifiable, Hashable {
+	var title: String
+	var pane: SettingsPane
+	var keywords: [String] = []
+	var id: String { "\(pane.rawValue).\(title)" }
+
+	static let all: [SettingsEntry] = [
+		SettingsEntry(
+			title: "Appearance", pane: .general,
+			keywords: ["light", "dark", "system", "auto", "mode"]),
+		SettingsEntry(
+			title: "Default app for SVG files", pane: .general,
+			keywords: ["open with", "finder", "double-click"]),
+		SettingsEntry(
+			title: "Open new windows in", pane: .windows,
+			keywords: ["layout", "canvas", "graph", "node"]),
+		SettingsEntry(
+			title: "Show code alongside", pane: .windows, keywords: ["source", "editor", "panel"]),
+		SettingsEntry(
+			title: "Open files locked", pane: .windows,
+			keywords: ["preview", "lock", "read only", "edit"]),
+		SettingsEntry(
+			title: "Canvas background", pane: .canvas,
+			keywords: [
+				"checkerboard", "white", "black", "grey", "transparent", "custom", "colour",
+				"color",
+			]),
+		SettingsEntry(
+			title: "Background behind the drawing only", pane: .canvas,
+			keywords: ["artboard", "page", "area"]),
+		SettingsEntry(title: "Layers button", pane: .toolbar, keywords: ["toolbar", "layers"]),
+		SettingsEntry(
+			title: "Inspector button", pane: .toolbar, keywords: ["toolbar", "inspector"]),
+		SettingsEntry(title: "Code button", pane: .toolbar, keywords: ["toolbar", "source"]),
+		SettingsEntry(title: "Graph button", pane: .toolbar, keywords: ["toolbar", "node editor"]),
+		SettingsEntry(
+			title: "Animations button", pane: .toolbar, keywords: ["toolbar", "timeline"]),
+		SettingsEntry(
+			title: "Changes button", pane: .toolbar, keywords: ["toolbar", "diff", "history"]),
+		SettingsEntry(
+			title: "Code font", pane: .editor,
+			keywords: ["typeface", "monospaced", "sf mono", "family"]),
+		SettingsEntry(title: "Font size", pane: .editor, keywords: ["text", "points", "zoom"]),
+		SettingsEntry(title: "Wrap lines", pane: .editor, keywords: ["soft wrap", "long lines"]),
+		SettingsEntry(
+			title: "Format automatically", pane: .editor, keywords: ["indent", "pretty", "tidy"]),
+		SettingsEntry(
+			title: "Dark theme", pane: .editor, keywords: ["syntax", "colours", "highlighting"]),
+		SettingsEntry(
+			title: "Light theme", pane: .editor, keywords: ["syntax", "colours", "highlighting"]),
+	]
+
+	/// Entries matching `query`, best first (fzf-style fuzzy matching).
+	static func search(_ query: String) -> [SettingsEntry] {
+		all.compactMap { entry -> (SettingsEntry, Int)? in
+			let titleScore = FuzzyMatch.match(query, in: entry.title)?.score
+			let otherScore = FuzzyMatch.best(query, in: entry.keywords + [entry.pane.title])
+				.map { $0 - 6 }  // the setting's own name counts most
+			guard let score = [titleScore, otherScore].compactMap({ $0 }).max() else { return nil }
+			return (entry, score)
 		}
-	}
-
-	/// Words the search field matches, beyond the title.
-	var keywords: [String] {
-		switch self {
-		case .general:
-			["appearance", "light", "dark", "system", "default", "svg", "open with", "app"]
-		case .windows: ["new", "layout", "graph", "code", "preview", "locked", "lock", "open"]
-		case .canvas:
-			[
-				"background", "transparent", "checkerboard", "white", "black", "grey", "custom",
-				"colour", "color", "drawing",
-			]
-		case .toolbar:
-			["buttons", "layers", "inspector", "code", "graph", "animations", "timeline"]
-		case .editor: ["font", "size", "wrap", "lines", "format", "indent", "text"]
-		case .themes: ["theme", "colours", "colors", "syntax", "highlighting", "dark", "light"]
-		}
-	}
-
-	func matches(_ query: String) -> Bool {
-		let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-		guard !q.isEmpty else { return true }
-		return title.lowercased().contains(q) || keywords.contains { $0.contains(q) }
+		.sorted { $0.1 > $1.1 }
+		.map(\.0)
 	}
 }
 
@@ -100,38 +130,55 @@ struct SettingsView: View {
 	@AppStorage("settings.pane") private var pane: SettingsPane = .general
 	@State private var query = ""
 
-	private var panes: [SettingsPane] { SettingsPane.allCases.filter { $0.matches(query) } }
+	private var results: [SettingsEntry] { SettingsEntry.search(query) }
+	private var isSearching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
 	var body: some View {
 		NavigationSplitView {
-			List(panes, selection: selection) { pane in
-				Label {
-					Text(pane.title)
-				} icon: {
-					Image(systemName: pane.symbol)
-						.font(.system(size: 11, weight: .semibold))
-						.foregroundStyle(.white)
-						.frame(width: 20, height: 20)
-						.background(
-							pane.tint.gradient, in: .rect(cornerRadius: 5, style: .continuous))
+			List(selection: selection) {
+				if isSearching {
+					Section("Results") {
+						ForEach(results) { entry in
+							VStack(alignment: .leading, spacing: 1) {
+								Text(entry.title)
+								Text(entry.pane.title).font(.caption).foregroundStyle(.secondary)
+							}
+							.tag(entry.pane)
+						}
+					}
+				} else {
+					ForEach(SettingsPane.allCases) { pane in
+						Label {
+							Text(pane.title)
+						} icon: {
+							Image(systemName: pane.symbol)
+								.font(.system(size: 11, weight: .semibold))
+								.foregroundStyle(.white)
+								.frame(width: 20, height: 20)
+								.background(
+									Brand.accent.gradient,
+									in: .rect(cornerRadius: 5, style: .continuous))
+						}
+						.tag(pane)
+					}
 				}
-				.tag(pane)
 			}
-			.navigationSplitViewColumnWidth(200)
-			.searchable(text: $query, placement: .sidebar, prompt: "Search")
+			.navigationSplitViewColumnWidth(210)
+			.searchable(text: $query, placement: .sidebar, prompt: "Search Settings")
 			.overlay {
-				if panes.isEmpty {
+				if isSearching && results.isEmpty {
 					ContentUnavailableView.search(text: query)
 				}
 			}
+			.toolbar(removing: .sidebarToggle)
 		} detail: {
-			detail(for: panes.contains(pane) ? pane : panes.first ?? pane)
-				.navigationTitle((panes.contains(pane) ? pane : panes.first ?? pane).title)
+			detail(for: pane)
+				.navigationTitle(pane.title)
 		}
-		.frame(width: 720, height: 520)
+		.frame(width: 720, height: 540)
 		.tint(Brand.accent)
 		.onChange(of: query) { _, _ in
-			if let first = panes.first, !panes.contains(pane) { pane = first }
+			if let first = results.first { pane = first.pane }
 		}
 	}
 
@@ -145,10 +192,31 @@ struct SettingsView: View {
 		case .general: GeneralSettings()
 		case .windows: WindowSettings()
 		case .canvas: CanvasSettings()
-		case .toolbar: Form { Section("Buttons") { ToolbarButtonsSettings() } }.formStyle(.grouped)
-		case .editor: EditorSettings(part: .text)
-		case .themes: EditorSettings(part: .themes)
+		case .toolbar:
+			Form {
+				Section {
+					ToolbarButtonsSettings()
+				} header: {
+					Text("Buttons")
+				} footer: {
+					SettingsFootnote(
+						"Choose which buttons appear in each window's toolbar. Everything stays available from the View menu and its shortcuts (⌘1–⌘5) either way."
+					)
+				}
+			}
+			.formStyle(.grouped)
+		case .editor: EditorSettings()
 		}
+	}
+}
+
+/// The explanatory text under a settings section.
+struct SettingsFootnote: View {
+	var text: String
+	init(_ text: String) { self.text = text }
+
+	var body: some View {
+		Text(text).font(.footnote).foregroundStyle(.secondary)
 	}
 }
 
@@ -169,6 +237,10 @@ private struct GeneralSettings: View {
 						}
 					}
 				}
+			} footer: {
+				SettingsFootnote(
+					"System follows your Mac's Light or Dark setting. Drawings themselves aren't affected: only the app's windows, panels and code editor change."
+				)
 			}
 			DefaultAppSection()
 		}
@@ -216,9 +288,9 @@ private struct DefaultAppSection: View {
 		} header: {
 			Text("Default App")
 		} footer: {
-			Text("Double-clicking an SVG in the Finder opens it in the default app.")
-				.font(.footnote)
-				.foregroundStyle(.secondary)
+			SettingsFootnote(
+				"Double-clicking an SVG in the Finder opens it in the default app. macOS may ask you to confirm the change; you can still open SVGs in other apps with Open With."
+			)
 		}
 		.onAppear(perform: refresh)
 	}
@@ -248,13 +320,19 @@ private struct WindowSettings: View {
 
 	var body: some View {
 		Form {
-			Section("New Windows") {
+			Section {
 				Picker("Open in", selection: $defaultLayout) {
 					ForEach(EditorLayout.allCases) { layout in
 						Label(layout.title, systemImage: layout.symbol).tag(layout)
 					}
 				}
 				Toggle("Show code alongside", isOn: $showsCodeByDefault)
+			} header: {
+				Text("New Windows")
+			} footer: {
+				SettingsFootnote(
+					"Canvas shows the drawing; Graph shows its elements as connected nodes. Showing code opens the source panel on the left of each new window. You can switch either at any time (⌘2, ⌘3)."
+				)
 			}
 			Section {
 				Toggle(isOn: $opensFilesLocked) {
@@ -265,6 +343,10 @@ private struct WindowSettings: View {
 				}
 			} header: {
 				Text("Preview")
+			} footer: {
+				SettingsFootnote(
+					"A locked window lets you zoom, pan, play animations and ⌘-click links, but nothing in the file can change until you unlock it with the lock at the bottom left of the canvas."
+				)
 			}
 		}
 		.formStyle(.grouped)
@@ -289,9 +371,9 @@ private struct CanvasSettings: View {
 				}
 				.disabled(background == .transparent)
 			} footer: {
-				Text("The background only affects how drawings are shown, not the saved file.")
-					.font(.footnote)
-					.foregroundStyle(.secondary)
+				SettingsFootnote(
+					"The background is only what Lines shows behind your drawing; it's never saved into the file. Transparent lets the desktop show through. Behind the drawing only keeps the window's own colour around the drawing's edges, like a page on a desk."
+				)
 			}
 		}
 		.formStyle(.grouped)
@@ -388,8 +470,7 @@ private struct MiniWindow: View {
 // MARK: - Editor
 
 private struct EditorSettings: View {
-	enum Part { case text, themes }
-	var part: Part
+	@AppStorage(CodeFont.key) private var fontName = ""
 	@AppStorage("editorFontSize") private var fontSize: Double = 12
 	@AppStorage("wrapsLines") private var wrapsLines = true
 	@AppStorage("formatsAutomatically") private var formatsAutomatically = true
@@ -398,7 +479,8 @@ private struct EditorSettings: View {
 
 	var body: some View {
 		Form {
-			if part == .themes { themes } else { text }
+			text
+			themes
 		}
 		.formStyle(.grouped)
 	}
@@ -415,18 +497,23 @@ private struct EditorSettings: View {
 		} header: {
 			Text("Colours")
 		} footer: {
-			Text(
-				"The editor uses the dark theme in Dark Mode and the light theme in Light Mode. Themes come from their Zed extensions."
+			SettingsFootnote(
+				"The editor uses the dark theme in Dark Mode and the light theme in Light Mode, so it always matches the app. The themes are ports of their Zed extensions."
 			)
-			.font(.footnote)
-			.foregroundStyle(.secondary)
 		}
 
 	}
 
 	@ViewBuilder
 	private var text: some View {
-		Section("Text") {
+		Section {
+			Picker("Font", selection: $fontName) {
+				Text(CodeFont.systemName).tag("")
+				Divider()
+				ForEach(CodeFont.families, id: \.self) { family in
+					Text(family).font(.custom(family, size: 13)).tag(family)
+				}
+			}
 			LabeledContent("Font size") {
 				Stepper(value: $fontSize, in: 9...24, step: 1) {
 					Text("\(Int(fontSize)) pt").monospacedDigit()
@@ -437,6 +524,12 @@ private struct EditorSettings: View {
 				Text("Format automatically")
 				Text("Re-indents the markup after canvas edits and when you pause typing.")
 			}
+		} header: {
+			Text("Text")
+		} footer: {
+			SettingsFootnote(
+				"Only fixed-width fonts are listed, so tags and attributes line up. You can also change the size with ⌘+ and ⌘− (or a pinch) while the editor is focused. Wrapping keeps long path data on screen instead of scrolling sideways."
+			)
 		}
 	}
 

@@ -19,8 +19,8 @@ enum Highlighter {
 
 	static func highlight(_ storage: NSTextStorage, fontSize: CGFloat, theme: SyntaxTheme) {
 		let full = NSRange(location: 0, length: storage.length)
-		let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-		let bold = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
+		let font = CodeFont.regular(size: fontSize)
+		let bold = CodeFont.bold(size: fontSize)
 		storage.beginEditing()
 		storage.setAttributes([.font: font, .foregroundColor: theme.plain], range: full)
 		// Very large files stay plain so typing remains responsive.
