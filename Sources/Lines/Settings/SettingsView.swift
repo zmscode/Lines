@@ -179,9 +179,21 @@ struct SettingsView: View {
 			.navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
 			.toolbar(removing: .sidebarToggle)
 		} detail: {
-			detail(for: pane)
-				.navigationTitle(pane.title)
+			// The window is always "Settings"; the heading names the section.
+			VStack(alignment: .leading, spacing: 0) {
+				HStack(spacing: 10) {
+					PaneIcon(pane: pane, size: 28)
+					Text(pane.title)
+						.font(.title2.weight(.semibold))
+						.accessibilityAddTraits(.isHeader)
+				}
+				.padding(.horizontal, 28)
+				.padding(.top, 14)
+				detail(for: pane)
+			}
+			.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 		}
+		.navigationTitle("Settings")
 		.frame(minWidth: 680, idealWidth: 800, minHeight: 460, idealHeight: 600)
 		.tint(Brand.accent)
 		.onChange(of: query) { _, _ in

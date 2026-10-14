@@ -5,6 +5,7 @@ import SwiftUI
 struct SplitDivider: View {
 	@Binding var width: Double
 	var range: ClosedRange<Double> = 220...900
+	var label: LocalizedStringKey = "Code panel width"
 	/// Draws the line; off for a panel edge that is its own boundary.
 	var showsLine = true
 
@@ -32,7 +33,7 @@ struct SplitDivider: View {
 					.onEnded { _ in startWidth = nil }
 			)
 			.accessibilityElement()
-			.accessibilityLabel("Code panel width")
+			.accessibilityLabel(label)
 			.accessibilityValue("\(Int(width)) points")
 			.accessibilityAdjustableAction { direction in
 				switch direction {

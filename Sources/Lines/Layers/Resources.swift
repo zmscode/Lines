@@ -105,11 +105,36 @@ struct ResourceInfo: Identifiable, Equatable {
 		}
 	}
 
-	/// What it does to this drawing, in a sentence, then how to read its preview.
+	/// What it does to this drawing, then how to read its preview.
 	var summary: String {
+		isUnused
+			? sentence
+				+ " Nothing uses it yet: the preview shows it on a sample shape. Drag it onto a layer to use it."
+			: sentence + " Left: without it. Right: with it — the dashed box marks the change."
+	}
+
+	/// What it does to this drawing, in a sentence.
+	var sentence: String {
 		let names = Self.list(users.map(\.displayName))
-		let p = item.props
 		let sentence: String
+		switch kind {
+		case .gradient, .pattern: sentence = "Fills \(names) with \(what)."
+		case .clip:
+			sentence = "Cuts \(names) to the outline of \(shapes): only the parts inside are drawn."
+		case .mask:
+			sentence =
+				"Masks \(names) with \(shapes): where they're white it shows, black hides it, grey fades it."
+		case .filter:
+			sentence = "\(what.prefix(1).uppercased() + what.dropFirst()), on \(names)."
+		case .symbol: sentence = "A reusable drawing, placed wherever \(names) points at it."
+		}
+		return isUnused ? sentence.replacingOccurrences(of: " nothing", with: " shapes") : sentence
+	}
+
+	/// What it is or does, as a phrase: "a straight blend from orange to pink",
+	/// "cuts it to the outline of Circle", "blurs by 2".
+	var what: String {
+		let p = item.props
 		switch item.tag {
 		case "linearGradient", "radialGradient":
 			let colours = parts.map { ColourName.of(Self.stopColour($0)) }
@@ -128,28 +153,23 @@ struct ResourceInfo: Identifiable, Equatable {
 				case "reflect": ", mirrored past its edge"
 				default: ""
 				}
-			sentence = "Fills \(names) with \(shape) \(blend)\(spread)."
+			return "\(shape) \(blend)\(spread)"
 		case "pattern":
-			sentence =
-				"Fills \(names) with a repeating \(p["width"] ?? "?")×\(p["height"] ?? "?") tile."
+			return "a repeating \(p["width"] ?? "?")×\(p["height"] ?? "?") tile"
 		case "clipPath":
-			let shapes = contents.isEmpty ? "no shapes yet" : Self.list(contents.map(\.displayName))
-			sentence = "Cuts \(names) to the outline of \(shapes): only the parts inside are drawn."
+			return "cuts it to the outline of \(shapes)"
 		case "mask":
-			let shapes = contents.isEmpty ? "no shapes yet" : Self.list(contents.map(\.displayName))
-			sentence =
-				"Masks \(names) with \(shapes): where they're white it shows, black hides it, grey fades it."
+			return "masks it with \(shapes)"
 		case "filter":
 			let effects = parts.map(Self.effect)
-			let what = effects.isEmpty ? "No effects yet" : Self.list(effects)
-			sentence = "\(what.prefix(1).uppercased() + what.dropFirst()), on \(names)."
+			return effects.isEmpty ? "no effects yet" : Self.list(effects)
 		default:
-			sentence = "A reusable drawing, placed wherever \(names) points at it."
+			return "a reusable drawing"
 		}
-		return isUnused
-			? sentence.replacingOccurrences(of: " nothing", with: " shapes")
-				+ " Nothing uses it yet: the preview shows it on a sample shape. Drag it onto a layer to use it."
-			: sentence + " Left: without it. Right: with it — the dashed box marks the change."
+	}
+
+	private var shapes: String {
+		contents.isEmpty ? "no shapes yet" : Self.list(contents.map(\.displayName))
 	}
 
 	private static func effect(_ part: OutlineItem) -> String {

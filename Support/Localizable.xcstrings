@@ -4,12 +4,25 @@
     "" : {
 
     },
+    "#%@" : {
+
+    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ %lld%% opacity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$lld%% opacity"
           }
         }
       }
@@ -26,12 +39,42 @@
     "%@ shadow" : {
 
     },
+    "%@ × %@, at %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ × %2$@, at %3$@, %4$@"
+          }
+        }
+      }
+    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@, %@ wide" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@ wide"
+          }
+        }
+      }
+    },
+    "%@, %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, %3$@"
           }
         }
       }
@@ -46,6 +89,36 @@
         }
       }
     },
+    "%@, applied to %@, which contains it" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, applied to %2$@, which contains it"
+          }
+        }
+      }
+    },
+    "%@, from %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, from %2$@"
+          }
+        }
+      }
+    },
+    "%@, with %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, with %2$@"
+          }
+        }
+      }
+    },
     "%@: %@" : {
       "localizations" : {
         "en" : {
@@ -56,12 +129,48 @@
         }
       }
     },
+    "%@: %@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ %3$@"
+          }
+        }
+      }
+    },
     "%@: %@ — click to select it" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@: %2$@ — click to select it"
+          }
+        }
+      }
+    },
+    "%@: %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%@: black, the default" : {
+
+    },
+    "%@: none" : {
+
+    },
+    "%@: “%@”, which isn't defined, so nothing is drawn" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: “%2$@”, which isn't defined, so nothing is drawn"
           }
         }
       }
@@ -151,6 +260,9 @@
 
     },
     "Animated — show the timeline" : {
+
+    },
+    "Animates %@" : {
 
     },
     "Animation" : {
@@ -247,6 +359,9 @@
 
     },
     "Clip Path" : {
+
+    },
+    "Clipped by %@" : {
 
     },
     "Clipping Path" : {
@@ -353,6 +468,9 @@
 
     },
     "Drag into the toolbar above" : {
+
+    },
+    "Drag it from Resources onto a layer to use it." : {
 
     },
     "Drag items into the toolbar, or out of it to remove them." : {
@@ -473,6 +591,16 @@
     "Fade In" : {
 
     },
+    "Faded to %lld%% by %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Faded to %1$lld%% by %2$@"
+          }
+        }
+      }
+    },
     "Fills just the drawing's area, with the window colour around it." : {
 
     },
@@ -480,6 +608,9 @@
 
     },
     "Filter by kind, or by what uses a resource" : {
+
+    },
+    "Filtered by %@" : {
 
     },
     "Filters" : {
@@ -569,6 +700,9 @@
     "Hide Code (⌘2)" : {
 
     },
+    "Hide Details" : {
+
+    },
     "Hide Element" : {
 
     },
@@ -588,6 +722,9 @@
 
     },
     "Hide Timeline (⌘4)" : {
+
+    },
+    "Hide the details column" : {
 
     },
     "Hide the raw attributes" : {
@@ -614,6 +751,9 @@
     "Insert" : {
 
     },
+    "Inside It" : {
+
+    },
     "Inspector" : {
 
     },
@@ -630,6 +770,9 @@
 
     },
     "Layers" : {
+
+    },
+    "Layers panel width" : {
 
     },
     "Light" : {
@@ -662,6 +805,9 @@
     "Lock to preview without changing anything (⇧⌘L)" : {
 
     },
+    "Made Of" : {
+
+    },
     "Make Lines the Default" : {
 
     },
@@ -672,6 +818,9 @@
 
     },
     "Mask" : {
+
+    },
+    "Masked by %@" : {
 
     },
     "Matches" : {
@@ -699,6 +848,9 @@
 
     },
     "Move and resize its dashed shapes over the element." : {
+
+    },
+    "Movement" : {
 
     },
     "Name" : {
@@ -746,6 +898,12 @@
     "None" : {
 
     },
+    "Not Used Yet" : {
+
+    },
+    "Nothing else changes how it's drawn." : {
+
+    },
     "Nothing to Inspect" : {
 
     },
@@ -786,6 +944,9 @@
 
     },
     "Page size" : {
+
+    },
+    "Paint" : {
 
     },
     "Path" : {
@@ -950,6 +1111,9 @@
     "Select Enclosing Group" : {
 
     },
+    "Select a layer to see what applies to it." : {
+
+    },
     "Select an element, then add an animation with the + menu." : {
 
     },
@@ -983,6 +1147,9 @@
     "Set the viewBox to the drawing’s bounds" : {
 
     },
+    "Settings" : {
+
+    },
     "Shapes" : {
 
     },
@@ -1002,6 +1169,9 @@
 
     },
     "Show Code (⌘2)" : {
+
+    },
+    "Show Details" : {
 
     },
     "Show Element" : {
@@ -1041,6 +1211,9 @@
 
     },
     "Show this version on the canvas (⌘-click or ⇧-click to pick several)" : {
+
+    },
+    "Show what applies to the selected layer, beside the layers" : {
 
     },
     "Show what uses it" : {
@@ -1121,6 +1294,9 @@
     "The source matches that version." : {
 
     },
+    "This Drawing" : {
+
+    },
     "Timeline" : {
 
     },
@@ -1181,6 +1357,9 @@
     "Use one radius for every corner" : {
 
     },
+    "Used By" : {
+
+    },
     "Used by %@" : {
 
     },
@@ -1194,6 +1373,12 @@
 
     },
     "Welcome to Lines" : {
+
+    },
+    "What Applies to It" : {
+
+    },
+    "What It Does" : {
 
     },
     "Where this colour sits along the gradient" : {
@@ -1232,6 +1417,9 @@
     "Zoom to Fit" : {
 
     },
+    "and %lld more" : {
+
+    },
     "lines since opening" : {
 
     },
@@ -1239,6 +1427,12 @@
 
     },
     "unused" : {
+
+    },
+    "used by %lld" : {
+
+    },
+    "“%@”" : {
 
     },
     "−%lld" : {

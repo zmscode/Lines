@@ -14,6 +14,14 @@ extension UTType {
 /// copies it as SVG, and SVG files dropped from the Finder are imported.
 struct LayersPanel: View {
 	var controller: CanvasController
+	/// The panel's width: wide enough, the details sit beside the layers.
+	@Binding var width: Double
+
+	static let narrowWidth: Double = 264
+	static let wideWidth: Double = 620
+	/// From this width the details column shows.
+	static let detailsWidth: Double = 500
+	private var isWide: Bool { width >= Self.detailsWidth }
 
 	@State private var expanded: Set<String> = []
 	@State private var renaming: String?
@@ -42,11 +50,29 @@ struct LayersPanel: View {
 	static let rowHeight: CGFloat = 32
 
 	var body: some View {
+		if isWide {
+			HStack(spacing: 0) {
+				layers.frame(width: min(360, max(260, width * 0.45)))
+				Divider()
+				LayerDetails(controller: controller) { kind in filter.kinds = [kind] }
+			}
+		} else {
+			layers
+		}
+	}
+
+	/// Elements that animate, or that SMIL animations target.
+	static func animatedOrders(_ outline: [OutlineItem]) -> Set<Int> {
+		Set(
+			outline.filter { AnimationTag.contains($0.tag) }.map(\.parent)
+				+ outline.filter { !$0.cssAnimations.isEmpty }.map(\.order))
+	}
+
+	@ViewBuilder
+	private var layers: some View {
 		let tree = LayerNode.build(Self.layerItems(controller.outline))
 		let index = LayerIndex(tree)
-		let animated = Set(
-			controller.outline.filter { AnimationTag.contains($0.tag) }.map(\.parent)
-				+ controller.outline.filter { !$0.cssAnimations.isEmpty }.map(\.order))
+		let animated = Self.animatedOrders(controller.outline)
 		let rows = filter.isActive ? filtered(tree, animated: animated) : flatten(tree)
 		VStack(spacing: 0) {
 			if !controller.outline.isEmpty {
@@ -135,7 +161,6 @@ struct LayersPanel: View {
 			}
 
 			bottomBar
-				.disabled(!controller.isEditing)
 		}
 		.onHover { inside in if !inside { controller.hover(order: nil) } }
 		.onDeleteCommand {
@@ -254,17 +279,26 @@ struct LayersPanel: View {
 	private var bottomBar: some View {
 		HStack(spacing: 2) {
 			Button("Group", systemImage: "square.on.square.dashed") { controller.groupSelection() }
-				.disabled(!controller.hasElementSelection)
+				.disabled(!controller.isEditing || !controller.hasElementSelection)
 				.help("Group the selected element (⌥⌘G)")
 			Button("Duplicate", systemImage: "plus.square.on.square") {
 				controller.duplicateSelection()
 			}
-			.disabled(!controller.hasElementSelection)
+			.disabled(!controller.isEditing || !controller.hasElementSelection)
 			.help("Duplicate (⌘D)")
 			Spacer()
 			Button("Delete", systemImage: "trash") { controller.deleteSelection() }
-				.disabled(!controller.hasElementSelection)
+				.disabled(!controller.isEditing || !controller.hasElementSelection)
 				.help("Delete the selected element")
+			Button(isWide ? "Hide Details" : "Show Details", systemImage: "sidebar.right") {
+				withAnimation(.snappy(duration: 0.25)) {
+					width = isWide ? Self.narrowWidth : Self.wideWidth
+				}
+			}
+			.help(
+				isWide
+					? "Hide the details column"
+					: "Show what applies to the selected layer, beside the layers")
 		}
 		.buttonStyle(.icon(size: 28))
 		.padding(.horizontal, 8)

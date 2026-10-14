@@ -456,11 +456,12 @@ final class CanvasController {
 	/// Renders the drawing with WebKit, the same renderer as the canvas.
 	/// Bumped when the drawing changes, so layer thumbnails redraw.
 	private(set) var thumbnailGeneration = 0
-	@ObservationIgnored private var thumbnailCache: [Int: NSImage] = [:]
+	@ObservationIgnored private var thumbnailCache: [String: NSImage] = [:]
 
 	/// An element drawn on its own, framed to its box, for layer rows.
 	func thumbnail(order: Int, size: Double = 64) async -> NSImage? {
-		if let cached = thumbnailCache[order] { return cached }
+		let key = "\(order)@\(Int(size))"
+		if let cached = thumbnailCache[key] { return cached }
 		guard isReady, let webView,
 			let result = try? await webView.callAsyncJavaScript(
 				"return await elementThumbnail(order, size)",
@@ -469,7 +470,7 @@ final class CanvasController {
 			let data = Data(base64Encoded: String(url[url.index(after: comma)...])),
 			let image = NSImage(data: data)
 		else { return nil }
-		thumbnailCache[order] = image
+		thumbnailCache[key] = image
 		return image
 	}
 

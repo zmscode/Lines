@@ -12,6 +12,7 @@ struct ContentView: View {
 	@State private var showsPreviewBadge = true
 	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
+	@SceneStorage("layersWidth") private var layersWidth: Double = LayersPanel.narrowWidth
 	@Environment(\.undoManager) private var undoManager
 	@Environment(\.dismissWindow) private var dismissWindow
 	@Environment(\.openDocument) private var openDocument
@@ -31,7 +32,6 @@ struct ContentView: View {
 
 	/// Floating panel sizes; the canvas keeps the drawing clear of them.
 	static let panelMargin: CGFloat = 12
-	static let layersWidth: CGFloat = 264
 	static let inspectorWidth: CGFloat = 308
 	static let changesWidth: CGFloat = 440
 
@@ -112,6 +112,7 @@ struct ContentView: View {
 				updateInsets()
 			}
 			.onChange(of: codeWidth) { _, _ in updateInsets() }
+			.onChange(of: layersWidth) { _, _ in updateInsets() }
 			.onChange(of: controller.showsTimeline, initial: true) { _, shows in
 				controller.setTimelineActive(shows)
 				// Opening the timeline stops at the start; Play starts it.
@@ -139,7 +140,7 @@ struct ContentView: View {
 
 	/// Room taken by the code and layers panels, for things placed after them.
 	private var leadingPanelsSpace: CGFloat {
-		codeSpace + (controller.showsLayers ? Self.layersWidth + Self.panelMargin : 0)
+		codeSpace + (controller.showsLayers ? layersWidth + Self.panelMargin : 0)
 	}
 
 	/// Room taken by the tools palette on the canvas's leading edge.
@@ -168,7 +169,7 @@ struct ContentView: View {
 		let m = Self.panelMargin
 		controller.setInsets(
 			left: codeSpace + paletteSpace
-				+ (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
+				+ (controller.showsLayers ? layersWidth + m * 2 : 0),
 			right: trailingPanelWidth > 0 ? trailingPanelWidth + m * 2 : 0,
 			top: 0,
 			bottom: controller.showsTimeline
@@ -231,9 +232,17 @@ struct ContentView: View {
 		.overlay(alignment: .topLeading) {
 			if controller.showsLayers {
 				FloatingPanel(title: "Layers", close: { controller.showsLayers = false }) {
-					LayersPanel(controller: controller)
+					LayersPanel(controller: controller, width: $layersWidth)
 				}
-				.frame(width: Self.layersWidth)
+				.frame(width: layersWidth)
+				.overlay(alignment: .trailing) {
+					SplitDivider(
+						width: $layersWidth, range: 240...900, label: "Layers panel width",
+						showsLine: false
+					)
+					.padding(.vertical, 24)
+					.offset(x: 4)
+				}
 				.padding(Self.panelMargin)
 				.padding(.leading, paletteSpace + codeSpace)
 				.transition(.move(edge: .leading).combined(with: .opacity))
