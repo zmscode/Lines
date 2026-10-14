@@ -12,7 +12,9 @@ final class CanvasController {
 	var selection: SelectionInfo?
 	var parseError: String?
 	var zoom: CGFloat = 1
-	var layout: EditorLayout = .canvas
+	var layout: EditorLayout = .canvas {
+		didSet { if layout != oldValue { call("setCanvasBehind(\(layout == .graph))") } }
+	}
 	var showsCode = false
 	var showsLayers = false
 	var showsInspector = false
@@ -307,6 +309,19 @@ final class CanvasController {
 	}
 
 	/// Renders the drawing with WebKit, the same renderer as the canvas.
+	/// A small picture of an element on its own, or a sample shape using a
+	/// definition, for the graph's hover previews.
+	func previewImage(order: Int, size: Double = 180) async -> NSImage? {
+		guard isReady, let webView,
+			let result = try? await webView.callAsyncJavaScript(
+				"return await previewImage(order, size)",
+				arguments: ["order": order, "size": size], contentWorld: .page),
+			let url = result as? String, let comma = url.firstIndex(of: ","),
+			let data = Data(base64Encoded: String(url[url.index(after: comma)...]))
+		else { return nil }
+		return NSImage(data: data)
+	}
+
 	func rasterize(scale: Double, background: String?, type: UTType, quality: Double = 0.92)
 		async throws -> Data
 	{
@@ -360,6 +375,7 @@ final class CanvasController {
 			if !lastInsets.isEmpty { call("setInsets(\(lastInsets))") }
 			if documentFrameShown { call("showDocumentFrame(true)") }
 			if !isEditing { call("setEditable(false)") }
+			if layout == .graph { call("setCanvasBehind(true)") }
 
 		case "changed":
 			guard var svg = body["svg"] as? String, let document else { return }

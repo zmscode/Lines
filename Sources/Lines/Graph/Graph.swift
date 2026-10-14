@@ -10,7 +10,14 @@ enum GraphLayoutMode: String, CaseIterable, Identifiable {
 	case tree
 	var id: String { rawValue }
 	var title: String { self == .flow ? "Flow" : "Tree" }
-	var symbol: String { self == .flow ? "arrow.right.square" : "list.bullet.indent" }
+	var symbol: String {
+		self == .flow ? "point.3.filled.connected.trianglepath.dotted" : "list.bullet.indent"
+	}
+	var help: String {
+		self == .flow
+			? "Flow: left to right by dependency; unconnected elements wait below"
+			: "Tree: the document's nesting, top-down, with references behind it"
+	}
 }
 
 struct GraphNodeData: Equatable, Sendable {
@@ -39,6 +46,83 @@ struct GraphNodeData: Equatable, Sendable {
 	/// Gradient stops or filter primitives.
 	var parts: [Part] = []
 	var hasAnimations = false
+	/// How many elements point at this definition.
+	var usedBy = 0
+	/// The names of the shapes inside a clip path or mask.
+	var contents: [String] = []
+
+	struct InfoRow: Hashable, Sendable {
+		var label: String
+		var value: String
+	}
+
+	/// What a definition is and does, shown under its header.
+	var infoRows: [InfoRow] {
+		guard [.paint, .clip, .mask, .filter, .symbol].contains(kind) else { return [] }
+		var rows: [InfoRow] = []
+		let fitsShape = { (name: String) in
+			props[name] == "userSpaceOnUse" ? "drawing units" : "fits each shape"
+		}
+		switch tag {
+		case "linearGradient":
+			let n = { (k: String, d: Double) in
+				props[k].flatMap { Double($0.replacingOccurrences(of: "%", with: "")) } ?? d
+			}
+			let angle = atan2(n("y2", 0) - n("y1", 0), n("x2", 1) - n("x1", 0)) * 180 / .pi
+			rows.append(InfoRow(label: "type", value: "linear · \(Int(angle.rounded()))°"))
+			rows.append(InfoRow(label: "spread", value: props["spreadMethod"] ?? "pad"))
+			rows.append(InfoRow(label: "units", value: fitsShape("gradientUnits")))
+		case "radialGradient":
+			rows.append(InfoRow(label: "type", value: "radial · r \(props["r"] ?? "50%")"))
+			rows.append(InfoRow(label: "spread", value: props["spreadMethod"] ?? "pad"))
+			rows.append(InfoRow(label: "units", value: fitsShape("gradientUnits")))
+		case "pattern":
+			rows.append(
+				InfoRow(
+					label: "tile", value: "\(props["width"] ?? "?") × \(props["height"] ?? "?")"))
+			rows.append(
+				InfoRow(
+					label: "units",
+					value: props["patternUnits"] == "userSpaceOnUse"
+						? "drawing units" : "fits each shape"))
+		case "clipPath", "mask":
+			let shown = contents.prefix(3).joined(separator: ", ")
+			let more = contents.count > 3 ? " +\(contents.count - 3)" : ""
+			rows.append(
+				InfoRow(label: "shapes", value: contents.isEmpty ? "none yet" : shown + more))
+			// Clip paths default to drawing units; masks' contents too.
+			let unitsKey = tag == "mask" ? "maskContentUnits" : "clipPathUnits"
+			rows.append(
+				InfoRow(
+					label: "units",
+					value: props[unitsKey] == "objectBoundingBox"
+						? "fits each shape" : "drawing units"))
+		case "filter":
+			if let w = props["width"], let h = props["height"] {
+				rows.append(InfoRow(label: "region", value: "\(w) × \(h)"))
+			}
+		case "symbol", "marker":
+			rows.append(InfoRow(label: "viewBox", value: props["viewBox"] ?? "none"))
+		default: break
+		}
+		rows.append(
+			InfoRow(
+				label: "used by",
+				value: usedBy == 0
+					? "nothing yet" : usedBy == 1 ? "1 element" : "\(usedBy) elements"))
+		return rows
+	}
+
+	/// The attribute that applies this definition to a shape.
+	var applyAttribute: String? {
+		switch kind {
+		case .paint: "fill"
+		case .clip: "clip-path"
+		case .mask: "mask"
+		case .filter: "filter"
+		default: nil
+		}
+	}
 
 	/// Only things other elements can point at get an output pin.
 	var hasOutput: Bool { [.paint, .clip, .mask, .filter, .symbol].contains(kind) }
@@ -72,6 +156,8 @@ struct Graph {
 	private var kinds: [String: GraphNodeData.Kind] = [:]
 	private var partsByOrder: [Int: [GraphNodeData.Part]] = [:]
 	private var animated: Set<Int> = []
+	private var usage: [String: Int] = [:]
+	private var contentsByOrder: [Int: [String]] = [:]
 
 	var nodeIDs: [String] { items.map(\.path) }
 
@@ -92,6 +178,12 @@ struct Graph {
 				GraphNodeData.Part(order: item.order, tag: item.tag, props: item.props))
 		}
 		for item in all where AnimationTag.contains(item.tag) { animated.insert(item.parent) }
+		for item in all {
+			for ref in item.references { usage[ref.targetID, default: 0] += 1 }
+			if let parent = byOrder[item.parent], parent.tag == "clipPath" || parent.tag == "mask" {
+				contentsByOrder[parent.order, default: []].append(item.displayName)
+			}
+		}
 
 		for item in outline {
 			orders[item.path] = item.order
@@ -111,9 +203,10 @@ struct Graph {
 					edges.append(
 						FlowEdge(
 							id: "h:\(item.path)", source: parent.path, target: item.path,
-							sourceHandle: "children", targetHandle: "parent", type: .straight,
+							sourceHandle: "children", targetHandle: "parent", type: .smoothstep,
 							deletable: false, focusable: false,
-							style: EdgeStyle(strokeColor: .secondary, strokeWidth: 1, opacity: 0.45)
+							style: EdgeStyle(
+								strokeColor: .secondary, strokeWidth: 1.25, opacity: 0.6)
 						))
 				}
 			}
@@ -130,9 +223,13 @@ struct Graph {
 						sourceHandle: "ref",
 						targetHandle: Self.inputs(for: item.tag).contains(ref.attribute)
 							? ref.attribute : "parent",
-						type: .default, animated: true,
+						// The flow layout is about references, so they're bold and
+						// moving; in the tree they recede behind the nesting.
+						type: .default, animated: !showsNesting,
 						style: EdgeStyle(
-							strokeColor: Self.color(for: ref.attribute), strokeWidth: 2)
+							strokeColor: Self.color(for: ref.attribute),
+							strokeWidth: showsNesting ? 1.5 : 2.25,
+							opacity: showsNesting ? 0.45 : 1)
 					))
 			}
 		}
@@ -144,7 +241,9 @@ struct Graph {
 			kind: Self.kind(for: item.tag), inputs: Self.inputs(for: item.tag),
 			connected: Set(item.references.map(\.attribute)), isHidden: item.isHidden,
 			props: item.props, parts: partsByOrder[item.order] ?? [],
-			hasAnimations: animated.contains(item.order)
+			hasAnimations: animated.contains(item.order),
+			usedBy: item.elementID.flatMap { usage[$0] } ?? 0,
+			contents: contentsByOrder[item.order] ?? []
 		)
 	}
 

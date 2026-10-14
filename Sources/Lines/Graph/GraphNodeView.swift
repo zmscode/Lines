@@ -13,7 +13,9 @@ struct GraphNodeView: View {
 
 	static func size(for data: GraphNodeData) -> CGSize {
 		var h = headerHeight
-		let rows = data.inputs.count + data.valueRows.count + partRows(data) + animationRows(data)
+		let rows =
+			data.inputs.count + data.valueRows.count + partRows(data) + animationRows(data)
+			+ data.infoRows.count
 		if rows > 0 { h += CGFloat(rows) * rowHeight + 10 }
 		if data.kind == .paint, !data.parts.isEmpty { h += 26 }  // the gradient strip
 		return CGSize(width: width, height: h)
@@ -45,6 +47,23 @@ struct GraphNodeView: View {
 					default:
 						ForEach(data.inputs, id: \.self) { inputRow($0, data: data) }
 						ForEach(data.valueRows, id: \.self) { valueRow($0, data: data) }
+					}
+					ForEach(data.infoRows, id: \.self) { info in
+						HStack(spacing: 6) {
+							Text(info.label).font(.caption.monospaced()).foregroundStyle(.secondary)
+							Spacer(minLength: 4)
+							Text(info.value)
+								.font(.caption)
+								.foregroundStyle(
+									info.label == "used by" && data.usedBy == 0
+										? AnyShapeStyle(.orange) : AnyShapeStyle(.primary)
+								)
+								.lineLimit(1)
+								.truncationMode(.middle)
+						}
+						.frame(height: Self.rowHeight)
+						.padding(.horizontal, 10)
+						.help("\(info.label): \(info.value)")
 					}
 				}
 				.padding(.vertical, 5)
@@ -100,6 +119,7 @@ struct GraphNodeView: View {
 			}
 		}
 		.contextMenu { menu(data) }
+		.modifier(NodeHoverPreview(data: data, controller: controller))
 		.shadow(color: .black.opacity(0.08), radius: 3, y: 1)
 		.opacity(data.isHidden ? 0.6 : 1)
 	}
@@ -293,6 +313,21 @@ struct GraphNodeView: View {
 					}
 				}
 			}
+			if let attribute = data.applyAttribute {
+				Button("Apply to Selection", systemImage: "wand.and.stars") {
+					if let s = controller.selection, !s.isRoot, s.order != data.order {
+						controller.setReference(
+							order: s.order, attribute: attribute, targetOrder: data.order)
+					} else {
+						NSSound.beep()
+					}
+				}
+				.disabled(!controller.hasElementSelection)
+			}
+			Button("Edit in Inspector", systemImage: "slider.horizontal.3") {
+				controller.select(order: data.order)
+				controller.showsInspector = true
+			}
 			Button("Remove Its References", systemImage: "link") {
 				controller.removeAllReferences(order: data.order)
 			}
@@ -477,5 +512,110 @@ struct NodeValue: View {
 			}
 			.padding(12)
 		}
+	}
+}
+
+/// After a short hover, a popover shows what the node does: the element on
+/// its own, or a sample shape using the definition, with a sentence about it.
+private struct NodeHoverPreview: ViewModifier {
+	var data: GraphNodeData
+	var controller: CanvasController?
+
+	@State private var isShown = false
+	@State private var image: NSImage?
+	@State private var task: Task<Void, Never>?
+
+	func body(content: Content) -> some View {
+		content
+			.onHover { inside in
+				task?.cancel()
+				if inside {
+					task = Task { @MainActor in
+						try? await Task.sleep(for: .milliseconds(650))
+						guard !Task.isCancelled, let controller else { return }
+						image = await controller.previewImage(order: data.order)
+						guard !Task.isCancelled else { return }
+						isShown = true
+					}
+				} else {
+					isShown = false
+				}
+			}
+			.popover(isPresented: $isShown, arrowEdge: .trailing) {
+				VStack(alignment: .leading, spacing: 8) {
+					if let image {
+						Image(nsImage: image)
+							.resizable()
+							.interpolation(.high)
+							.aspectRatio(contentMode: .fit)
+							.frame(maxWidth: 200, maxHeight: 140)
+							.frame(maxWidth: .infinity)
+							.padding(8)
+							.background(
+								PreviewBacking(),
+								in: .rect(cornerRadius: 8, style: .continuous))
+					}
+					Text(data.name).font(.headline)
+					Text(NodeDescription.of(data))
+						.font(.callout)
+						.foregroundStyle(.secondary)
+						.fixedSize(horizontal: false, vertical: true)
+				}
+				.frame(width: 232)
+				.padding(12)
+			}
+	}
+}
+
+/// A plain-language sentence about what a node does.
+enum NodeDescription {
+	static func of(_ data: GraphNodeData) -> String {
+		let used =
+			data.usedBy == 0
+			? "Nothing uses it yet — drag from its output to a shape's input."
+			: "Used by \(data.usedBy) element\(data.usedBy == 1 ? "" : "s")."
+		switch data.tag {
+		case "linearGradient":
+			return "Paints a straight blend through \(data.parts.count) colours. \(used)"
+		case "radialGradient":
+			return
+				"Paints a blend outward from a centre through \(data.parts.count) colours. \(used)"
+		case "pattern":
+			return "Paints shapes with a repeating tile. \(used)"
+		case "clipPath":
+			return "Draws only what falls inside its shapes; the rest is cut away. \(used)"
+		case "mask":
+			return
+				"Shows what's under its white areas, hides it under black, and fades it under grey. \(used)"
+		case "filter":
+			let effects = data.parts.map { GraphNodeView.effectName($0.tag).lowercased() }
+			return
+				"Applies \(effects.isEmpty ? "no effects yet" : effects.joined(separator: ", then ")) to what uses it. \(used)"
+		case "symbol", "marker":
+			return "A reusable drawing, shown wherever a <use> points at it. \(used)"
+		case "use":
+			return "Draws another element again here."
+		case _ where AnimationTag.contains(data.tag):
+			let p = data.props
+			let what = p["attributeName"] ?? p["type"] ?? "its shape"
+			let repeats = p["repeatCount"] == "indefinite" ? ", forever" : ""
+			return "Animates \(what) over \(p["dur"] ?? "?")\(repeats)."
+		case "g":
+			return "A group: moves, hides and styles its contents together."
+		default:
+			var parts = ["A \(InspectorView.elementName(for: data.tag).lowercased())"]
+			if let fill = data.props["fill"] { parts.append("filled with \(fill)") }
+			if let stroke = data.props["stroke"], stroke != "none" {
+				parts.append("outlined in \(stroke)")
+			}
+			return parts.joined(separator: ", ") + "."
+		}
+	}
+}
+
+/// A soft backing behind previews, so light and transparent parts read.
+private struct PreviewBacking: ShapeStyle {
+	func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
+		Color.gray.opacity(0.12)
 	}
 }

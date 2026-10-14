@@ -10,6 +10,8 @@ import SwiftUI
 /// deleting an edge removes it.
 struct GraphView: View {
 	var controller: CanvasController
+	/// Room taken on the leading edge by the floating code panel.
+	var leadingInset: CGFloat = 0
 
 	@State private var positions: [String: XYPosition] = [:]
 	@State private var movedByHand: Set<String> = []
@@ -20,6 +22,10 @@ struct GraphView: View {
 	@State private var hasFitted = false
 	@StateObject private var flow = SwiftFlowInstance()
 	@AppStorage("graph.layout") private var mode: GraphLayoutMode = .flow
+	@State private var chosen: [String: Int] = [:]
+
+	/// Shift-dragged nodes snap to this grid, which the background dots show.
+	static let snapGrid: CGFloat = 24
 
 	private static let hiddenTags: Set<String> = [
 		"stop", "tspan", "title", "desc", "metadata", "style", "script",
@@ -65,7 +71,7 @@ struct GraphView: View {
 		) { node in
 			GraphNodeView(node: node, controller: controller)
 		} overlay: {
-			Background(variant: .dots, color: .secondary.opacity(0.35))
+			Background(variant: .dots, color: .secondary.opacity(0.35), gap: Self.snapGrid)
 			MiniMap(
 				nodeColor: .secondary.opacity(0.45), selectedNodeColor: Brand.accent,
 				nodeBorderRadius: 2, width: 168, height: 112, position: .bottomLeft
@@ -73,48 +79,43 @@ struct GraphView: View {
 			.floating(accent: Brand.accent)
 		}
 		.background(GraphNavigation(flow: flow))
-		.overlay(alignment: .top) {
-			// Top centre, clear of the floating layers and inspector panels.
-			FloatingStrip(axis: .horizontal) {
-				Menu {
-					ForEach(CanvasController.Definition.allCases) { kind in
-						Button(kind.title, systemImage: kind.symbol) {
-							controller.addDefinition(kind)
-						}
-					}
-				} label: {
-					Label("Add", systemImage: "plus")
-				}
-				.menuStyle(.button)
-				.menuIndicator(.hidden)
-				.buttonStyle(.icon)
-				.help("Add a gradient, clip path, mask or filter, then connect it to a shape")
-
-				StripDivider(axis: .horizontal)
-
+		.overlay(alignment: .topLeading) {
+			// A vertical palette in the same place and style as the canvas's tools.
+			FloatingStrip {
+				PaletteSlot(
+					id: "graph.add",
+					options: CanvasController.Definition.allCases.map { kind in
+						PaletteOption(
+							title: "Add \(kind.title)", symbol: kind.symbol,
+							help: "Add a \(kind.title.lowercased()), then connect it to a shape"
+						) { controller.addDefinition(kind) }
+					}, chosen: $chosen, isSelected: false)
+				StripDivider()
 				ForEach(GraphLayoutMode.allCases) { option in
 					Button(option.title, systemImage: option.symbol) {
 						mode = option
 						movedByHand.removeAll()
 						relayout(graph, force: true)
 					}
-					.buttonStyle(.icon(selected: mode == option))
-					.help(
-						option == .flow
-							? "Flow: definitions feed the elements that use them"
-							: "Tree: the document's nesting")
+					.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: mode == option))
+					.help(option.help)
 				}
-
-				StripDivider(axis: .horizontal)
-
+				StripDivider()
 				Button("Tidy Up", systemImage: "wand.and.rays") {
 					movedByHand.removeAll()
 					relayout(graph, force: true)
 				}
-				.buttonStyle(.icon)
+				.buttonStyle(.icon(size: ToolPalette.buttonSize))
 				.help("Arrange the graph automatically")
+				Button("Select on Canvas", systemImage: "scope") {
+					controller.layout = .canvas
+				}
+				.buttonStyle(.icon(size: ToolPalette.buttonSize))
+				.disabled(!controller.hasElementSelection)
+				.help("Show the selected node's element on the canvas")
 			}
 			.padding(12)
+			.padding(.leading, leadingInset)
 		}
 		.overlay(alignment: .bottomTrailing) {
 			// The same zoom strip as the canvas.
@@ -220,7 +221,13 @@ struct GraphView: View {
 	private func handleNodeChanges(_ changes: [NodeChange<GraphNodeData>]) {
 		for change in changes {
 			if case .position(let id, let position) = change {
-				positions[id] = position
+				// Holding Shift snaps to the grid.
+				let g = Self.snapGrid
+				positions[id] =
+					NSEvent.modifierFlags.contains(.shift)
+					? XYPosition(
+						x: (position.x / g).rounded() * g, y: (position.y / g).rounded() * g)
+					: position
 				movedByHand.insert(id)
 			}
 		}

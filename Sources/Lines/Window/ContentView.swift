@@ -218,7 +218,7 @@ struct ContentView: View {
 				.allowsHitTesting(controller.layout == .canvas)
 				.accessibilityHidden(controller.layout == .graph)
 			if controller.layout == .graph {
-				GraphView(controller: controller)
+				GraphView(controller: controller, leadingInset: codeSpace)
 					.transition(.opacity)
 					.dropDestination(for: URL.self) { urls, _ in
 						controller.handleDroppedFiles(urls.filter(CanvasController.isSVG))
