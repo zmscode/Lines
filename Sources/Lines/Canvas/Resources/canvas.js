@@ -39,8 +39,10 @@ const hoverBox = document.getElementById("hover");
 const post = (m) => window.webkit.messageHandlers.bridge.postMessage(m);
 
 let root = null; // live <svg> element
-let prefix = ""; // text before the root element (prolog, doctype, comments)
-let suffix = "\n"; // text after the root element
+// Text before and after the drawing's <svg>: the prolog, doctype and comments,
+// or a page the drawing sits in. Kept as written.
+let prefix = "";
+let suffix = "\n";
 let selected = null;
 // Off in preview mode: the drawing can be viewed, zoomed and played, not changed.
 let editable = true;
@@ -51,25 +53,83 @@ const MIN_ZOOM = 0.05,
 
 // MARK: Rendering
 
+// Where the drawing is in the text: its first <svg> element, from the start
+// tag to the end of its end tag.
+function drawingSpan(text) {
+  const tags =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(\/?)svg(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+  let start = -1;
+  let depth = 0;
+  let m;
+  while ((m = tags.exec(text))) {
+    if (m[0].startsWith("<!")) continue;
+    const closing = m[1] === "/";
+    const empty = !closing && m[0].endsWith("/>");
+    if (start < 0) {
+      if (closing) continue;
+      start = m.index;
+      if (empty) return { start, end: tags.lastIndex };
+    } else if (closing) {
+      if (depth === 0) return { start, end: tags.lastIndex };
+      depth--;
+    } else if (!empty) {
+      depth++;
+    }
+  }
+  return start < 0 ? null : { start, end: text.length };
+}
+
+function parseError(doc) {
+  const err = doc.querySelector("parsererror");
+  return err
+    ? err.textContent
+        .replace(/\s+/g, " ")
+        .replace(/^.*?error[^:]*:\s*/i, "")
+        .trim() || "This SVG couldn't be parsed."
+    : null;
+}
+
+// The drawing is the root <svg>, or the first <svg> inside another root (an
+// XHTML or HTML page, say); only it is shown and edited.
 function setSVG(text) {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
-  const err = doc.querySelector("parsererror");
-  if (err || !doc.documentElement || doc.documentElement.localName !== "svg") {
-    const msg = err
-      ? err.textContent
-          .replace(/\s+/g, " ")
-          .replace(/^.*?error[^:]*:\s*/i, "")
-          .trim()
-      : "The root element must be <svg>.";
-    post({ type: "error", message: msg || "This SVG couldn't be parsed." });
+  let error = parseError(doc);
+  const span = drawingSpan(text);
+  let drawing = null;
+  if (!error) {
+    drawing =
+      doc.documentElement.localName === "svg"
+        ? doc.documentElement
+        : doc.getElementsByTagNameNS(NS, "svg")[0] || null;
+    // Without a span the page around it couldn't be kept.
+    if (drawing && drawing !== doc.documentElement && !span) drawing = null;
+  }
+  if (!drawing && span) {
+    // Not XML (an HTML page): read just the drawing, which in a page may lean
+    // on it for its namespaces.
+    let source = text.slice(span.start, span.end);
+    const open = source.slice(0, source.indexOf(">"));
+    if (!/\sxmlns\s*=/.test(open)) source = source.replace(/^<svg/, `<svg xmlns="${NS}"`);
+    if (/\bxlink:/.test(source) && !/\sxmlns:xlink\s*=/.test(open)) {
+      source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+    }
+    const inner = new DOMParser().parseFromString(source, "image/svg+xml");
+    error = parseError(inner);
+    if (!error) drawing = inner.documentElement;
+  }
+  if (!drawing) {
+    post({ type: "error", message: error || "There's no <svg> element to show." });
     return;
   }
   const oldPath = selected ? pathOf(selected) : null;
-  const start = text.search(/<svg[\s>/]/);
-  const end = text.lastIndexOf("</svg>");
-  prefix = start > 0 ? text.slice(0, start) : "";
-  suffix = end >= 0 ? text.slice(end + 6) : (text.match(/\s*$/) || ["\n"])[0];
-  const node = document.importNode(doc.documentElement, true);
+  if (span) {
+    prefix = text.slice(0, span.start);
+    suffix = text.slice(span.end);
+  } else {
+    prefix = "";
+    suffix = (text.match(/\s*$/) || ["\n"])[0];
+  }
+  const node = document.importNode(drawing, true);
   if (defEdit) {
     defEdit = null;
     post({ type: "definitionEdit", active: false });

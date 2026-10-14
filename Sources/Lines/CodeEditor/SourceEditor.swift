@@ -274,7 +274,7 @@ struct SourceEditor: NSViewRepresentable {
 				textView.window?.firstResponder === textView
 			else { return }
 			let caret = textView.selectedRange().location
-			let tags = TagScanner.startTags(in: textView.string)
+			let tags = TagScanner.elementTags(in: textView.string)
 			if let index = tags.lastIndex(where: { $0.location <= caret && caret <= NSMaxRange($0) }
 			) {
 				parent.controller.select(order: index)
@@ -284,7 +284,7 @@ struct SourceEditor: NSViewRepresentable {
 		/// Highlights an element's start tag after it's selected on the canvas.
 		func revealElement(order: Int) {
 			guard let textView, textView.window?.firstResponder !== textView else { return }
-			let tags = TagScanner.startTags(in: textView.string)
+			let tags = TagScanner.elementTags(in: textView.string)
 			guard order >= 0, order < tags.count else { return }
 			let range = tags[order]
 			isProgrammaticChange = true

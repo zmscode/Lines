@@ -68,6 +68,38 @@ enum TagScanner {
 }
 
 extension TagScanner {
+	/// The start tags of the drawing's elements: those in its first <svg>,
+	/// the part the canvas shows. Matches the canvas's preorder indices even
+	/// when the <svg> sits inside another root, like an XHTML page.
+	static func elementTags(in string: String) -> [NSRange] {
+		let ranges = startTags(in: string)
+		guard let drawing = drawingRange(in: string) else { return ranges }
+		return ranges.filter { NSLocationInRange($0.location, drawing) }
+	}
+
+	/// The first <svg> element, from its start tag to the end of its end tag.
+	static func drawingRange(in string: String) -> NSRange? {
+		let all = tags(in: string)
+		guard let first = all.firstIndex(where: { $0.name == "svg" && $0.kind != .end }) else {
+			return nil
+		}
+		let start = all[first].range
+		if all[first].kind == .empty { return start }
+		var depth = 0
+		for tag in all[(first + 1)...] where tag.name == "svg" {
+			if tag.kind == .start { depth += 1 }
+			if tag.kind == .end {
+				if depth == 0 {
+					return NSRange(
+						location: start.location, length: NSMaxRange(tag.range) - start.location)
+				}
+				depth -= 1
+			}
+		}
+		return NSRange(
+			location: start.location, length: (string as NSString).length - start.location)
+	}
+
 	/// A start, end or self-closing tag, with where its name is.
 	struct Tag {
 		enum Kind { case start, end, empty }
