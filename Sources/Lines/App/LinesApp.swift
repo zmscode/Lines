@@ -153,6 +153,14 @@ private struct ViewCommands: Commands {
 			.keyboardShortcut("4", modifiers: .command)
 			.disabled(controller == nil)
 			Button(
+				controller?.showsChanges == true ? "Hide Changes" : "Show Changes",
+				systemImage: "plusminus"
+			) {
+				controller?.showsChanges.toggle()
+			}
+			.keyboardShortcut("5", modifiers: .command)
+			.disabled(controller?.hasChanges != true)
+			Button(
 				controller?.isPlaying == true ? "Pause Animations" : "Play Animations",
 				systemImage: controller?.isPlaying == true ? "pause" : "play"
 			) {

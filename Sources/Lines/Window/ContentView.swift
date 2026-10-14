@@ -29,6 +29,7 @@ struct ContentView: View {
 	@AppStorage(ToolbarButtons.code) private var toolbarShowsCode = true
 	@AppStorage(ToolbarButtons.graph) private var toolbarShowsGraph = true
 	@AppStorage(ToolbarButtons.timeline) private var toolbarShowsTimeline = true
+	@AppStorage(ToolbarButtons.changes) private var toolbarShowsChanges = true
 
 	private var isTransparent: Bool { background == .transparent && controller.layout == .canvas }
 
@@ -36,6 +37,13 @@ struct ContentView: View {
 	static let panelMargin: CGFloat = 12
 	static let layersWidth: CGFloat = 264
 	static let inspectorWidth: CGFloat = 308
+	static let changesWidth: CGFloat = 440
+
+	/// Room taken on the trailing edge by the inspector or the changes panel.
+	private var trailingPanelWidth: CGFloat {
+		controller.showsChanges
+			? Self.changesWidth : controller.showsInspector ? Self.inspectorWidth : 0
+	}
 
 	var body: some View {
 		editor
@@ -66,6 +74,7 @@ struct ContentView: View {
 			.onAppear {
 				dismissWindow(id: WelcomeView.windowID)
 				controller.document = document
+				controller.originalText = document.text
 				// Files open to look at; new drawings open ready to edit.
 				controller.isEditing = !(opensFilesLocked && document.configuration?.fileURL != nil)
 				controller.layout = defaultLayout
@@ -98,6 +107,14 @@ struct ContentView: View {
 				controller.setDocumentFrame(shown)
 			}
 			.onChange(of: controller.isEditing) { _, _ in updateInsets() }
+			.onChange(of: controller.showsChanges) { _, shows in
+				// The changes panel takes the inspector's place.
+				if shows { controller.showsInspector = false }
+				updateInsets()
+			}
+			.onChange(of: controller.hasChanges) { _, has in
+				if !has && controller.showsChanges { controller.showsChanges = false }
+			}
 			.onChange(of: controller.layout) { _, layout in
 				if layout == .graph && isLoaded { closeSidePanels() }
 				updateInsets()
@@ -114,6 +131,7 @@ struct ContentView: View {
 				updateInsets()
 			}
 			.onChange(of: controller.showsInspector) { _, shows in
+				if shows { controller.showsChanges = false }
 				savedShowsInspector = shows
 				updateInsets()
 			}
@@ -158,7 +176,7 @@ struct ContentView: View {
 		controller.setInsets(
 			left: codeSpace + paletteSpace
 				+ (controller.showsLayers ? Self.layersWidth + m * 2 : 0),
-			right: controller.showsInspector ? Self.inspectorWidth + m * 2 : 0,
+			right: trailingPanelWidth > 0 ? trailingPanelWidth + m * 2 : 0,
 			top: 0,
 			bottom: controller.showsTimeline && controller.layout == .canvas
 				? TimelinePanel.height + m * 2 : 0)
@@ -217,7 +235,7 @@ struct ContentView: View {
 					)
 					.padding(
 						.trailing,
-						controller.showsInspector ? Self.inspectorWidth + Self.panelMargin : 0)
+						trailingPanelWidth > 0 ? trailingPanelWidth + Self.panelMargin : 0)
 			}
 		}
 		.overlay(alignment: .topLeading) {
@@ -249,6 +267,23 @@ struct ContentView: View {
 				.transition(.move(edge: .trailing).combined(with: .opacity))
 			}
 		}
+		.overlay(alignment: .topTrailing) {
+			if controller.showsChanges, let original = controller.originalText {
+				ChangesPanel(
+					original: original, current: document.text,
+					revert: {
+						document.replaceText(
+							with: original, actionName: "Revert Changes",
+							undoManager: controller.undoManager)
+					},
+					close: { controller.showsChanges = false }
+				)
+				.frame(width: Self.changesWidth)
+				.padding(Self.panelMargin)
+				.transition(.move(edge: .trailing).combined(with: .opacity))
+			}
+		}
+		.animation(Self.panelAnimation, value: controller.showsChanges)
 		.overlay(alignment: .bottom) {
 			if controller.showsTimeline {
 				TimelinePanel(controller: controller, close: { controller.showsTimeline = false })
@@ -258,7 +293,7 @@ struct ContentView: View {
 					)
 					.padding(
 						.trailing,
-						controller.showsInspector ? Self.inspectorWidth + Self.panelMargin : 0
+						trailingPanelWidth > 0 ? trailingPanelWidth + Self.panelMargin : 0
 					)
 					.transition(.move(edge: .bottom).combined(with: .opacity))
 			}
@@ -331,6 +366,16 @@ struct ContentView: View {
 					Label("Graph", systemImage: EditorLayout.graph.symbol)
 				}
 				.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
+			}
+			if toolbarShowsChanges {
+				Toggle(isOn: $controller.showsChanges) {
+					Label("Changes", systemImage: "plusminus")
+				}
+				.disabled(!controller.hasChanges)
+				.help(
+					controller.hasChanges
+						? (controller.showsChanges ? "Hide Changes (⌘5)" : "Show Changes (⌘5)")
+						: "No changes since opening")
 			}
 			if toolbarShowsTimeline {
 				Toggle(isOn: $controller.showsTimeline) {

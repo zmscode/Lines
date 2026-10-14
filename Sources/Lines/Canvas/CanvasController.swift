@@ -18,6 +18,15 @@ final class CanvasController {
 	var showsInspector = false
 	var tool: CanvasTool = .select
 	var showsTimeline = false
+	/// The changes panel, comparing the source with `originalText`.
+	var showsChanges = false
+	/// The source as the window opened it.
+	var originalText: String?
+	/// Whether the source differs from how it was opened.
+	var hasChanges: Bool {
+		guard let originalText, let document else { return false }
+		return document.text != originalText
+	}
 	/// The animation playhead, in seconds, and whether animations are playing.
 	var animationTime: Double = 0
 	var isPlaying = true

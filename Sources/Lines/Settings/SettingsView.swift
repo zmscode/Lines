@@ -505,6 +505,7 @@ enum ToolbarButtons {
 	static let code = "toolbar.code"
 	static let graph = "toolbar.graph"
 	static let timeline = "toolbar.timeline"
+	static let changes = "toolbar.changes"
 }
 
 private struct ToolbarButtonsSettings: View {
@@ -513,6 +514,7 @@ private struct ToolbarButtonsSettings: View {
 	@AppStorage(ToolbarButtons.code) private var code = true
 	@AppStorage(ToolbarButtons.graph) private var graph = true
 	@AppStorage(ToolbarButtons.timeline) private var timeline = true
+	@AppStorage(ToolbarButtons.changes) private var changes = true
 
 	var body: some View {
 		Toggle(isOn: $layers) { Label("Layers", systemImage: "square.3.layers.3d") }
@@ -522,5 +524,6 @@ private struct ToolbarButtonsSettings: View {
 		}
 		Toggle(isOn: $graph) { Label("Graph", systemImage: EditorLayout.graph.symbol) }
 		Toggle(isOn: $timeline) { Label("Animations", systemImage: "film.stack") }
+		Toggle(isOn: $changes) { Label("Changes", systemImage: "plusminus") }
 	}
 }

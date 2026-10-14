@@ -3,6 +3,11 @@ const NS = "http://www.w3.org/2000/svg";
 const XLINK = "http://www.w3.org/1999/xlink";
 const host = document.getElementById("host");
 const selBox = document.getElementById("sel");
+// The corner-radius knob for a selected rectangle (see Corner radius below).
+const radiusKnob = document.createElement("div");
+radiusKnob.id = "radius-knob";
+radiusKnob.title = "Drag to change the corner radius";
+document.body.appendChild(radiusKnob);
 const hoverBox = document.getElementById("hover");
 const post = (m) => window.webkit.messageHandlers.bridge.postMessage(m);
 
@@ -310,9 +315,11 @@ function updateOverlay() {
           )
         : null,
     );
+    radiusKnob.style.display = "none";
     return;
   }
   place(selBox, anim ? selected.parentNode : selected);
+  updateRadiusKnob();
   if (selected) {
     const r = selBox.getBoundingClientRect();
     selBox.classList.toggle("compact", r.width < 28 || r.height < 28);
@@ -447,6 +454,82 @@ host.addEventListener("contextmenu", (e) => {
   if (!t) select(null);
   else if (!selection().includes(t)) select(t);
 });
+
+// MARK: Corner radius — a knob inside a selected rectangle's top-left
+// corner; drag it diagonally to round the corners (rx, and ry with it).
+
+let radiusDrag = null;
+
+function rectGeometry(el) {
+  const n = (a) => parseFloat(el.getAttribute(a)) || 0;
+  const w = n("width"),
+    h = n("height");
+  const rxAttr = el.getAttribute("rx"),
+    ryAttr = el.getAttribute("ry");
+  const rx = rxAttr != null ? n("rx") : ryAttr != null ? n("ry") : 0;
+  return { x: n("x"), y: n("y"), w, h, rx: Math.min(rx, w / 2, h / 2) };
+}
+
+function updateRadiusKnob() {
+  const el = selected;
+  const show = editable && el && el.localName === "rect" && extras.length === 0 && el.getScreenCTM;
+  if (!show) {
+    radiusKnob.style.display = "none";
+    return;
+  }
+  const g = rectGeometry(el);
+  const m = el.getScreenCTM();
+  if (!m || !g.w || !g.h) {
+    radiusKnob.style.display = "none";
+    return;
+  }
+  // Inset at least 10 screen points so it can be grabbed at zero radius.
+  const scale = Math.hypot(m.a, m.b) || 1;
+  const inset = Math.min(Math.max(g.rx, 10 / scale), g.w / 2, g.h / 2);
+  const p = new DOMPoint(g.x + inset, g.y + inset).matrixTransform(m);
+  radiusKnob.style.display = "block";
+  radiusKnob.style.left = p.x + "px";
+  radiusKnob.style.top = p.y + "px";
+}
+
+radiusKnob.addEventListener("pointerdown", (e) => {
+  if (!selected || e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  radiusKnob.setPointerCapture(e.pointerId);
+  radiusDrag = { el: selected, id: e.pointerId, moved: false, hadRy: selected.hasAttribute("ry") };
+});
+radiusKnob.addEventListener("mousedown", (e) => e.stopPropagation());
+
+radiusKnob.addEventListener("pointermove", (e) => {
+  if (!radiusDrag || e.pointerId !== radiusDrag.id) return;
+  const el = radiusDrag.el;
+  const g = rectGeometry(el);
+  const p = toLocal(el, e.clientX, e.clientY);
+  // Along the corner's diagonal: the average of the two distances in.
+  let r = (p.x - g.x + (p.y - g.y)) / 2;
+  r = Math.max(0, Math.min(r, g.w / 2, g.h / 2));
+  if (e.shiftKey) r = Math.round(r);
+  radiusDrag.moved = true;
+  if (r < 0.01) {
+    el.removeAttribute("rx");
+    el.removeAttribute("ry");
+  } else {
+    el.setAttribute("rx", round(r));
+    if (radiusDrag.hadRy) el.setAttribute("ry", round(r));
+  }
+  updateOverlay();
+  reportSelection(true);
+});
+
+function endRadiusDrag(e) {
+  if (!radiusDrag || e.pointerId !== radiusDrag.id) return;
+  const moved = radiusDrag.moved;
+  radiusDrag = null;
+  if (moved) commit("Change Corner Radius");
+}
+radiusKnob.addEventListener("pointerup", endRadiusDrag);
+radiusKnob.addEventListener("pointercancel", endRadiusDrag);
 
 // MARK: Marquee — drag on empty canvas to select everything it touches.
 
