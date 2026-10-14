@@ -136,6 +136,7 @@ struct CanvasView: NSViewRepresentable {
 		let config = WKWebViewConfiguration()
 		config.userContentController.add(WeakMessageHandler(controller), name: "bridge")
 		let webView = CanvasWebView(frame: .zero, configuration: config)
+		webView.navigationDelegate = context.coordinator
 		webView.controller = controller
 		webView.underPageBackgroundColor = .clear
 		webView.setValue(false, forKey: "drawsBackground")
@@ -156,8 +157,21 @@ struct CanvasView: NSViewRepresentable {
 
 	func makeCoordinator() -> Coordinator { Coordinator() }
 
-	final class Coordinator {
+	final class Coordinator: NSObject, WKNavigationDelegate {
 		var look: String?
+
+		/// The canvas page never navigates: a link in a drawing (clicked, or
+		/// followed any other way) can't replace it. ⌘-clicked links open in
+		/// the browser through the bridge instead.
+		func webView(
+			_ webView: WKWebView, decidePolicyFor action: WKNavigationAction
+		) async -> WKNavigationActionPolicy {
+			let url = action.request.url
+			let isPageLoad =
+				action.navigationType == .other
+				&& (url == nil || url?.absoluteString == "about:blank")
+			return isPageLoad ? .allow : .cancel
+		}
 	}
 
 	static func dismantleNSView(_ webView: CanvasWebView, coordinator: Coordinator) {

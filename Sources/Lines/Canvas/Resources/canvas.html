@@ -2,6 +2,13 @@
 <html>
 	<head>
 		<meta charset="utf-8" />
+		<!-- The drawing is someone else's file: only this page's own script runs
+		     (not the drawing's <script>s or onload/onclick handlers), and nothing
+		     loads from the network. Images and fonts may be embedded as data. -->
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'none'; script-src 'nonce-CANVAS_NONCE'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:"
+		/>
 		<meta name="color-scheme" content="light dark" />
 		<style id="base">
 			/* canvas.css */
@@ -42,7 +49,7 @@
 			<div class="knob" data-handle="sw" style="left: 0; top: 100%"></div>
 			<div class="knob edge" data-handle="w" style="left: 0; top: 50%"></div>
 		</div>
-		<script>
+		<script nonce="CANVAS_NONCE">
 			// canvas.js
 		</script>
 	</body>

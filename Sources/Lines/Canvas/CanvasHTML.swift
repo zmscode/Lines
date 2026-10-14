@@ -11,7 +11,10 @@ enum CanvasHTML {
 			else { fatalError("Missing canvas resource \(name).\(ext)") }
 			return text
 		}
+		// The page's script runs by this nonce; the drawing can't know it.
+		let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
 		return resource("canvas", "html")
+			.replacingOccurrences(of: "CANVAS_NONCE", with: nonce)
 			.replacingOccurrences(of: "/* canvas.css */\n", with: resource("canvas", "css"))
 			.replacingOccurrences(of: "// canvas.js\n", with: resource("canvas", "js"))
 	}()
