@@ -1,9 +1,29 @@
 import SwiftFlow
 import SwiftUI
 
+/// How the graph is arranged.
+enum GraphLayoutMode: String, CaseIterable, Identifiable {
+	/// Definitions on the left feeding the elements that use them, like a
+	/// node editor; nesting is hidden.
+	case flow
+	/// The document's nesting as a tree.
+	case tree
+	var id: String { rawValue }
+	var title: String { self == .flow ? "Flow" : "Tree" }
+	var symbol: String { self == .flow ? "arrow.right.square" : "list.bullet.indent" }
+}
+
 struct GraphNodeData: Equatable, Sendable {
 	enum Kind: Equatable, Sendable {
-		case element, group, paint, clip, mask, filter, symbol, container
+		case element, group, paint, clip, mask, filter, symbol, container, animation
+	}
+
+	/// A child shown inside a node: a gradient stop or a filter primitive.
+	struct Part: Equatable, Sendable, Identifiable {
+		var order: Int
+		var tag: String
+		var props: [String: String]
+		var id: Int { order }
 	}
 
 	var order: Int
@@ -14,12 +34,27 @@ struct GraphNodeData: Equatable, Sendable {
 	var inputs: [String]
 	var connected: Set<String>
 	var isHidden: Bool
-
-	/// Gradient stop colours, or a filter's effects.
-	var preview: [String]? = nil
+	/// The element's own attribute values (paints, widths, timings…).
+	var props: [String: String] = [:]
+	/// Gradient stops or filter primitives.
+	var parts: [Part] = []
+	var hasAnimations = false
 
 	/// Only things other elements can point at get an output pin.
 	var hasOutput: Bool { [.paint, .clip, .mask, .filter, .symbol].contains(kind) }
+
+	/// Value rows shown below the inputs on shapes.
+	var valueRows: [String] {
+		switch kind {
+		case .element:
+			var rows: [String] = []
+			if inputs.contains("stroke") { rows.append("stroke-width") }
+			rows.append("opacity")
+			return rows
+		case .group: return ["opacity"]
+		default: return []
+		}
+	}
 }
 
 struct Graph {
@@ -32,32 +67,63 @@ struct Graph {
 	var orders: [String: Int] = [:]  // node id (path) → element order
 	var references: [String: ReferenceEdge] = [:]  // edge id → the attribute it represents
 	var edges: [FlowEdge<EmptyEdgeData>] = []
+	/// Reference pairs (source path → target path), for the flow layout.
+	var referencePairs: [(source: String, target: String)] = []
 	private var kinds: [String: GraphNodeData.Kind] = [:]
+	private var partsByOrder: [Int: [GraphNodeData.Part]] = [:]
+	private var animated: Set<Int> = []
 
 	var nodeIDs: [String] { items.map(\.path) }
 
-	init(outline: [OutlineItem]) {
+	/// - Parameters:
+	///   - outline: the elements to show as nodes.
+	///   - all: the whole outline, for stops and primitives shown inside nodes.
+	///   - showsNesting: draw parent → child edges (the tree layout).
+	init(outline: [OutlineItem], all: [OutlineItem], showsNesting: Bool) {
 		items = outline
-		let byOrder = Dictionary(uniqueKeysWithValues: outline.map { ($0.order, $0) })
+		let byOrder = Dictionary(uniqueKeysWithValues: all.map { ($0.order, $0) })
+		let shown = Set(outline.map(\.order))
 		let byID = Dictionary(
-			outline.compactMap { item in item.elementID.map { ($0, item) } },
+			all.compactMap { item in item.elementID.map { ($0, item) } },
 			uniquingKeysWith: { first, _ in first })
+
+		for item in all where item.tag == "stop" || item.tag.hasPrefix("fe") {
+			partsByOrder[item.parent, default: []].append(
+				GraphNodeData.Part(order: item.order, tag: item.tag, props: item.props))
+		}
+		for item in all where AnimationTag.contains(item.tag) { animated.insert(item.parent) }
+
 		for item in outline {
 			orders[item.path] = item.order
 			kinds[item.path] = Self.kind(for: item.tag)
-			if let parent = byOrder[item.parent] {
-				edges.append(
-					FlowEdge(
-						id: "h:\(item.path)", source: parent.path, target: item.path,
-						sourceHandle: "children", targetHandle: "parent", type: .straight,
-						deletable: false, focusable: false,
-						style: EdgeStyle(strokeColor: .secondary, strokeWidth: 1, opacity: 0.45)
-					))
+			if let parent = byOrder[item.parent], shown.contains(parent.order) {
+				let isAnimation = AnimationTag.contains(item.tag)
+				if isAnimation {
+					// Animations hang off the right of what they animate, in every layout.
+					edges.append(
+						FlowEdge(
+							id: "a:\(item.path)", source: parent.path, target: item.path,
+							sourceHandle: "animations", targetHandle: "animated", type: .default,
+							deletable: false, focusable: false,
+							style: EdgeStyle(strokeColor: .indigo, strokeWidth: 1.5, opacity: 0.7)
+						))
+				} else if showsNesting {
+					edges.append(
+						FlowEdge(
+							id: "h:\(item.path)", source: parent.path, target: item.path,
+							sourceHandle: "children", targetHandle: "parent", type: .straight,
+							deletable: false, focusable: false,
+							style: EdgeStyle(strokeColor: .secondary, strokeWidth: 1, opacity: 0.45)
+						))
+				}
 			}
 			for ref in item.references {
-				guard let target = byID[ref.targetID] else { continue }
+				guard let target = byID[ref.targetID], shown.contains(target.order) else {
+					continue
+				}
 				let id = "r:\(item.path):\(ref.attribute)"
 				references[id] = ReferenceEdge(order: item.order, attribute: ref.attribute)
+				referencePairs.append((target.path, item.path))
 				edges.append(
 					FlowEdge(
 						id: id, source: target.path, target: item.path,
@@ -77,20 +143,21 @@ struct Graph {
 			order: item.order, tag: item.tag, name: item.displayName, elementID: item.elementID,
 			kind: Self.kind(for: item.tag), inputs: Self.inputs(for: item.tag),
 			connected: Set(item.references.map(\.attribute)), isHidden: item.isHidden,
-			preview: item.preview
+			props: item.props, parts: partsByOrder[item.order] ?? [],
+			hasAnimations: animated.contains(item.order)
 		)
 	}
 
 	func nodes(positions: [String: XYPosition], selected: String?) -> [Node<GraphNodeData>] {
 		items.enumerated().map { index, item in
 			let data = data(for: item)
+			let size = GraphNodeView.size(for: data)
 			return Node(
 				id: item.path,
 				position: positions[item.path]
 					?? XYPosition(x: CGFloat(index % 6) * 240, y: CGFloat(index / 6) * 160),
 				data: data, selected: item.path == selected,
-				width: GraphNodeView.size(for: data).width,
-				height: GraphNodeView.size(for: data).height
+				width: size.width, height: size.height
 			)
 		}
 	}
@@ -122,6 +189,7 @@ struct Graph {
 		case "symbol", "marker": .symbol
 		case "g", "a", "switch": .group
 		case "defs", "svg": .container
+		case _ where AnimationTag.contains(tag): .animation
 		default: .element
 		}
 	}

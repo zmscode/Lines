@@ -14,34 +14,27 @@ struct ToolPalette: View {
 	@State private var chosen: [Int: CanvasTool] = [:]
 
 	var body: some View {
-		VStack(spacing: 2) {
+		FloatingStrip {
 			ForEach(Array(CanvasTool.groups.enumerated()), id: \.offset) { index, group in
 				slot(index, group)
-				if index == 1 { divider }  // navigation tools, then drawing tools
+				if index == 1 { StripDivider() }  // navigation tools, then drawing tools
 			}
-			divider
+			StripDivider()
 			PaletteButton(
 				title: "Image", symbol: "photo.badge.plus", help: "Place an image…",
 				isSelected: false
 			) {
 				chooseImage()
 			}
-			divider
+			StripDivider()
 			BackgroundPill()
 		}
-		.padding(6)
-		.glassEffect(.regular, in: .rect(cornerRadius: 14, style: .continuous))
-		.shadow(color: .black.opacity(0.14), radius: 10, y: 4)
 		.onChange(of: controller.tool) { _, tool in
 			// Keep the slot showing whichever variant was picked (by key or menu).
 			if let index = CanvasTool.groups.firstIndex(where: { $0.contains(tool) }) {
 				chosen[index] = tool
 			}
 		}
-	}
-
-	private var divider: some View {
-		Divider().frame(width: Self.buttonSize - 10).padding(.vertical, 3)
 	}
 
 	@ViewBuilder
@@ -115,7 +108,7 @@ struct ToolPalette: View {
 	}
 }
 
-/// One square tool button, highlighted when its tool is active.
+/// One tool button, highlighted when its tool is active.
 private struct PaletteButton: View {
 	var title: String
 	var symbol: String
@@ -124,26 +117,10 @@ private struct PaletteButton: View {
 	var hasVariants = false
 	var action: () -> Void
 
-	@State private var isHovered = false
-
 	var body: some View {
-		Button(action: action) {
-			Image(systemName: symbol)
-				.font(.system(size: 15, weight: .medium))
-				.foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
-				.frame(width: ToolPalette.buttonSize, height: ToolPalette.buttonSize)
-				.background(
-					isSelected
-						? AnyShapeStyle(.tint.opacity(0.18))
-						: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
-					in: .rect(cornerRadius: 8, style: .continuous)
-				)
-				.contentShape(.rect)
-		}
-		.buttonStyle(.plain)
-		.onHover { isHovered = $0 }
-		.help(help)
-		.accessibilityLabel(title)
-		.accessibilityAddTraits(isSelected ? .isSelected : [])
+		Button(title, systemImage: symbol, action: action)
+			.buttonStyle(.icon(size: ToolPalette.buttonSize, selected: isSelected))
+			.help(help)
+			.accessibilityAddTraits(isSelected ? .isSelected : [])
 	}
 }

@@ -7,7 +7,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
 	var title: String {
 		switch self {
-		case .system: "Auto"
+		case .system: "System"
 		case .light: "Light"
 		case .dark: "Dark"
 		}

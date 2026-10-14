@@ -114,6 +114,11 @@ struct OutlineItem: Identifiable, Equatable, Sendable {
 	var references: [Reference]
 	/// Gradient stop colours, or a filter's effects, for the graph.
 	var preview: [String]? = nil
+	/// Attribute values: paints for shapes; everything for stops, filter
+	/// primitives and animations.
+	var props: [String: String] = [:]
+
+	func prop(_ name: String) -> String? { props[name] }
 
 	var id: String { path }
 

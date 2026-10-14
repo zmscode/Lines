@@ -19,34 +19,34 @@ private struct ZoomButtons: View {
 	var controller: CanvasController
 
 	var body: some View {
-		GlassEffectContainer(spacing: 8) {
-			VStack(spacing: 8) {
-				button("Zoom In", "plus.magnifyingglass") { controller.zoom(by: 1.25) }
-				button("Zoom Out", "minus.magnifyingglass") { controller.zoom(by: 0.8) }
-				button(
-					controller.isFitted ? "Actual Size" : "Zoom to Fit",
-					controller.isFitted ? "1.magnifyingglass" : "arrow.counterclockwise"
-				) {
-					if controller.isFitted { controller.setZoom(1) } else { controller.zoomToFit() }
-				}
+		FloatingStrip {
+			button("Zoom In", "plus.magnifyingglass", help: "Zoom In (⌘+)") {
+				controller.zoom(by: 1.25)
+			}
+			button("Zoom Out", "minus.magnifyingglass", help: "Zoom Out (⌘−)") {
+				controller.zoom(by: 0.8)
+			}
+			StripDivider()
+			button(
+				controller.isFitted ? "Actual Size" : "Zoom to Fit",
+				controller.isFitted
+					? "1.magnifyingglass" : "arrow.up.left.and.down.right.magnifyingglass",
+				help: controller.isFitted ? "Actual Size (⌘0)" : "Zoom to Fit (⌘9)"
+			) {
+				if controller.isFitted { controller.setZoom(1) } else { controller.zoomToFit() }
 			}
 		}
 	}
 
-	private func button(_ title: String, _ symbol: String, action: @escaping () -> Void)
-		-> some View
-	{
+	private func button(
+		_ title: String, _ symbol: String, help: String, action: @escaping () -> Void
+	) -> some View {
 		Button(title, systemImage: symbol, action: action)
-			.labelStyle(.iconOnly)
-			.buttonStyle(.glass)
-			.buttonBorderShape(.circle)
-			.controlSize(.large)
-			.help(title)
+			.buttonStyle(.icon(size: ToolPalette.buttonSize))
+			.help(help)
 	}
 }
 
-/// Shows the current canvas background; click to switch between the quick
-/// choices or pick a custom colour.
 /// The canvas background swatch at the foot of the tools palette, like the
 /// colour swatches at the bottom of Photoshop's toolbar.
 struct BackgroundPill: View {
@@ -58,12 +58,14 @@ struct BackgroundPill: View {
 		Button {
 			isPresented.toggle()
 		} label: {
-			BackgroundSwatch(background: background, customColour: customColour)
-				.frame(width: 22, height: 22)
-				.frame(width: ToolPalette.buttonSize, height: ToolPalette.buttonSize)
-				.contentShape(.rect)
+			Label {
+				Text("Canvas Background")
+			} icon: {
+				BackgroundSwatch(background: background, customColour: customColour)
+					.frame(width: 18, height: 18)
+			}
 		}
-		.buttonStyle(.plain)
+		.buttonStyle(.icon(size: ToolPalette.buttonSize))
 		.help("Canvas background: \(background.title)")
 		.accessibilityLabel("Canvas background")
 		.accessibilityValue(background.title)

@@ -201,9 +201,8 @@ struct LayersPanel: View {
 				.disabled(!controller.hasElementSelection)
 				.help("Delete the selected element")
 		}
-		.labelStyle(.iconOnly)
-		.buttonStyle(.borderless)
-		.padding(.horizontal, 12)
+		.buttonStyle(.icon(size: 28))
+		.padding(.horizontal, 8)
 		.padding(.vertical, 8)
 		.overlay(alignment: .top) { Divider().opacity(0.6) }
 	}
@@ -321,9 +320,7 @@ private struct LayerRowView: View {
 			) {
 				controller.toggleHidden(order: item.order)
 			}
-			.labelStyle(.iconOnly)
-			.buttonStyle(.borderless)
-			.foregroundStyle(.secondary)
+			.buttonStyle(.icon(size: 22))
 			.opacity(isHovered || item.isHidden ? 1 : 0)
 			.help(item.isHidden ? "Show Element" : "Hide Element")
 		}

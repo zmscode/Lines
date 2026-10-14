@@ -59,22 +59,22 @@ Then add `"SwiftFlow"` to your target's dependencies:
 Full documentation with guides, API reference, and examples is available on the
 [SwiftFlow documentation site](https://aaurelions.github.io/SwiftFlow/).
 
-| Section | Description |
-| ------- | ----------- |
-| [Getting Started](https://aaurelions.github.io/SwiftFlow/guide/getting-started.html) | Installation, requirements, and first graph |
-| [SwiftFlow Canvas](https://aaurelions.github.io/SwiftFlow/api/swiftflow-canvas.html) | Main canvas: parameters, callbacks, interactions |
-| [Models](https://aaurelions.github.io/SwiftFlow/api/models.html) | `Node`, `Edge`, `Connection`, and `Viewport` types |
-| [Callbacks](https://aaurelions.github.io/SwiftFlow/api/callbacks.html) | All event callbacks and their signatures |
-| [Handle](https://aaurelions.github.io/SwiftFlow/api/handle.html) | Connection handles inside node views |
-| [Background](https://aaurelions.github.io/SwiftFlow/api/background.html) | Grid patterns (dots, lines, cross) |
-| [Controls](https://aaurelions.github.io/SwiftFlow/api/controls.html) | Zoom, fit-view, and custom control buttons |
-| [MiniMap](https://aaurelions.github.io/SwiftFlow/api/minimap.html) | Interactive overview minimap |
-| [Panel & Overlays](https://aaurelions.github.io/SwiftFlow/api/panel-overlays.html) | Positional containers, toolbars, edge labels |
-| [Change Utilities](https://aaurelions.github.io/SwiftFlow/api/change-utilities.html) | `applyNodeChanges`, `applyEdgeChanges`, `addEdge` |
-| [Graph & Geometry](https://aaurelions.github.io/SwiftFlow/api/graph-utilities.html) | `getIncomers`, `getOutgoers`, bounding boxes, intersection tests |
-| [Auto Layout](https://aaurelions.github.io/SwiftFlow/api/auto-layout.html) | Tree, force-directed, and grid layout algorithms |
-| [Serialization](https://aaurelions.github.io/SwiftFlow/api/serialization.html) | JSON import/export with `Codable` support |
-| [Types Reference](https://aaurelions.github.io/SwiftFlow/api/types-reference.html) | Complete reference of all public types and enums |
+| Section                                                                              | Description                                                      |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| [Getting Started](https://aaurelions.github.io/SwiftFlow/guide/getting-started.html) | Installation, requirements, and first graph                      |
+| [SwiftFlow Canvas](https://aaurelions.github.io/SwiftFlow/api/swiftflow-canvas.html) | Main canvas: parameters, callbacks, interactions                 |
+| [Models](https://aaurelions.github.io/SwiftFlow/api/models.html)                     | `Node`, `Edge`, `Connection`, and `Viewport` types               |
+| [Callbacks](https://aaurelions.github.io/SwiftFlow/api/callbacks.html)               | All event callbacks and their signatures                         |
+| [Handle](https://aaurelions.github.io/SwiftFlow/api/handle.html)                     | Connection handles inside node views                             |
+| [Background](https://aaurelions.github.io/SwiftFlow/api/background.html)             | Grid patterns (dots, lines, cross)                               |
+| [Controls](https://aaurelions.github.io/SwiftFlow/api/controls.html)                 | Zoom, fit-view, and custom control buttons                       |
+| [MiniMap](https://aaurelions.github.io/SwiftFlow/api/minimap.html)                   | Interactive overview minimap                                     |
+| [Panel & Overlays](https://aaurelions.github.io/SwiftFlow/api/panel-overlays.html)   | Positional containers, toolbars, edge labels                     |
+| [Change Utilities](https://aaurelions.github.io/SwiftFlow/api/change-utilities.html) | `applyNodeChanges`, `applyEdgeChanges`, `addEdge`                |
+| [Graph & Geometry](https://aaurelions.github.io/SwiftFlow/api/graph-utilities.html)  | `getIncomers`, `getOutgoers`, bounding boxes, intersection tests |
+| [Auto Layout](https://aaurelions.github.io/SwiftFlow/api/auto-layout.html)           | Tree, force-directed, and grid layout algorithms                 |
+| [Serialization](https://aaurelions.github.io/SwiftFlow/api/serialization.html)       | JSON import/export with `Codable` support                        |
+| [Types Reference](https://aaurelions.github.io/SwiftFlow/api/types-reference.html)   | Complete reference of all public types and enums                 |
 
 ---
 
@@ -116,6 +116,7 @@ struct ContentView: View {
 
 > **Tip:** Use `FlowEdge` (a type alias for `Edge`) to avoid ambiguity with
 > `SwiftUI.Edge`:
+>
 > ```swift
 > @State var edges: [FlowEdge<EmptyEdgeData>] = [
 >     FlowEdge(id: "e1-2", source: "1", target: "2"),
@@ -313,14 +314,14 @@ Handle(nodeId: node.id, id: "output", type: .source, position: .right)
 Handle(nodeId: node.id, id: "input", type: .target, position: .left)
 ```
 
-| Property        | Type         | Default     | Description                          |
-| --------------- | ------------ | ----------- | ------------------------------------ |
-| `nodeId`        | `String`     | —           | Parent node ID (required)            |
-| `id`            | `String`     | —           | Handle identifier (required)         |
-| `type`          | `HandleType` | `.source`   | `.source` or `.target`               |
-| `position`      | `Position`   | —           | `.top`, `.bottom`, `.left`, `.right` |
-| `color`         | `Color`      | `.gray`     | Handle fill color                    |
-| `isConnectable` | `Bool`       | `true`      | Enable connections                   |
+| Property        | Type         | Default   | Description                          |
+| --------------- | ------------ | --------- | ------------------------------------ |
+| `nodeId`        | `String`     | —         | Parent node ID (required)            |
+| `id`            | `String`     | —         | Handle identifier (required)         |
+| `type`          | `HandleType` | `.source` | `.source` or `.target`               |
+| `position`      | `Position`   | —         | `.top`, `.bottom`, `.left`, `.right` |
+| `color`         | `Color`      | `.gray`   | Handle fill color                    |
+| `isConnectable` | `Bool`       | `true`    | Enable connections                   |
 
 ---
 
@@ -429,11 +430,11 @@ Panel(position: .topRight) {
 }
 ```
 
-| Position Values |                 |
+| Position Values | |
 | --------------- | --------------- | -------------- |
-| `.topLeft`      | `.topCenter`    | `.topRight`    |
-| `.centerLeft`   | `.center`       | `.centerRight` |
-| `.bottomLeft`   | `.bottomCenter` | `.bottomRight` |
+| `.topLeft` | `.topCenter` | `.topRight` |
+| `.centerLeft` | `.center` | `.centerRight` |
+| `.bottomLeft` | `.bottomCenter` | `.bottomRight` |
 
 ---
 
@@ -801,22 +802,22 @@ Centralized state management class. Use it for simpler state handling.
 )
 ```
 
-| Method / Property                        | Description                          |
-| ---------------------------------------- | ------------------------------------ |
-| `nodes`                                  | Published node array                 |
-| `edges`                                  | Published edge array                 |
-| `viewport`                               | Published viewport                   |
-| `selectedNodeIds`                        | Currently selected node IDs          |
-| `selectedEdgeIds`                        | Currently selected edge IDs          |
-| `onNodesChange(_:)`                      | Apply node changes                   |
-| `onEdgesChange(_:)`                      | Apply edge changes                   |
-| `onConnect(_:)`                          | Create edge from connection          |
-| `getNode(id:)`                           | Look up node by ID                   |
-| `getEdge(id:)`                           | Look up edge by ID                   |
+| Method / Property                        | Description                                                 |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `nodes`                                  | Published node array                                        |
+| `edges`                                  | Published edge array                                        |
+| `viewport`                               | Published viewport                                          |
+| `selectedNodeIds`                        | Currently selected node IDs                                 |
+| `selectedEdgeIds`                        | Currently selected edge IDs                                 |
+| `onNodesChange(_:)`                      | Apply node changes                                          |
+| `onEdgesChange(_:)`                      | Apply edge changes                                          |
+| `onConnect(_:)`                          | Create edge from connection                                 |
+| `getNode(id:)`                           | Look up node by ID                                          |
+| `getEdge(id:)`                           | Look up edge by ID                                          |
 | `deleteElements(nodeIds:edgeIds:)`       | Delete by ID (respects `deletable`, removes incident edges) |
-| `getNodesData(ids:)`                     | Get data for specific node IDs       |
-| `getNodeConnections(nodeId:handleType:)` | Get connections for a node           |
-| `nodesInitialized`                       | Whether all nodes have been measured |
+| `getNodesData(ids:)`                     | Get data for specific node IDs                              |
+| `getNodeConnections(nodeId:handleType:)` | Get connections for a node                                  |
+| `nodesInitialized`                       | Whether all nodes have been measured                        |
 
 ---
 
@@ -1015,13 +1016,13 @@ SwiftFlow adapts familiar ReactFlow concepts to SwiftUI-native APIs. Release 0.2
 
 ### Feature Parity
 
-| Category               | SwiftFlow 0.2.0 Status |
-| ---------------------- | ---------------------- |
-| Components             | Core canvas, handles, controls, minimap, backgrounds, panels, toolbars, resize controls, and edge label helpers |
-| State Patterns         | Change callbacks, `SwiftFlowStore`, `SwiftFlowProvider`, and `SwiftFlowInstance` |
-| Types & Models         | Generic `Node`, `FlowEdge`/`Edge`, `Connection`, `Viewport`, style, accessibility, keyboard, and selection types |
-| Utility Functions      | Change helpers, graph queries, geometry/intersection helpers, edge paths, auto layout, and serialization |
-| Event Callbacks        | Node, edge, selection, connection, viewport, deletion, hover, and context-menu callbacks |
+| Category          | SwiftFlow 0.2.0 Status                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Components        | Core canvas, handles, controls, minimap, backgrounds, panels, toolbars, resize controls, and edge label helpers  |
+| State Patterns    | Change callbacks, `SwiftFlowStore`, `SwiftFlowProvider`, and `SwiftFlowInstance`                                 |
+| Types & Models    | Generic `Node`, `FlowEdge`/`Edge`, `Connection`, `Viewport`, style, accessibility, keyboard, and selection types |
+| Utility Functions | Change helpers, graph queries, geometry/intersection helpers, edge paths, auto layout, and serialization         |
+| Event Callbacks   | Node, edge, selection, connection, viewport, deletion, hover, and context-menu callbacks                         |
 
 ---
 

@@ -37,12 +37,7 @@ struct FloatingPanel<Content: View>: View {
 
 	private var closeButton: some View {
 		Button("Close", systemImage: "xmark", action: close)
-			.labelStyle(.iconOnly)
-			.buttonStyle(.borderless)
-			.font(.caption.weight(.semibold))
-			.foregroundStyle(.secondary)
-			.frame(width: 22, height: 22)
-			.contentShape(.circle)
+			.buttonStyle(.icon(size: 24))
 			.help("Close")
 	}
 }

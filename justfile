@@ -16,7 +16,7 @@ default:
 
 # Build build/Lines.app (release by default; `just build debug` for a debug build)
 build config="release":
-    ./build.sh {{ config }}
+    @./build.sh {{ config }}
 
 # Build, quit any running copy, and open the fresh build
 run config="release": (build config)

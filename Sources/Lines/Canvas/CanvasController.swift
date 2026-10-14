@@ -17,10 +17,15 @@ final class CanvasController {
 	var showsLayers = false
 	var showsInspector = false
 	var tool: CanvasTool = .select
+	var showsTimeline = false
+	/// The animation playhead, in seconds, and whether animations are playing.
+	var animationTime: Double = 0
+	var isPlaying = true
 	var isExporting = false
 	/// Set when someone double-clicks an element that has no in-place editing.
 	var wantsInspector = false
 	@ObservationIgnored private var lastInsets = ""
+	@ObservationIgnored private var documentFrameShown = false
 
 	/// Re-indents the source as one undoable step.
 	func formatDocument() {
@@ -129,11 +134,36 @@ final class CanvasController {
 	func addDefinition(_ kind: Definition) { call("addDefinition(\(js(kind.rawValue)))") }
 	func removeAllReferences(order: Int) { call("removeAllReferences(\(order))") }
 
+	// MARK: Animation
+
+	var animations: [AnimationInfo] { AnimationInfo.all(in: outline) }
+
+	func play() { call("animPlay()") }
+	func pause() { call("animPause()") }
+	func seek(to seconds: Double) { call("animSeek(\(seconds))") }
+	func addAnimation(_ preset: AnimationPreset, toOrder order: Int) {
+		call("addAnimation(\(order), \(js(preset.rawValue)))")
+	}
+	func setTimelineActive(_ on: Bool) { call("setTimelineActive(\(on))") }
+
 	func setTool(_ newTool: CanvasTool) {
 		tool = newTool
 		call("setTool(\(js(newTool.rawValue)))")
 	}
 	func fitViewBoxToContent() { call("fitViewBoxToContent()") }
+
+	/// Edits an attribute on any element (by order) without selecting it; nil removes it.
+	func setAttribute(_ name: String, _ value: String?, onOrder order: Int, coalesce: Bool = false)
+	{
+		call("setAttrOn(\(order), \(js(name)), \(value.map(js) ?? "null"), \(coalesce))")
+	}
+
+	/// Outlines the document with resize handles (while the inspector shows it).
+	func setDocumentFrame(_ shown: Bool) {
+		guard shown != documentFrameShown else { return }
+		documentFrameShown = shown
+		call("showDocumentFrame(\(shown))")
+	}
 
 	/// Space covered by floating panels, so fitting and centring use what's left.
 	func setInsets(left: CGFloat, right: CGFloat, top: CGFloat, bottom: CGFloat) {
@@ -273,6 +303,7 @@ final class CanvasController {
 					.flatMap(CanvasBackground.init(rawValue:)) ?? .checkerboard)
 			setAccentColor(NSColor(Brand.accent))
 			if !lastInsets.isEmpty { call("setInsets(\(lastInsets))") }
+			if documentFrameShown { call("showDocumentFrame(true)") }
 
 		case "changed":
 			guard var svg = body["svg"] as? String, let document else { return }
@@ -306,7 +337,8 @@ final class CanvasController {
 					elementID: d["id"] as? String,
 					label: d["label"] as? String, isHidden: d["hidden"] as? Bool ?? false,
 					fill: d["fill"] as? String, references: refs,
-					preview: d["preview"] as? [String]
+					preview: d["preview"] as? [String],
+					props: d["props"] as? [String: String] ?? [:]
 				)
 			}
 			if items != outline { outline = items }
@@ -341,6 +373,10 @@ final class CanvasController {
 			if moved, !info.isRoot, body["fromSource"] as? Bool != true {
 				sourceEditor?.revealElement(order: order)
 			}
+
+		case "time":
+			if let t = body["t"] as? Double { animationTime = t }
+			isPlaying = body["playing"] as? Bool ?? isPlaying
 
 		case "tool":
 			if let name = body["tool"] as? String, let t = CanvasTool(rawValue: name) { tool = t }

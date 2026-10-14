@@ -39,6 +39,7 @@ function setSVG(text) {
   const node = document.importNode(doc.documentElement, true);
   host.replaceChildren(node);
   root = node;
+  restoreAnimationState();
   lastGood = text;
   if (autoFit) {
     applyZoom(fitScale(), null, null, true);
@@ -329,7 +330,7 @@ host.addEventListener("mousedown", (e) => {
 
 document.addEventListener("mousedown", (e) => {
   // Clicks on the handles or the text editor keep the selection.
-  if (e.target === textEditor || selBox.contains(e.target)) return;
+  if (e.target === textEditor || selBox.contains(e.target) || docBox.contains(e.target)) return;
   if (!host.contains(e.target) && e.button === 0) select(null);
 });
 
@@ -810,6 +811,7 @@ function render() {
   frame = 0;
   host.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
   updateOverlay();
+  updateDocFrame();
   updateMinimap();
 }
 function scheduleRender() {
@@ -1405,8 +1407,25 @@ function fitViewBoxToContent() {
 // MARK: Tools — draw shapes by dragging, place text by clicking.
 
 let tool = "select";
-const TOOL_KEYS = { v: "select", h: "hand", r: "rect", o: "ellipse", l: "line", p: "star", t: "text" };
-const SHAPE_TOOLS = new Set(["rect", "roundedRect", "ellipse", "line", "arrow", "triangle", "hexagon", "star"]);
+const TOOL_KEYS = {
+  v: "select",
+  h: "hand",
+  r: "rect",
+  o: "ellipse",
+  l: "line",
+  p: "star",
+  t: "text",
+};
+const SHAPE_TOOLS = new Set([
+  "rect",
+  "roundedRect",
+  "ellipse",
+  "line",
+  "arrow",
+  "triangle",
+  "hexagon",
+  "star",
+]);
 let drawingShape = null;
 
 // `fromCanvas` tells the app when the change started here (a key or a finished drawing).
@@ -1419,37 +1438,66 @@ function setTool(name, fromCanvas) {
 
 // Points of a polygon tool inside the unit square.
 function unitPolygon(kind) {
-  if (kind === "triangle") return [[0.5, 0], [1, 1], [0, 1]];
+  if (kind === "triangle")
+    return [
+      [0.5, 0],
+      [1, 1],
+      [0, 1],
+    ];
   if (kind === "hexagon")
     return [...Array(6)].map((_, i) => {
       const a = Math.PI / 6 + (i * Math.PI) / 3;
       return [0.5 + 0.5 * Math.cos(a), 0.5 + 0.5 * Math.sin(a)];
     });
   return [...Array(10)].map((_, i) => {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 0.2 : 0.5;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5,
+      r = i % 2 ? 0.2 : 0.5;
     return [0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a)];
   });
 }
 
 function shapeGeometry(kind, x0, y0, x1, y1) {
-  const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  const x = Math.min(x0, x1),
+    y = Math.min(y0, y1),
+    w = Math.abs(x1 - x0),
+    h = Math.abs(y1 - y0);
   switch (kind) {
-    case "rect": return { x: round(x), y: round(y), width: round(w), height: round(h) };
-    case "roundedRect": return { x: round(x), y: round(y), width: round(w), height: round(h), rx: round(Math.min(w, h) * 0.18) };
-    case "ellipse": return { cx: round(x + w / 2), cy: round(y + h / 2), rx: round(w / 2), ry: round(h / 2) };
-    case "line": return { x1: round(x0), y1: round(y0), x2: round(x1), y2: round(y1) };
+    case "rect":
+      return { x: round(x), y: round(y), width: round(w), height: round(h) };
+    case "roundedRect":
+      return {
+        x: round(x),
+        y: round(y),
+        width: round(w),
+        height: round(h),
+        rx: round(Math.min(w, h) * 0.18),
+      };
+    case "ellipse":
+      return { cx: round(x + w / 2), cy: round(y + h / 2), rx: round(w / 2), ry: round(h / 2) };
+    case "line":
+      return { x1: round(x0), y1: round(y0), x2: round(x1), y2: round(y1) };
     case "arrow": {
-      const a = Math.atan2(y1 - y0, x1 - x0), len = Math.max(8, Math.hypot(x1 - x0, y1 - y0) * 0.18);
-      const hx = (d) => round(x1 - len * Math.cos(a + d)), hy = (d) => round(y1 - len * Math.sin(a + d));
-      return { d: `M${round(x0)} ${round(y0)} L${round(x1)} ${round(y1)} M${hx(0.5)} ${hy(0.5)} L${round(x1)} ${round(y1)} L${hx(-0.5)} ${hy(-0.5)}` };
+      const a = Math.atan2(y1 - y0, x1 - x0),
+        len = Math.max(8, Math.hypot(x1 - x0, y1 - y0) * 0.18);
+      const hx = (d) => round(x1 - len * Math.cos(a + d)),
+        hy = (d) => round(y1 - len * Math.sin(a + d));
+      return {
+        d: `M${round(x0)} ${round(y0)} L${round(x1)} ${round(y1)} M${hx(0.5)} ${hy(0.5)} L${round(x1)} ${round(y1)} L${hx(-0.5)} ${hy(-0.5)}`,
+      };
     }
     default:
-      return { points: unitPolygon(kind).map(([u, v]) => `${round(x + u * w)},${round(y + v * h)}`).join(" ") };
+      return {
+        points: unitPolygon(kind)
+          .map(([u, v]) => `${round(x + u * w)},${round(y + v * h)}`)
+          .join(" "),
+      };
   }
 }
 
 function newShape(kind) {
-  const tag = { rect: "rect", roundedRect: "rect", ellipse: "ellipse", line: "line", arrow: "path" }[kind] || "polygon";
+  const tag =
+    { rect: "rect", roundedRect: "rect", ellipse: "ellipse", line: "line", arrow: "path" }[kind] ||
+    "polygon";
   const el = document.createElementNS(NS, tag);
   const colour = palette[paletteIndex++ % palette.length];
   if (kind === "line" || kind === "arrow") {
@@ -1468,76 +1516,115 @@ function applyGeometry(el, geo) {
   for (const [k, v] of Object.entries(geo)) el.setAttribute(k, v);
 }
 
-document.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !root || spaceDown) return;
-  if (!(SHAPE_TOOLS.has(tool) || tool === "text")) return;
-  if (minimap.contains(e.target) || selBox.contains(e.target) || e.target === textEditor) return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  const parent = selected && selected.localName === "g" ? selected : root;
-  const p = toLocal(parent, e.clientX, e.clientY);
-  if (tool === "text") {
-    const el = document.createElementNS(NS, "text");
-    el.setAttribute("x", round(p.x));
-    el.setAttribute("y", round(p.y));
-    el.setAttribute("font-family", "-apple-system, Helvetica, sans-serif");
-    el.setAttribute("font-size", round(Math.max(12, intrinsicSize().h / 12)));
-    el.setAttribute("fill", "#1c1c1e");
-    el.textContent = "Text";
-    insert(el, parent);
-    select(el);
-    commit("Add Text");
-    setTool("select", true);
-    beginTextEdit(el);
-    return;
-  }
-  const el = newShape(tool);
-  insert(el, parent);
-  drawingShape = { el, parent, kind: tool, x0: p.x, y0: p.y, cx: e.clientX, cy: e.clientY, id: e.pointerId };
-  applyGeometry(el, shapeGeometry(tool, p.x, p.y, p.x, p.y));
-  document.documentElement.setPointerCapture(e.pointerId);
-}, true);
-
-document.addEventListener("pointermove", (e) => {
-  if (!drawingShape || e.pointerId !== drawingShape.id) return;
-  e.stopImmediatePropagation();
-  const d = drawingShape;
-  let p = toLocal(d.parent, e.clientX, e.clientY);
-  let dx = p.x - d.x0, dy = p.y - d.y0;
-  if (e.shiftKey) {
-    if (d.kind === "line" || d.kind === "arrow") {
-      // Snap the angle to 45° steps.
-      const len = Math.hypot(dx, dy), a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-      dx = len * Math.cos(a); dy = len * Math.sin(a);
-    } else {
-      const m = Math.max(Math.abs(dx), Math.abs(dy));
-      dx = m * Math.sign(dx || 1); dy = m * Math.sign(dy || 1);
+document.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (e.button !== 0 || !root || spaceDown) return;
+    if (!(SHAPE_TOOLS.has(tool) || tool === "text")) return;
+    if (minimap.contains(e.target) || selBox.contains(e.target) || e.target === textEditor) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const parent = selected && selected.localName === "g" ? selected : root;
+    const p = toLocal(parent, e.clientX, e.clientY);
+    if (tool === "text") {
+      const el = document.createElementNS(NS, "text");
+      el.setAttribute("x", round(p.x));
+      el.setAttribute("y", round(p.y));
+      el.setAttribute("font-family", "-apple-system, Helvetica, sans-serif");
+      el.setAttribute("font-size", round(Math.max(12, intrinsicSize().h / 12)));
+      el.setAttribute("fill", "#1c1c1e");
+      el.textContent = "Text";
+      insert(el, parent);
+      select(el);
+      commit("Add Text");
+      setTool("select", true);
+      beginTextEdit(el);
+      return;
     }
-  }
-  let x0 = d.x0, y0 = d.y0;
-  if (e.altKey && d.kind !== "line" && d.kind !== "arrow") { x0 -= dx; y0 -= dy; }
-  applyGeometry(d.el, shapeGeometry(d.kind, x0, y0, d.x0 + dx, d.y0 + dy));
-  updateOverlay();
-}, true);
+    const el = newShape(tool);
+    insert(el, parent);
+    drawingShape = {
+      el,
+      parent,
+      kind: tool,
+      x0: p.x,
+      y0: p.y,
+      cx: e.clientX,
+      cy: e.clientY,
+      id: e.pointerId,
+    };
+    applyGeometry(el, shapeGeometry(tool, p.x, p.y, p.x, p.y));
+    document.documentElement.setPointerCapture(e.pointerId);
+  },
+  true,
+);
 
-document.addEventListener("pointerup", (e) => {
-  if (!drawingShape || e.pointerId !== drawingShape.id) return;
-  e.stopImmediatePropagation();
-  const d = drawingShape;
-  drawingShape = null;
-  // A click without a drag places a default-size shape centred on the click.
-  if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) {
-    const s = Math.min(intrinsicSize().w, intrinsicSize().h) / 4;
-    const geo = d.kind === "line" || d.kind === "arrow"
-      ? shapeGeometry(d.kind, d.x0 - s / 2, d.y0 + s / 4, d.x0 + s / 2, d.y0 - s / 4)
-      : shapeGeometry(d.kind, d.x0 - s / 2, d.y0 - s / 2, d.x0 + s / 2, d.y0 + s / 2);
-    applyGeometry(d.el, geo);
-  }
-  select(d.el);
-  const names = { rect: "Rectangle", roundedRect: "Rounded Rectangle", ellipse: "Ellipse", line: "Line", arrow: "Arrow", triangle: "Triangle", hexagon: "Hexagon", star: "Star" };
-  commit(`Add ${names[d.kind]}`);
-  setTool("select", true);
-}, true);
+document.addEventListener(
+  "pointermove",
+  (e) => {
+    if (!drawingShape || e.pointerId !== drawingShape.id) return;
+    e.stopImmediatePropagation();
+    const d = drawingShape;
+    let p = toLocal(d.parent, e.clientX, e.clientY);
+    let dx = p.x - d.x0,
+      dy = p.y - d.y0;
+    if (e.shiftKey) {
+      if (d.kind === "line" || d.kind === "arrow") {
+        // Snap the angle to 45° steps.
+        const len = Math.hypot(dx, dy),
+          a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+        dx = len * Math.cos(a);
+        dy = len * Math.sin(a);
+      } else {
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        dx = m * Math.sign(dx || 1);
+        dy = m * Math.sign(dy || 1);
+      }
+    }
+    let x0 = d.x0,
+      y0 = d.y0;
+    if (e.altKey && d.kind !== "line" && d.kind !== "arrow") {
+      x0 -= dx;
+      y0 -= dy;
+    }
+    applyGeometry(d.el, shapeGeometry(d.kind, x0, y0, d.x0 + dx, d.y0 + dy));
+    updateOverlay();
+  },
+  true,
+);
+
+document.addEventListener(
+  "pointerup",
+  (e) => {
+    if (!drawingShape || e.pointerId !== drawingShape.id) return;
+    e.stopImmediatePropagation();
+    const d = drawingShape;
+    drawingShape = null;
+    // A click without a drag places a default-size shape centred on the click.
+    if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) {
+      const s = Math.min(intrinsicSize().w, intrinsicSize().h) / 4;
+      const geo =
+        d.kind === "line" || d.kind === "arrow"
+          ? shapeGeometry(d.kind, d.x0 - s / 2, d.y0 + s / 4, d.x0 + s / 2, d.y0 - s / 4)
+          : shapeGeometry(d.kind, d.x0 - s / 2, d.y0 - s / 2, d.x0 + s / 2, d.y0 + s / 2);
+      applyGeometry(d.el, geo);
+    }
+    select(d.el);
+    const names = {
+      rect: "Rectangle",
+      roundedRect: "Rounded Rectangle",
+      ellipse: "Ellipse",
+      line: "Line",
+      arrow: "Arrow",
+      triangle: "Triangle",
+      hexagon: "Hexagon",
+      star: "Star",
+    };
+    commit(`Add ${names[d.kind]}`);
+    setTool("select", true);
+  },
+  true,
+);
 
 // Adds a reusable definition (gradient, clip path, mask or filter) to <defs>,
 // ready to connect to shapes in the graph.
@@ -1550,27 +1637,74 @@ function addDefinition(kind) {
   }
   const { w, h } = intrinsicSize();
   const vb = root.viewBox && root.viewBox.baseVal;
-  const box = vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
+  const box =
+    vb && vb.width ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : { x: 0, y: 0, w, h };
   const make = (tag, attrs, children) => {
     const el = document.createElementNS(NS, tag);
     for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
     for (const c of children || []) insert(c, el);
     return el;
   };
-  const a = palette[paletteIndex++ % palette.length], b = palette[paletteIndex++ % palette.length];
-  const stops = () => [make("stop", { offset: "0", "stop-color": a }), make("stop", { offset: "1", "stop-color": b })];
+  const a = palette[paletteIndex++ % palette.length],
+    b = palette[paletteIndex++ % palette.length];
+  const stops = () => [
+    make("stop", { offset: "0", "stop-color": a }),
+    make("stop", { offset: "1", "stop-color": b }),
+  ];
   const specs = {
     linearGradient: ["linearGradient", "gradient", { x1: "0", y1: "0", x2: "1", y2: "1" }, stops],
     radialGradient: ["radialGradient", "radial", { cx: "0.5", cy: "0.5", r: "0.5" }, stops],
-    clipPath: ["clipPath", "clip", {}, () => [make("circle", { cx: round(box.x + box.w / 2), cy: round(box.y + box.h / 2), r: round(Math.min(box.w, box.h) / 2.5) })]],
-    mask: ["mask", "mask", {}, () => [
-      make("rect", { x: round(box.x), y: round(box.y), width: round(box.w), height: round(box.h), fill: "white" }),
-      make("circle", { cx: round(box.x + box.w / 2), cy: round(box.y + box.h / 2), r: round(Math.min(box.w, box.h) / 5), fill: "black" }),
-    ]],
-    blur: ["filter", "blur", {}, () => [make("feGaussianBlur", { stdDeviation: round(Math.max(1, box.w / 128)) })]],
-    shadow: ["filter", "shadow", { x: "-20%", y: "-20%", width: "140%", height: "140%" }, () => [
-      make("feDropShadow", { dx: "0", dy: round(box.h / 96), stdDeviation: round(box.w / 96), "flood-opacity": "0.35" }),
-    ]],
+    clipPath: [
+      "clipPath",
+      "clip",
+      {},
+      () => [
+        make("circle", {
+          cx: round(box.x + box.w / 2),
+          cy: round(box.y + box.h / 2),
+          r: round(Math.min(box.w, box.h) / 2.5),
+        }),
+      ],
+    ],
+    mask: [
+      "mask",
+      "mask",
+      {},
+      () => [
+        make("rect", {
+          x: round(box.x),
+          y: round(box.y),
+          width: round(box.w),
+          height: round(box.h),
+          fill: "white",
+        }),
+        make("circle", {
+          cx: round(box.x + box.w / 2),
+          cy: round(box.y + box.h / 2),
+          r: round(Math.min(box.w, box.h) / 5),
+          fill: "black",
+        }),
+      ],
+    ],
+    blur: [
+      "filter",
+      "blur",
+      {},
+      () => [make("feGaussianBlur", { stdDeviation: round(Math.max(1, box.w / 128)) })],
+    ],
+    shadow: [
+      "filter",
+      "shadow",
+      { x: "-20%", y: "-20%", width: "140%", height: "140%" },
+      () => [
+        make("feDropShadow", {
+          dx: "0",
+          dy: round(box.h / 96),
+          stdDeviation: round(box.w / 96),
+          "flood-opacity": "0.35",
+        }),
+      ],
+    ],
   };
   const spec = specs[kind];
   if (!spec) return;
@@ -1578,7 +1712,14 @@ function addDefinition(kind) {
   const el = make(tag, { id: uniqueID(base), ...attrs }, children());
   insert(el, defs);
   select(el);
-  const names = { linearGradient: "Linear Gradient", radialGradient: "Radial Gradient", clipPath: "Clip Path", mask: "Mask", blur: "Blur", shadow: "Drop Shadow" };
+  const names = {
+    linearGradient: "Linear Gradient",
+    radialGradient: "Radial Gradient",
+    clipPath: "Clip Path",
+    mask: "Mask",
+    blur: "Blur",
+    shadow: "Drop Shadow",
+  };
   commit(`Add ${names[kind]}`);
 }
 
@@ -1589,10 +1730,274 @@ function removeAllReferences(order) {
   const refs = refsOf(el);
   if (!refs.length) return;
   for (const [attr] of refs) {
-    if (attr === "href") { el.removeAttribute("href"); el.removeAttributeNS(XLINK, "href"); }
-    else el.removeAttribute(attr);
+    if (attr === "href") {
+      el.removeAttribute("href");
+      el.removeAttributeNS(XLINK, "href");
+    } else el.removeAttribute(attr);
   }
   commit("Remove References");
+}
+
+// MARK: Document frame — the drawing's extents, with handles to resize it.
+// Resizing changes the canvas, not the artwork: width/height grow and the
+// viewBox grows with them, so everything keeps its size and place.
+
+const docBox = document.getElementById("doc");
+const docSize = document.getElementById("doc-size");
+let docFrameShown = false;
+let docDrag = null;
+
+function showDocumentFrame(on) {
+  docFrameShown = !!on;
+  updateDocFrame();
+}
+
+function updateDocFrame() {
+  if (!docFrameShown || !root) {
+    docBox.style.display = "none";
+    return;
+  }
+  const r = host.getBoundingClientRect();
+  docBox.style.display = "block";
+  docBox.style.left = r.left + "px";
+  docBox.style.top = r.top + "px";
+  docBox.style.width = r.width + "px";
+  docBox.style.height = r.height + "px";
+  const { w, h } = intrinsicSize();
+  docSize.textContent = `${round(w)} × ${round(h)}`;
+}
+
+function numericAttr(name) {
+  const v = root.getAttribute(name);
+  return v != null && /^\s*[\d.]+\s*(px)?\s*$/.test(v) ? parseFloat(v) : null;
+}
+
+docBox.addEventListener("pointerdown", (e) => {
+  const handle = e.target.dataset && e.target.dataset.doc;
+  if (!handle || e.button !== 0 || !root) return;
+  e.preventDefault();
+  e.stopPropagation();
+  docBox.setPointerCapture(e.pointerId);
+  const vb = root.viewBox && root.viewBox.baseVal;
+  const { w, h } = intrinsicSize();
+  docDrag = {
+    handle,
+    id: e.pointerId,
+    x0: e.clientX,
+    y0: e.clientY,
+    w0: w,
+    h0: h,
+    tx0: tx,
+    ty0: ty,
+    vb0: vb && vb.width ? [vb.x, vb.y, vb.width, vb.height] : null,
+    width0: root.getAttribute("width"),
+    height0: root.getAttribute("height"),
+    hasW: numericAttr("width") != null,
+    hasH: numericAttr("height") != null,
+    moved: false,
+  };
+});
+
+docBox.addEventListener("pointermove", (e) => {
+  const d = docDrag;
+  if (!d || e.pointerId !== d.id) return;
+  d.moved = true;
+  const [hx, hy] = HANDLES[d.handle];
+  let w = Math.max(1, d.w0 + (hx * (e.clientX - d.x0)) / zoom);
+  let h = Math.max(1, d.h0 + (hy * (e.clientY - d.y0)) / zoom);
+  if (e.shiftKey && hx && hy) {
+    const k = Math.max(w / d.w0, h / d.h0);
+    w = d.w0 * k;
+    h = d.h0 * k;
+  }
+  w = Math.round(w);
+  h = Math.round(h);
+  // Growing from the left or top moves the origin, so the artwork stays put.
+  const offX = hx < 0 ? d.w0 - w : 0,
+    offY = hy < 0 ? d.h0 - h : 0;
+  if (d.vb0) {
+    const ux = d.vb0[2] / d.w0,
+      uy = d.vb0[3] / d.h0;
+    root.setAttribute(
+      "viewBox",
+      [d.vb0[0] + offX * ux, d.vb0[1] + offY * uy, w * ux, h * uy].map(round).join(" "),
+    );
+  }
+  if (d.hasW || !d.vb0) root.setAttribute("width", w);
+  if (d.hasH || !d.vb0) root.setAttribute("height", h);
+  updateIntrinsicSize();
+  tx = d.tx0 + offX * zoom;
+  ty = d.ty0 + offY * zoom;
+  renderNow();
+});
+
+function endDocDrag(e) {
+  const d = docDrag;
+  if (!d || e.pointerId !== d.id) return;
+  docDrag = null;
+  if (d.moved) {
+    leaveFit();
+    commit("Resize Canvas");
+  }
+}
+docBox.addEventListener("pointerup", endDocDrag);
+docBox.addEventListener("pointercancel", endDocDrag);
+
+// MARK: Animation — SMIL animations, played and scrubbed from the timeline.
+
+let animPaused = false;
+let animTime = 0;
+let timeTimer = 0;
+let timelineActive = false;
+
+function reportTime() {
+  if (!root) return;
+  post({ type: "time", t: root.getCurrentTime(), playing: !animPaused });
+}
+
+function updateTimeReports() {
+  const want = timelineActive && !animPaused;
+  if (want && !timeTimer) {
+    timeTimer = setInterval(() => {
+      reportTime();
+      updateOverlay();
+    }, 50);
+  } else if (!want && timeTimer) {
+    clearInterval(timeTimer);
+    timeTimer = 0;
+  }
+}
+
+// The timeline is open; report the playhead while it plays.
+function setTimelineActive(on) {
+  timelineActive = !!on;
+  updateTimeReports();
+  reportTime();
+}
+
+function animPlay() {
+  if (!root) return;
+  root.unpauseAnimations();
+  animPaused = false;
+  updateTimeReports();
+  reportTime();
+}
+
+function animPause() {
+  if (!root) return;
+  root.pauseAnimations();
+  animPaused = true;
+  animTime = root.getCurrentTime();
+  updateTimeReports();
+  reportTime();
+}
+
+function animSeek(t) {
+  if (!root) return;
+  root.setCurrentTime(Math.max(0, t));
+  animTime = Math.max(0, t);
+  updateOverlay();
+  reportTime();
+}
+
+// A re-rendered drawing starts its timeline at zero; keep a paused playhead.
+function restoreAnimationState() {
+  if (animPaused) {
+    root.pauseAnimations();
+    root.setCurrentTime(animTime);
+  }
+}
+
+// Adds an animation preset to an element, as a SMIL child it controls.
+function addAnimation(order, preset) {
+  const el = byOrder(order);
+  if (!el || el === root) return;
+  let b;
+  try {
+    b = el.getBBox();
+  } catch (e) {
+    b = { x: 0, y: 0, width: 0, height: 0 };
+  }
+  const cx = round(b.x + b.width / 2),
+    cy = round(b.y + b.height / 2);
+  const fill = el.getAttribute("fill") || "#000000";
+  const other = palette[paletteIndex++ % palette.length];
+  const make = (tag, attrs) => {
+    const a = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
+    return a;
+  };
+  let anim;
+  switch (preset) {
+    case "fade":
+      anim = make("animate", {
+        attributeName: "opacity",
+        values: "1;0.15;1",
+        dur: "2s",
+        repeatCount: "indefinite",
+      });
+      break;
+    case "fadeIn":
+      anim = make("animate", {
+        attributeName: "opacity",
+        from: "0",
+        to: "1",
+        dur: "1s",
+        fill: "freeze",
+      });
+      break;
+    case "spin":
+      anim = make("animateTransform", {
+        attributeName: "transform",
+        type: "rotate",
+        from: `0 ${cx} ${cy}`,
+        to: `360 ${cx} ${cy}`,
+        dur: "3s",
+        repeatCount: "indefinite",
+        additive: "sum",
+      });
+      break;
+    case "slide": {
+      const d = round(Math.max(10, b.width / 3));
+      anim = make("animateTransform", {
+        attributeName: "transform",
+        type: "translate",
+        values: `0 0; ${d} 0; 0 0`,
+        dur: "2s",
+        repeatCount: "indefinite",
+        additive: "sum",
+      });
+      break;
+    }
+    case "colour":
+      anim = make("animate", {
+        attributeName: "fill",
+        values: `${fill};${other};${fill}`,
+        dur: "3s",
+        repeatCount: "indefinite",
+      });
+      break;
+    case "draw": {
+      const len = el.getTotalLength ? round(el.getTotalLength()) : 0;
+      if (!len) return;
+      el.setAttribute("stroke-dasharray", len);
+      if (!el.getAttribute("stroke") || el.getAttribute("stroke") === "none")
+        el.setAttribute("stroke", fill === "none" ? "#000000" : fill);
+      anim = make("animate", {
+        attributeName: "stroke-dashoffset",
+        from: len,
+        to: "0",
+        dur: "2s",
+        fill: "freeze",
+      });
+      break;
+    }
+    default:
+      return;
+  }
+  insert(anim, el);
+  select(anim);
+  commit("Add Animation");
 }
 
 // MARK: Inline text editing — double-click a text element to type in place.
@@ -1709,6 +2114,36 @@ function scheduleOutline() {
   outlineTimer = setTimeout(sendOutline, 60);
 }
 
+// Attribute values the graph and timeline show and edit. Stops, filter
+// primitives and animations report everything; other elements their paint.
+const SHOWN_PROPS = ["fill", "stroke", "stroke-width", "opacity", "fill-opacity", "stroke-opacity"];
+function propsOf(el) {
+  const name = el.localName;
+  const all =
+    name === "stop" || name.startsWith("fe") || name.startsWith("animate") || name === "set";
+  const props = {};
+  for (const a of el.attributes) {
+    if ((all || SHOWN_PROPS.includes(a.name)) && a.value.length <= 300) props[a.name] = a.value;
+  }
+  return props;
+}
+
+// Sets (or, with null, removes) an attribute on any element, without changing
+// the selection — for values edited in the graph and timeline.
+function setAttrOn(order, name, value, coalesce) {
+  const el = byOrder(order);
+  if (!el || !name) return;
+  try {
+    if (value == null) el.removeAttribute(name);
+    else setAttrNS(el, name, value);
+  } catch (e) {
+    return;
+  }
+  if (el === root) updateIntrinsicSize();
+  updateOverlay();
+  commit(`Change ${label(name)}`, coalesce ? `attr:${order}:${name}` : null);
+}
+
 // What the graph shows inside definition nodes: a gradient's stop colours,
 // or the effects a filter applies.
 function previewOf(el) {
@@ -1742,6 +2177,7 @@ function sendOutline() {
         fill: el.getAttribute("fill"),
         refs: refsOf(el),
         preview: previewOf(el),
+        props: propsOf(el),
       });
     }
     Array.from(el.children).forEach((c, i) => walk(c, order, depth + 1, path.concat(i)));

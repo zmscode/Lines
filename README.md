@@ -34,15 +34,15 @@ just format           # swift-format with the project's .swift-format
 
 ## How it fits together
 
-| File | Role |
-| --- | --- |
-| `SVGDocument.swift` | The document (new SwiftUI `Document` protocol). The source text is the single source of truth; `replaceText` registers named, coalesced undo. |
-| `CanvasHTML.swift` | The WebKit canvas: rendering, hit testing, dragging, and DOM edits, which are serialized back to text. |
-| `CanvasController.swift` | The per-window bridge between SwiftUI, the canvas and the source editor. |
-| `SyntaxTheme.swift` | Code colour themes, taken from each theme's Zed extension. |
-| `SourceEditor.swift` | The NSTextView editor, highlighter, and start-tag scanner used for selection sync. |
-| `InspectorView.swift` | The inspector form. |
-| `LayersSidebar.swift` | The layers list (top-level elements are layers; groups disclose their contents). |
-| `GraphView.swift` | The element graph, built on [SwiftFlow](https://github.com/aaurelions/SwiftFlow) (vendored in `Vendor/SwiftFlow` with a fix; see `VENDORED.md`). |
-| `ColourPicker.swift` | The colour popover, built from ColourPickerMaker's canvas and sliders. |
-| `Vendor/ColourPickerMaker` | [ColourPickerMaker](https://github.com/sturdysturge/SwiftUIColourPickerMaker) (MIT), vendored with fixes listed in `VENDORED.md`. |
+| File                       | Role                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SVGDocument.swift`        | The document (new SwiftUI `Document` protocol). The source text is the single source of truth; `replaceText` registers named, coalesced undo.    |
+| `CanvasHTML.swift`         | The WebKit canvas: rendering, hit testing, dragging, and DOM edits, which are serialized back to text.                                           |
+| `CanvasController.swift`   | The per-window bridge between SwiftUI, the canvas and the source editor.                                                                         |
+| `SyntaxTheme.swift`        | Code colour themes, taken from each theme's Zed extension.                                                                                       |
+| `SourceEditor.swift`       | The NSTextView editor, highlighter, and start-tag scanner used for selection sync.                                                               |
+| `InspectorView.swift`      | The inspector form.                                                                                                                              |
+| `LayersSidebar.swift`      | The layers list (top-level elements are layers; groups disclose their contents).                                                                 |
+| `GraphView.swift`          | The element graph, built on [SwiftFlow](https://github.com/aaurelions/SwiftFlow) (vendored in `Vendor/SwiftFlow` with a fix; see `VENDORED.md`). |
+| `ColourPicker.swift`       | The colour popover, built from ColourPickerMaker's canvas and sliders.                                                                           |
+| `Vendor/ColourPickerMaker` | [ColourPickerMaker](https://github.com/sturdysturge/SwiftUIColourPickerMaker) (MIT), vendored with fixes listed in `VENDORED.md`.                |

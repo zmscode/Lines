@@ -111,9 +111,7 @@ private struct ElementInspector: View {
 		_ title: String, _ symbol: String, role: ButtonRole? = nil, perform: @escaping () -> Void
 	) -> some View {
 		Button(title, systemImage: symbol, role: role, action: perform)
-			.labelStyle(.iconOnly)
-			.buttonStyle(.glass)
-			.buttonBorderShape(.circle)
+			.buttonStyle(.icon(size: 30))
 			.help(title)
 	}
 
@@ -151,14 +149,14 @@ private struct ElementInspector: View {
 					controller.setRotation(selection.rotation + 90)
 				}
 				.help("Rotate Right 90°")
-				Toggle(isOn: $lockAspect) {
-					Label("Lock Aspect Ratio", systemImage: lockAspect ? "lock.fill" : "lock.open")
-				}
-				.toggleStyle(.button)
+				Button(
+					lockAspect ? "Unlock Aspect Ratio" : "Lock Aspect Ratio",
+					systemImage: lockAspect ? "lock.fill" : "lock.open"
+				) { lockAspect.toggle() }
+				.buttonStyle(.icon(size: 28, selected: lockAspect))
 				.help(lockAspect ? "Unlock Aspect Ratio" : "Lock Aspect Ratio")
 			}
-			.labelStyle(.iconOnly)
-			.buttonStyle(.borderless)
+			.buttonStyle(.icon(size: 28))
 		}
 	}
 
@@ -242,12 +240,10 @@ private struct PaintRow: View {
 				Button("Remove \(title)", systemImage: "minus.circle") {
 					controller.setAttribute(attribute, "none")
 				}
-				.foregroundStyle(.secondary)
 				.help("Remove \(title.lowercased())")
 			}
 		}
-		.labelStyle(.iconOnly)
-		.buttonStyle(.borderless)
+		.buttonStyle(.icon(size: 26))
 	}
 
 	private func describe(_ value: String, opacity: Double) -> String {
@@ -471,19 +467,20 @@ private struct DocumentInspector: View {
 				}
 			}
 			HStack {
-				Toggle(isOn: $lockAspect) {
-					Label("Lock Aspect", systemImage: lockAspect ? "lock.fill" : "lock.open")
-				}
-				.toggleStyle(.button)
+				Button(
+					lockAspect ? "Unlock Aspect Ratio" : "Lock Aspect Ratio",
+					systemImage: lockAspect ? "lock.fill" : "lock.open"
+				) { lockAspect.toggle() }
+				.buttonStyle(.icon(size: 28, selected: lockAspect))
 				.help(lockAspect ? "Unlock Aspect Ratio" : "Lock Aspect Ratio")
 				Spacer()
 				Button("Fit to Content", systemImage: "arrow.down.right.and.arrow.up.left") {
 					controller.fitViewBoxToContent()
 				}
 				.help("Set the viewBox to the drawing’s bounds")
+				.buttonStyle(.borderless)
+				.controlSize(.small)
 			}
-			.buttonStyle(.borderless)
-			.controlSize(.small)
 			AttributeField(
 				title: "View Box", value: selection.value("viewBox") ?? "", prompt: "None"
 			) {
@@ -592,9 +589,7 @@ private struct AllAttributes: View {
 					Button("Remove \(attribute.name)", systemImage: "minus.circle") {
 						controller.removeAttribute(attribute.name)
 					}
-					.labelStyle(.iconOnly)
-					.buttonStyle(.borderless)
-					.foregroundStyle(.secondary)
+					.buttonStyle(.icon(size: 24))
 					.help("Remove \(attribute.name)")
 				}
 			}

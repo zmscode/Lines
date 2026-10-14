@@ -15,19 +15,26 @@ struct GraphView: View {
 	@State private var movedByHand: Set<String> = []
 	@State private var layoutKey: [String] = []
 	@State private var needsFit = true
+	/// Hidden until the first fit, so the graph appears in place instead of
+	/// sliding in from SwiftFlow's default viewport at the top left.
+	@State private var hasFitted = false
 	@StateObject private var flow = SwiftFlowInstance()
+	@AppStorage("graph.layout") private var mode: GraphLayoutMode = .flow
 
 	private static let hiddenTags: Set<String> = [
 		"stop", "tspan", "title", "desc", "metadata", "style", "script",
 	]
-	/// Filter primitives (feGaussianBlur, …) are shown inside their filter's node.
-	private static func isShown(_ item: OutlineItem) -> Bool {
-		!hiddenTags.contains(item.tag) && !item.tag.hasPrefix("fe")
+	/// Filter primitives and gradient stops are shown inside their parent's
+	/// node. The flow layout also leaves out containers like `<defs>`.
+	private func isShown(_ item: OutlineItem) -> Bool {
+		!Self.hiddenTags.contains(item.tag) && !item.tag.hasPrefix("fe")
+			&& !(mode == .flow && Graph.kind(for: item.tag) == .container)
 	}
 	private static let nodeLimit = 300
 
 	var body: some View {
-		let graph = Graph(outline: visibleItems)
+		let graph = Graph(
+			outline: visibleItems, all: controller.outline, showsNesting: mode == .tree)
 		SwiftFlow(
 			nodes: graph.nodes(positions: positions, selected: selectedPath),
 			edges: graph.edges,
@@ -59,34 +66,68 @@ struct GraphView: View {
 			GraphNodeView(node: node, controller: controller)
 		} overlay: {
 			Background(variant: .dots, color: .secondary.opacity(0.35))
-			Controls()
-			MiniMap(selectedNodeColor: .accentColor)
+			MiniMap(selectedNodeColor: .accentColor, position: .bottomLeft)
 		}
 		.background(GraphNavigation(flow: flow))
 		.overlay(alignment: .top) {
 			// Top centre, clear of the floating layers and inspector panels.
-			GlassEffectContainer(spacing: 8) {
-				HStack(spacing: 8) {
-					Menu {
-						ForEach(CanvasController.Definition.allCases) { kind in
-							Button(kind.title, systemImage: kind.symbol) {
-								controller.addDefinition(kind)
-							}
+			FloatingStrip(axis: .horizontal) {
+				Menu {
+					ForEach(CanvasController.Definition.allCases) { kind in
+						Button(kind.title, systemImage: kind.symbol) {
+							controller.addDefinition(kind)
 						}
-					} label: {
-						Label("Add", systemImage: "plus")
 					}
-					.menuIndicator(.hidden)
-					.buttonStyle(.glass)
-					.help("Add a gradient, clip path, mask or filter, then connect it to a shape")
+				} label: {
+					Label("Add", systemImage: "plus")
+				}
+				.menuStyle(.button)
+				.menuIndicator(.hidden)
+				.buttonStyle(.icon)
+				.help("Add a gradient, clip path, mask or filter, then connect it to a shape")
 
-					Button("Tidy Up", systemImage: "wand.and.rays") {
+				StripDivider(axis: .horizontal)
+
+				ForEach(GraphLayoutMode.allCases) { option in
+					Button(option.title, systemImage: option.symbol) {
+						mode = option
 						movedByHand.removeAll()
 						relayout(graph, force: true)
 					}
-					.buttonStyle(.glass)
-					.help("Arrange the graph automatically")
+					.buttonStyle(.icon(selected: mode == option))
+					.help(
+						option == .flow
+							? "Flow: definitions feed the elements that use them"
+							: "Tree: the document's nesting")
 				}
+
+				StripDivider(axis: .horizontal)
+
+				Button("Tidy Up", systemImage: "wand.and.rays") {
+					movedByHand.removeAll()
+					relayout(graph, force: true)
+				}
+				.buttonStyle(.icon)
+				.help("Arrange the graph automatically")
+			}
+			.padding(12)
+		}
+		.overlay(alignment: .bottomTrailing) {
+			// The same zoom strip as the canvas.
+			FloatingStrip {
+				Button("Zoom In", systemImage: "plus.magnifyingglass") { flow.zoomIn() }
+					.buttonStyle(.icon)
+					.help("Zoom In")
+				Button("Zoom Out", systemImage: "minus.magnifyingglass") { flow.zoomOut() }
+					.buttonStyle(.icon)
+					.help("Zoom Out")
+				StripDivider()
+				Button("Zoom to Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
+					needsFit = true
+					fitIfNeeded(graph)
+				}
+				.buttonStyle(.icon)
+				.help("Zoom to Fit")
 			}
 			.padding(12)
 		}
@@ -97,6 +138,7 @@ struct GraphView: View {
 					description: Text("Elements and the references between them appear here."))
 			}
 		}
+		.opacity(hasFitted ? 1 : 0)
 		.onAppear { relayout(graph, force: true) }
 		.onChange(of: graph.nodeIDs) { _, _ in relayout(graph, force: false) }
 		.onChange(of: flow.viewSize) { _, _ in fitIfNeeded(graph) }
@@ -106,7 +148,7 @@ struct GraphView: View {
 
 	/// Large drawings show their top levels plus anything involved in a reference.
 	private var visibleItems: [OutlineItem] {
-		let items = controller.outline.filter(Self.isShown)
+		let items = controller.outline.filter(isShown)
 		guard items.count > Self.nodeLimit else { return items }
 		let referenced = Set(items.flatMap { $0.references.map(\.targetID) })
 		return Array(
@@ -131,9 +173,11 @@ struct GraphView: View {
 		guard force || graph.nodeIDs != layoutKey else { return }
 		let firstLayout = layoutKey.isEmpty
 		layoutKey = graph.nodeIDs
-		let tidy = TidyTreeLayout.positions(for: graph.items) {
-			GraphNodeView.size(for: graph.data(for: $0))
-		}
+		let size = { (item: OutlineItem) in GraphNodeView.size(for: graph.data(for: item)) }
+		let tidy =
+			mode == .flow
+			? FlowLayout.positions(for: graph.items, references: graph.referencePairs, size: size)
+			: TidyTreeLayout.positions(for: graph.items, size: size)
 		var laidOut = positions
 		for (id, position) in tidy where force || !movedByHand.contains(id) {
 			laidOut[id] = position
@@ -147,15 +191,24 @@ struct GraphView: View {
 
 	/// Frames the graph once SwiftFlow knows its size; until then the fit waits.
 	private func fitIfNeeded(_ graph: Graph) {
-		guard needsFit, flow.viewSize.width > 1, flow.viewSize.height > 1, !graph.items.isEmpty
-		else { return }
+		if graph.items.isEmpty {
+			hasFitted = true
+			return
+		}
+		guard needsFit, flow.viewSize.width > 1, flow.viewSize.height > 1 else { return }
 		needsFit = false
 		let nodes = graph.nodes(positions: positions, selected: nil)
 		let sizes = Dictionary(
 			uniqueKeysWithValues: nodes.map { ($0.id, GraphNodeView.size(for: $0.data)) })
+		// The first fit is instant; later ones (Tidy Up) animate.
 		flow.fitView(
 			nodes: nodes, nodeSizes: sizes,
-			options: FitViewOptions(padding: 48, maxZoom: 1, duration: 0.25))
+			options: FitViewOptions(padding: 48, maxZoom: 1, duration: hasFitted ? 0.25 : nil))
+		if !hasFitted {
+			DispatchQueue.main.async {
+				withAnimation(.easeOut(duration: 0.15)) { hasFitted = true }
+			}
+		}
 	}
 
 	// MARK: Changes

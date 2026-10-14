@@ -68,9 +68,7 @@ struct NewAttributeRow: View {
 				.onSubmit(add)
 				.help("Attribute value")
 			Button("Add Attribute", systemImage: "plus.circle.fill", action: add)
-				.labelStyle(.iconOnly)
-				.buttonStyle(.borderless)
-				.foregroundStyle(isValid ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+				.buttonStyle(.icon(size: 26, selected: isValid))
 				.disabled(!isValid)
 				.help(isValid ? "Add \(trimmed)" : "Type an attribute name to add it")
 		}

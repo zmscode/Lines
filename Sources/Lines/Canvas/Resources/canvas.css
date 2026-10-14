@@ -72,6 +72,41 @@ body.space * {
 	display: none;
 	box-sizing: border-box;
 }
+/* The document's extents, shown while the inspector shows the document. */
+#doc {
+	border: 1.5px dashed var(--accent);
+}
+#doc .knob[data-doc="nw"],
+#doc .knob[data-doc="se"] {
+	cursor: nwse-resize;
+}
+#doc .knob[data-doc="ne"],
+#doc .knob[data-doc="sw"] {
+	cursor: nesw-resize;
+}
+#doc .knob[data-doc="n"],
+#doc .knob[data-doc="s"] {
+	cursor: ns-resize;
+}
+#doc .knob[data-doc="e"],
+#doc .knob[data-doc="w"] {
+	cursor: ew-resize;
+}
+#doc-size {
+	position: absolute;
+	left: 50%;
+	top: 100%;
+	transform: translate(-50%, 10px);
+	padding: 2px 7px;
+	border-radius: 6px;
+	font:
+		600 11px/16px -apple-system,
+		system-ui;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	color: #fff;
+	background: var(--accent);
+}
 #sel {
 	border: 1.5px solid var(--accent);
 	border-radius: 1px;

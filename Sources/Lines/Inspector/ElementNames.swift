@@ -31,6 +31,10 @@ extension InspectorView {
 		case "title": "Title"
 		case "desc": "Description"
 		case "metadata": "Metadata"
+		case "animate": "Animation"
+		case "animateTransform": "Transform Animation"
+		case "animateMotion": "Motion Path"
+		case "set": "Set"
 		default: tag
 		}
 	}
@@ -58,6 +62,7 @@ extension InspectorView {
 		case "marker": return "arrowtriangle.right"
 		case "style": return "paintbrush"
 		case "title", "desc", "metadata": return "text.alignleft"
+		case "animate", "animateTransform", "animateMotion", "set": return "play.circle"
 		default: return "chevron.left.forwardslash.chevron.right"
 		}
 	}

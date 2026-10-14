@@ -57,6 +57,9 @@ struct ContentView: View {
 				withAnimation(Self.panelAnimation) { controller.showsInspector = true }
 			}
 			.onChange(of: controller.showsLayers) { _, _ in updateInsets() }
+			.onChange(of: documentFrameShown, initial: true) { _, shown in
+				controller.setDocumentFrame(shown)
+			}
 			.onChange(of: controller.layout) { _, _ in updateInsets() }
 			.onChange(of: controller.showsInspector) { _, shows in
 				savedShowsInspector = shows
@@ -69,6 +72,13 @@ struct ContentView: View {
 	/// Room taken by the tools palette on the canvas's leading edge.
 	private var paletteSpace: CGFloat {
 		controller.layout == .canvas ? ToolPalette.width + Self.panelMargin : 0
+	}
+
+	/// The document's extents and resize handles show while the inspector is
+	/// showing the document (nothing selected).
+	private var documentFrameShown: Bool {
+		controller.showsInspector && controller.layout == .canvas
+			&& (controller.selection?.isRoot ?? false)
 	}
 
 	private func updateInsets() {
@@ -109,6 +119,7 @@ struct ContentView: View {
 				.accessibilityHidden(controller.layout == .graph)
 			if controller.layout == .graph {
 				GraphView(controller: controller)
+					.transition(.opacity)
 			}
 			if controller.layout == .canvas {
 				CanvasControls(controller: controller)
@@ -169,9 +180,10 @@ struct ContentView: View {
 
 	// MARK: Toolbar
 	//
-	// Three groups (HIG › Toolbars): the panels on the leading edge, what the
-	// viewer shows in the centre, and sharing on the trailing edge. Drawing
-	// tools live in the palette on the canvas. Every item is also in the menu bar.
+	// Two groups (HIG › Toolbars): what the window shows on the leading edge
+	// (the panels and the element graph) and sharing on the trailing edge.
+	// Drawing tools live in the palette on the canvas. Every item is also in
+	// the menu bar.
 
 	@ToolbarContentBuilder
 	private var toolbar: some CustomizableToolbarContent {
@@ -189,24 +201,19 @@ struct ContentView: View {
 					Label("Code", systemImage: "chevron.left.forwardslash.chevron.right")
 				}
 				.help(controller.showsCode ? "Hide Code (⌘2)" : "Show Code (⌘2)")
+				Toggle(
+					isOn: Binding(
+						get: { controller.layout == .graph },
+						set: { controller.layout = $0 ? .graph : .canvas })
+				) {
+					Label("Graph", systemImage: EditorLayout.graph.symbol)
+				}
+				.help(controller.layout == .graph ? "Show Canvas (⌘3)" : "Show Element Graph (⌘3)")
 			} label: {
 				Label("Panels", systemImage: "rectangle.3.group")
 			}
 		}
 		.customizationBehavior(.disabled)
-
-		ToolbarItem(id: "mode", placement: .principal) {
-			Picker("View", selection: $controller.layout) {
-				ForEach(EditorLayout.allCases) { layout in
-					Label(layout == .canvas ? "Canvas" : "Graph", systemImage: layout.symbol)
-						.tag(layout)
-				}
-			}
-			.pickerStyle(.segmented)
-			.labelStyle(.titleAndIcon)
-			.fixedSize()
-			.help("Show the drawing or its element graph (⌘3)")
-		}
 
 		ToolbarItem(id: "share", placement: .primaryAction) {
 			Menu {
