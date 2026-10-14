@@ -65,7 +65,7 @@ function intrinsicSize() {
     const v = root[name].baseVal;
     try {
       v.convertToSpecifiedUnits(1);
-    } catch (e) {}
+    } catch {}
     return v.value || null;
   };
   let w = len("width"),
@@ -917,6 +917,28 @@ function groupSelected() {
   insert(el, g);
   select(g);
   commit("Group");
+}
+
+// Mirrors each selected element across its own centre.
+function flipSelected(axis) {
+  const all = selection();
+  if (!all.length) return;
+  for (const el of all) {
+    let b;
+    try {
+      b = el.getBBox();
+    } catch (e) {
+      continue;
+    }
+    const cx = round(b.x + b.width / 2),
+      cy = round(b.y + b.height / 2);
+    const s = axis === "h" ? "-1 1" : "1 -1";
+    const f = `translate(${cx} ${cy}) scale(${s}) translate(${-cx} ${-cy})`;
+    const t = el.getAttribute("transform");
+    el.setAttribute("transform", t ? `${t} ${f}` : f);
+  }
+  updateOverlay();
+  commit(axis === "h" ? "Flip Horizontal" : "Flip Vertical");
 }
 
 function ungroupSelected() {
@@ -1928,6 +1950,21 @@ function addDefinition(kind, applyOrder) {
   const specs = {
     linearGradient: ["linearGradient", "gradient", { x1: "0", y1: "0", x2: "1", y2: "1" }, stops],
     radialGradient: ["radialGradient", "radial", { cx: "0.5", cy: "0.5", r: "0.5" }, stops],
+    pattern: [
+      "pattern",
+      "pattern",
+      (() => {
+        const size = round(Math.max(4, Math.min(box.w, box.h) / 10));
+        return { width: size, height: size, patternUnits: "userSpaceOnUse" };
+      })(),
+      () => {
+        const size = round(Math.max(4, Math.min(box.w, box.h) / 10));
+        return [
+          make("rect", { width: size, height: size, fill: a }),
+          make("circle", { cx: size / 2, cy: size / 2, r: round(size / 4), fill: b }),
+        ];
+      },
+    ],
     clipPath: [
       "clipPath",
       "clip",
@@ -1987,9 +2024,13 @@ function addDefinition(kind, applyOrder) {
   insert(el, defs);
   if (target && target !== root) {
     const attr =
-      { linearGradient: "fill", radialGradient: "fill", clipPath: "clip-path", mask: "mask" }[
-        kind
-      ] || "filter";
+      {
+        linearGradient: "fill",
+        radialGradient: "fill",
+        pattern: "fill",
+        clipPath: "clip-path",
+        mask: "mask",
+      }[kind] || "filter";
     target.setAttribute(attr, `url(#${el.id})`);
     select(target);
   } else select(el);
@@ -1999,6 +2040,7 @@ function addDefinition(kind, applyOrder) {
     clipPath: "Clip Path",
     mask: "Mask",
     blur: "Blur",
+    pattern: "Pattern",
     shadow: "Drop Shadow",
   };
   commit(`Add ${names[kind]}`);

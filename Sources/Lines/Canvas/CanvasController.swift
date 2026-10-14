@@ -92,6 +92,8 @@ final class CanvasController {
 	func reorder(_ mode: ReorderMode) { call("reorder(\(js(mode.rawValue)))") }
 	func groupSelection() { call("groupSelected()") }
 	func ungroupSelection() { call("ungroupSelected()") }
+	/// Mirrors the selection across its centre.
+	func flipSelection(horizontally: Bool) { call("flipSelected(\(js(horizontally ? "h" : "v")))") }
 	func paste(markup: String) { call("pasteMarkup(\(js(markup)))") }
 	func toggleHidden(order: Int) { call("toggleHidden(\(order))") }
 
@@ -111,12 +113,13 @@ final class CanvasController {
 	func setRotation(_ degrees: Double) { call("setRotation(\(degrees))") }
 
 	enum Definition: String, CaseIterable, Identifiable {
-		case linearGradient, radialGradient, clipPath, mask, blur, shadow
+		case linearGradient, radialGradient, pattern, clipPath, mask, blur, shadow
 		var id: String { rawValue }
 		var title: String {
 			switch self {
 			case .linearGradient: "Linear Gradient"
 			case .radialGradient: "Radial Gradient"
+			case .pattern: "Pattern"
 			case .clipPath: "Clip Path"
 			case .mask: "Mask"
 			case .blur: "Blur"
@@ -127,6 +130,7 @@ final class CanvasController {
 			switch self {
 			case .linearGradient: "circle.lefthalf.filled"
 			case .radialGradient: "circle.circle"
+			case .pattern: "circle.grid.3x3.fill"
 			case .clipPath: "scissors"
 			case .mask: "theatermasks"
 			case .blur: "drop"
