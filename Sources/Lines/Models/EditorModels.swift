@@ -39,6 +39,9 @@ enum CanvasBackground: String, CaseIterable, Identifiable {
 
 	/// Where the custom colour (a hex string) is stored.
 	static let customColourKey = "canvasCustomColour"
+	/// Paint the background behind the drawing only, with the window colour around it.
+	static let drawingOnlyKey = "canvasBackgroundDrawingOnly"
+	static var drawingOnly: Bool { UserDefaults.standard.bool(forKey: drawingOnlyKey) }
 	static var customColour: String {
 		UserDefaults.standard.string(forKey: customColourKey) ?? "#f2a65a"
 	}

@@ -45,6 +45,31 @@ body.window {
 body.transparent {
 	background: transparent;
 }
+/* Background behind the drawing only; the window colour around it. */
+body.drawing-only {
+	background: var(--window) !important;
+	background-image: none !important;
+}
+body.drawing-only.checkerboard #host > svg {
+	background-color: var(--checker-a);
+	background-image: conic-gradient(var(--checker-b) 25%, transparent 0 50%, var(--checker-b) 0 75%, transparent 0);
+	background-size: 16px 16px;
+}
+body.drawing-only.white #host > svg {
+	background: #fff;
+}
+body.drawing-only.black #host > svg {
+	background: #000;
+}
+body.drawing-only.grey #host > svg {
+	background: #8e8e93;
+}
+body.drawing-only.custom #host > svg {
+	background: var(--custom);
+}
+body.drawing-only #host > svg {
+	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+}
 body.panning,
 body.panning * {
 	cursor: grabbing !important;

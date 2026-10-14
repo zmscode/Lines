@@ -103,9 +103,13 @@ function commit(action, coalesce) {
 }
 
 // `color` is used by the custom background.
-function setBackground(kind, color) {
+// With `drawingOnly`, the background fills the drawing's area and the window
+// colour surrounds it.
+function setBackground(kind, color, drawingOnly) {
   document.body.className = kind;
-  document.body.style.background = kind === "custom" && color ? color : "";
+  document.body.classList.toggle("drawing-only", !!drawingOnly && kind !== "transparent");
+  document.body.style.setProperty("--custom", color || "#f2a65a");
+  document.body.style.background = kind === "custom" && color && !drawingOnly ? color : "";
 }
 function setAccent(css) {
   document.documentElement.style.setProperty("--accent", css);

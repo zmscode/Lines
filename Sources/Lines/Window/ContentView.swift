@@ -16,6 +16,7 @@ struct ContentView: View {
 
 	@AppStorage("canvasBackground") private var background: CanvasBackground = .checkerboard
 	@AppStorage(CanvasBackground.customColourKey) private var customColour = "#f2a65a"
+	@AppStorage(CanvasBackground.drawingOnlyKey) private var backgroundDrawingOnly = false
 	@AppStorage("defaultLayout") private var defaultLayout: EditorLayout = .canvas
 	@AppStorage("showsCodeByDefault") private var showsCodeByDefault = false
 	@AppStorage("opensFilesLocked") private var opensFilesLocked = true
@@ -39,6 +40,17 @@ struct ContentView: View {
 	var body: some View {
 		editor
 			.background(WindowTransparency(isTransparent: isTransparent))
+			// A see-through window keeps a solid title bar and toolbar.
+			.background {
+				if isTransparent {
+					// Zero high at the top of the content; ignoring the safe area
+					// stretches it up under the toolbar and title.
+					VStack(spacing: 0) {
+						Rectangle().fill(.bar).frame(height: 0).ignoresSafeArea(edges: .top)
+						Spacer(minLength: 0)
+					}
+				}
+			}
 			// A see-through window would otherwise take the toolbar with it.
 			.toolbarBackgroundVisibility(isTransparent ? .visible : .automatic, for: .windowToolbar)
 			.tint(Brand.accent)
@@ -269,7 +281,7 @@ struct ContentView: View {
 	private var canvas: some View {
 		CanvasView(
 			text: document.text, background: background, customColour: customColour,
-			controller: controller
+			drawingOnly: backgroundDrawingOnly, controller: controller
 		)
 		.overlay(alignment: .bottom) {
 			if let error = controller.parseError {

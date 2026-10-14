@@ -67,7 +67,9 @@ final class CanvasController {
 	}
 
 	func setBackground(_ background: CanvasBackground) {
-		call("setBackground(\(js(background.rawValue)), \(js(CanvasBackground.customColour)))")
+		call(
+			"setBackground(\(js(background.rawValue)), \(js(CanvasBackground.customColour)), \(CanvasBackground.drawingOnly))"
+		)
 	}
 
 	func setAccentColor(_ color: NSColor) {

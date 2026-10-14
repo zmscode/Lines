@@ -129,6 +129,7 @@ struct CanvasView: NSViewRepresentable {
 	var text: String
 	var background: CanvasBackground
 	var customColour: String
+	var drawingOnly = false
 	var controller: CanvasController
 
 	func makeNSView(context: Context) -> CanvasWebView {
@@ -146,7 +147,7 @@ struct CanvasView: NSViewRepresentable {
 
 	func updateNSView(_ webView: CanvasWebView, context: Context) {
 		controller.render(text)
-		let look = "\(background.rawValue) \(customColour)"
+		let look = "\(background.rawValue) \(customColour) \(drawingOnly)"
 		if context.coordinator.look != look {
 			context.coordinator.look = look
 			controller.setBackground(background)
