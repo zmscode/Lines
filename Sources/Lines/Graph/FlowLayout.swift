@@ -16,7 +16,7 @@ enum FlowLayout {
 
 	static func positions(
 		for items: [OutlineItem], references: [(source: String, target: String)],
-		size: (OutlineItem) -> CGSize
+		size: (OutlineItem) -> CGSize, aspect: CGFloat = 1.6
 	) -> [String: XYPosition] {
 		let byPath = Dictionary(uniqueKeysWithValues: items.map { ($0.path, $0) })
 		let byOrder = Dictionary(uniqueKeysWithValues: items.map { ($0.order, $0) })
@@ -86,10 +86,31 @@ enum FlowLayout {
 
 		// Place columns left to right; each node as near its neighbours'
 		// height as it can get without overlapping.
+		// A column taller than the view's shape allows splits into side-by-side
+		// sub-columns, so the whole graph keeps the window's proportions.
+		let area = connected.map { size($0).width * size($0).height * 1.6 }.reduce(0, +)
+		let targetHeight = max(600, (area / max(0.5, aspect)).squareRoot())
+		var split: [[String]] = []
+		for column in columns {
+			var chunk: [String] = []
+			var height: CGFloat = 0
+			for path in column {
+				let h = byPath[path].map { size($0).height } ?? 0
+				if !chunk.isEmpty && height + h > targetHeight {
+					split.append(chunk)
+					chunk = []
+					height = 0
+				}
+				chunk.append(path)
+				height += h + rowGap
+			}
+			if !chunk.isEmpty { split.append(chunk) }
+		}
+
 		var x: CGFloat = 0
 		var centreY: [String: CGFloat] = [:]
 		var bottom: CGFloat = 0
-		for column in columns {
+		for column in split {
 			let nodes = column.compactMap { byPath[$0] }
 			var wanted: [(OutlineItem, CGFloat)] = []
 			var fallback: CGFloat = 0
@@ -113,7 +134,7 @@ enum FlowLayout {
 		// Everything else in a grid below, in document order.
 		let top = connected.isEmpty ? 0 : bottom + sectionGap
 		let cellWidth = (loose.map { size($0).width }.max() ?? 220) + gridGap
-		let perRow = max(3, min(6, columnCount + 1))
+		let perRow = max(3, min(8, Int((CGFloat(max(1, columnCount)) * aspect).rounded())))
 		var rowTop = top
 		for row in stride(from: 0, to: loose.count, by: perRow) {
 			let slice = loose[row..<min(row + perRow, loose.count)]

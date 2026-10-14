@@ -238,6 +238,9 @@ struct PaletteSlot: View {
 	@Binding var chosen: [String: Int]
 	var isSelected: Bool
 	var size: CGFloat = ToolPalette.buttonSize
+	/// A fixed button (title, symbol) whose click opens the options, instead
+	/// of repeating the last one.
+	var menu: (title: String, symbol: String)? = nil
 
 	@State private var flyoutShown = false
 	@State private var isHovered = false
@@ -246,37 +249,45 @@ struct PaletteSlot: View {
 
 	var body: some View {
 		let option = options[current]
-		Button(option.title, systemImage: option.symbol, action: option.perform)
-			.buttonStyle(.icon(size: size, selected: isSelected))
-			.modifier(PaletteEffectModifier(effect: option.effect, isActive: isHovered))
-			.onHover { isHovered = $0 }
-			.help(options.count > 1 ? option.help + " — right-click for more" : option.help)
-			.accessibilityAddTraits(isSelected ? .isSelected : [])
-			.overlay(alignment: .bottomTrailing) {
-				if options.count > 1 {
-					CornerTriangle()
-						.contentShape(.rect)
-						.onTapGesture { flyoutShown = true }
-				}
+		Button(
+			menu?.title ?? option.title, systemImage: menu?.symbol ?? option.symbol,
+			action: menu == nil ? option.perform : { flyoutShown = true }
+		)
+		.buttonStyle(.icon(size: size, selected: isSelected || (menu != nil && flyoutShown)))
+		.modifier(
+			PaletteEffectModifier(effect: menu == nil ? option.effect : .none, isActive: isHovered)
+		)
+		.onHover { isHovered = $0 }
+		.help(
+			menu.map { "\($0.title)…" }
+				?? (options.count > 1 ? option.help + " — right-click for more" : option.help)
+		)
+		.accessibilityAddTraits(isSelected ? .isSelected : [])
+		.overlay(alignment: .bottomTrailing) {
+			if options.count > 1 {
+				CornerTriangle()
+					.contentShape(.rect)
+					.onTapGesture { flyoutShown = true }
 			}
-			.overlay {
-				if options.count > 1 { RightClickCatcher { flyoutShown = true } }
-			}
-			.popover(isPresented: $flyoutShown, arrowEdge: .trailing) {
-				// A vertical mini toolbar: each option with its name, like
-				// Photoshop's tool flyouts.
-				VStack(alignment: .leading, spacing: 2) {
-					ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-						FlyoutRow(option: option, isSelected: index == current) {
-							chosen[id] = index
-							flyoutShown = false
-							option.perform()
-						}
+		}
+		.overlay {
+			if options.count > 1 { RightClickCatcher { flyoutShown = true } }
+		}
+		.popover(isPresented: $flyoutShown, arrowEdge: .trailing) {
+			// A vertical mini toolbar: each option with its name, like
+			// Photoshop's tool flyouts.
+			VStack(alignment: .leading, spacing: 2) {
+				ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+					FlyoutRow(option: option, isSelected: index == current) {
+						chosen[id] = index
+						flyoutShown = false
+						option.perform()
 					}
 				}
-				.padding(6)
 			}
-			.accessibilityAction(named: "More Options") { flyoutShown = true }
+			.padding(6)
+		}
+		.accessibilityAction(named: "More Options") { flyoutShown = true }
 	}
 }
 

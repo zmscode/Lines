@@ -165,6 +165,14 @@ struct Graph {
 
 	var nodeIDs: [String] { items.map(\.path) }
 
+	/// Whether any shown definition is unused (nothing points at it).
+	var hasUnusedDefinitions: Bool {
+		items.contains { item in
+			[.paint, .clip, .mask, .filter, .symbol].contains(Self.kind(for: item.tag))
+				&& data(for: item).usedBy == 0
+		}
+	}
+
 	/// - Parameters:
 	///   - outline: the elements to show as nodes.
 	///   - all: the whole outline, for stops and primitives shown inside nodes.

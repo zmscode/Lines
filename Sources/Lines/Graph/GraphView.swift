@@ -135,6 +135,21 @@ struct GraphView: View {
 			controller.hoveredNode = nil
 			controller.pinnedPreviewNode = nil
 		}
+		// A pinned preview fades after a few seconds…
+		.task(id: controller.pinnedPreviewNode) {
+			guard controller.pinnedPreviewNode != nil else { return }
+			try? await Task.sleep(for: .seconds(5))
+			if !Task.isCancelled { controller.pinnedPreviewNode = nil }
+		}
+		// …or as soon as another node is selected.
+		.onChange(of: controller.selection?.order) { _, order in
+			if let pinned = controller.pinnedPreviewNode, pinned != order {
+				controller.pinnedPreviewNode = nil
+			}
+			if let hovered = controller.hoveredNode, hovered != order {
+				controller.hoveredNode = nil
+			}
+		}
 		.overlay(alignment: .bottomTrailing) {
 			// The same zoom strip as the canvas.
 			FloatingStrip {
@@ -180,7 +195,17 @@ struct GraphView: View {
 						title: "Add \(kind.title)", symbol: kind.symbol,
 						help: "Add a \(kind.title.lowercased()), then connect it to a shape"
 					) { controller.addDefinition(kind) }
-				}, chosen: $chosen, isSelected: false)
+				}, chosen: $chosen, isSelected: false, menu: ("Add", "plus"))
+		case "cleanup":
+			Button("Remove Unused", systemImage: "trash.slash") {
+				controller.removeUnusedDefinitions()
+			}
+			.buttonStyle(.icon(size: ToolPalette.buttonSize))
+			.disabled(!graph.hasUnusedDefinitions || !controller.isEditing)
+			.help(
+				graph.hasUnusedDefinitions
+					? "Remove gradients, clips, masks, filters and patterns nothing uses"
+					: "Every definition is in use")
 		case "flow", "tree":
 			let option: GraphLayoutMode = id == "flow" ? .flow : .tree
 			Button(option.title, systemImage: option.symbol) {
@@ -278,8 +303,9 @@ struct GraphView: View {
 		let size = { (item: OutlineItem) in GraphNodeView.size(for: graph.data(for: item)) }
 		let tidy =
 			mode == .flow
-			? FlowLayout.positions(for: graph.items, references: graph.referencePairs, size: size)
-			: TidyTreeLayout.positions(for: graph.items, size: size)
+			? FlowLayout.positions(
+				for: graph.items, references: graph.referencePairs, size: size, aspect: viewAspect)
+			: TidyTreeLayout.positions(for: graph.items, size: size, aspect: viewAspect)
 		var laidOut = positions
 		for (id, position) in tidy where force || !movedByHand.contains(id) {
 			laidOut[id] = position
@@ -294,6 +320,12 @@ struct GraphView: View {
 			needsFit = true
 			fitIfNeeded(graph)
 		}
+	}
+
+	/// The graph area's shape (width ÷ height), so layouts fill it.
+	private var viewAspect: CGFloat {
+		let s = flow.viewSize
+		return s.width > 1 && s.height > 1 ? min(3, max(0.6, s.width / s.height)) : 1.6
 	}
 
 	/// Frames the graph once SwiftFlow knows its size; until then the fit waits.

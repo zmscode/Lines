@@ -2697,6 +2697,34 @@ function addDefinitionShape(order, kind) {
   commit(isMask ? "Add Shape to Mask" : "Add Shape to Clip Path");
 }
 
+// Deletes definitions nothing refers to: not by url(#id) or href anywhere in
+// the drawing, nor by #id in its style sheets. Repeats, since removing one
+// (a gradient another inherited from) can leave others unused.
+function removeUnusedDefinitions() {
+  if (!root) return;
+  let removed = 0;
+  for (let pass = 0; pass < 5; pass++) {
+    const used = new Set();
+    for (const el of root.querySelectorAll("*")) for (const [, id] of refsOf(el)) used.add(id);
+    // Style sheets and inline style attributes can point at ids too.
+    const css = Array.from(root.querySelectorAll("style"))
+      .map((s) => s.textContent)
+      .concat(Array.from(root.querySelectorAll("[style]")).map((e) => e.getAttribute("style")))
+      .join("\n");
+    const unused = Array.from(root.querySelectorAll("*")).filter(
+      (el) =>
+        DEFINITION_TAGS.has(el.localName) &&
+        (!el.id || (!used.has(el.id) && !css.includes("#" + el.id))),
+    );
+    if (!unused.length) break;
+    for (const el of unused) removeWithWhitespace(el);
+    removed += unused.length;
+  }
+  if (!removed) return;
+  select(null);
+  commit(removed === 1 ? "Remove Unused Definition" : `Remove ${removed} Unused Definitions`);
+}
+
 // Swaps white and black in a mask, so what it showed it hides.
 function invertMask(order) {
   const mask = byOrder(order);
@@ -3998,6 +4026,7 @@ const EDITING_FUNCTIONS = [
   "invertMask",
   "setCornerRadii",
   "editDefinitionOnCanvas",
+  "removeUnusedDefinitions",
 ];
 for (const name of EDITING_FUNCTIONS) {
   const f = window[name];

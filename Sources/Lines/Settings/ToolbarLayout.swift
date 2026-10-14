@@ -63,7 +63,7 @@ struct ToolbarLayout: Equatable {
 		+ ["effects", "fills", "masking", "transform", "animate", "image", "|3", "background"]
 
 	static let graphKey = "graph.palette.layout"
-	static let graphDefaults = ["add", "|1", "flow", "tree", "|2", "tidy", "canvas"]
+	static let graphDefaults = ["add", "cleanup", "|1", "flow", "tree", "|2", "tidy", "canvas"]
 
 	/// Names and symbols for the settings list.
 	static func describe(_ id: String) -> (title: String, symbol: String) {
@@ -93,6 +93,7 @@ struct ToolbarLayout: Equatable {
 		case "flow": return ("Flow Layout", GraphLayoutMode.flow.symbol)
 		case "tree": return ("Tree Layout", GraphLayoutMode.tree.symbol)
 		case "tidy": return ("Tidy Up", "wand.and.rays")
+		case "cleanup": return ("Remove Unused", "trash.slash")
 		case "canvas": return ("Show on Canvas", "scope")
 		default: return (id, "questionmark")
 		}

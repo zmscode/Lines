@@ -220,6 +220,8 @@ final class CanvasController {
 		call("addDefinitionShape(\(order), \(js(kind)))")
 	}
 	func invertMask(order: Int) { call("invertMask(\(order))") }
+	/// Deletes gradients, clips, masks, filters, patterns and symbols nothing uses.
+	func removeUnusedDefinitions() { call("removeUnusedDefinitions()") }
 
 	/// A clip path or mask being edited on the canvas: its kind and name.
 	var definitionEdit: (kind: String, name: String)?

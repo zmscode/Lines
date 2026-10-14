@@ -12,9 +12,9 @@ enum TidyTreeLayout {
 	static let maxRowWidth: CGFloat = 1000
 	static let treeGap: CGFloat = 72
 
-	static func positions(for items: [OutlineItem], size: (OutlineItem) -> CGSize) -> [String:
-		XYPosition]
-	{
+	static func positions(
+		for items: [OutlineItem], size: (OutlineItem) -> CGSize, aspect: CGFloat = 1.6
+	) -> [String: XYPosition] {
 		let visible = Dictionary(uniqueKeysWithValues: items.map { ($0.order, $0) })
 		var children: [Int: [OutlineItem]] = [:]
 		var roots: [OutlineItem] = []
@@ -133,7 +133,9 @@ enum TidyTreeLayout {
 		// The top level wraps too, aiming for a landscape block overall.
 		let rootBlocks = roots.map(measure)
 		let area = rootBlocks.map { $0.width * $0.height }.reduce(0, +)
-		let limit = rowLimit(rootBlocks, minimum: max(maxRowWidth, (area * 1.8).squareRoot()))
+		// Wrap to the view's shape, so the tree fills the window when fitted.
+		let limit = rowLimit(
+			rootBlocks, minimum: max(maxRowWidth, (area * max(0.5, aspect)).squareRoot()))
 		let laid = wrap(rootBlocks, width: limit)
 		// Top-level rows have no parent lines, so they can sit further apart.
 		placeRows(roots, x: 0, y: 0, width: laid.size.width, limit: limit, gap: treeGap)
