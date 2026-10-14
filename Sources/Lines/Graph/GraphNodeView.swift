@@ -584,7 +584,7 @@ struct NodeImpactCard: View {
 							Image(systemName: "arrow.right")
 								.font(.caption.weight(.semibold))
 								.foregroundStyle(.secondary)
-								.frame(maxHeight: .infinity)
+								.frame(height: 130)
 						}
 						VStack(spacing: 4) {
 							Image(nsImage: picture.image)
@@ -624,48 +624,169 @@ struct NodeImpactCard: View {
 
 /// A plain-language sentence about what a node does.
 enum NodeDescription {
+	/// What the node does to this drawing, then what the pictures show.
 	static func of(_ data: GraphNodeData) -> String {
-		let used =
-			data.usedBy == 0
-			? "Nothing uses it yet — drag from its output to a shape's input."
-			: "Used by \(data.usedBy) element\(data.usedBy == 1 ? "" : "s")."
+		let users = list(data.users)
+		let p = data.props
 		switch data.tag {
-		case "linearGradient":
-			return "Paints a straight blend through \(data.parts.count) colours. \(used)"
-		case "radialGradient":
-			return
-				"Paints a blend outward from a centre through \(data.parts.count) colours. \(used)"
+		case "linearGradient", "radialGradient":
+			let colours = data.parts.map { ColourName.of(GraphNodeView.stopColour($0)) }
+			let blend =
+				colours.count >= 2
+				? "from \(colours.first!) to \(colours.last!)"
+					+ (colours.count > 2
+						? " through \(list(Array(colours.dropFirst().dropLast())))" : "")
+				: "of \(colours.first ?? "one colour")"
+			let kind =
+				data.tag == "radialGradient"
+				? "a blend outward from the centre" : "a straight blend"
+			let spread =
+				switch p["spreadMethod"] {
+				case "repeat": ", repeating past its edge"
+				case "reflect": ", mirrored past its edge"
+				default: ""
+				}
+			return uses(data, "Fills \(users) with \(kind) \(blend)\(spread).")
 		case "pattern":
-			return "Paints shapes with a repeating tile. \(used)"
+			return uses(
+				data,
+				"Fills \(users) with a repeating \(p["width"] ?? "?")×\(p["height"] ?? "?") tile.")
 		case "clipPath":
-			return "Draws only what falls inside its shapes; the rest is cut away. \(used)"
+			let shapes = data.contents.isEmpty ? "no shapes yet" : list(data.contents)
+			return uses(
+				data,
+				"Cuts \(users) to the outline of \(shapes): only the parts inside are drawn, the rest disappears."
+			)
 		case "mask":
-			return
-				"Shows what's under its white areas, hides it under black, and fades it under grey. \(used)"
+			let shapes = data.contents.isEmpty ? "no shapes yet" : list(data.contents)
+			return uses(
+				data,
+				"Masks \(users) with \(shapes): where they're white it shows, black hides it, grey fades it."
+			)
 		case "filter":
-			let effects = data.parts.map { GraphNodeView.effectName($0.tag).lowercased() }
-			return
-				"Applies \(effects.isEmpty ? "no effects yet" : effects.joined(separator: ", then ")) to what uses it. \(used)"
+			let effects = data.parts.map(effect)
+			let what = effects.isEmpty ? "No effects yet" : list(effects).capitalizedFirst
+			return uses(data, "\(what), on \(users).")
 		case "symbol", "marker":
-			return "A reusable drawing, shown wherever a <use> points at it. \(used)"
+			return uses(data, "A reusable drawing, placed wherever \(users) points at it.")
 		case "use":
-			return "Draws another element again here."
+			return
+				"Draws another element again here. The picture shows where it sits in the drawing."
 		case _ where AnimationTag.contains(data.tag):
-			let p = data.props
-			let what = p["attributeName"] ?? p["type"] ?? "its shape"
-			let repeats = p["repeatCount"] == "indefinite" ? ", forever" : ""
-			return "Animates \(what) over \(p["dur"] ?? "?")\(repeats)."
-		case "g":
-			return "A group: moves, hides and styles its contents together."
-		default:
-			var parts = ["A \(InspectorView.elementName(for: data.tag).lowercased())"]
-			if let fill = data.props["fill"] { parts.append("filled with \(fill)") }
-			if let stroke = data.props["stroke"], stroke != "none" {
-				parts.append("outlined in \(stroke)")
+			let target = data.users.first ?? "its element"
+			let property =
+				data.tag == "animateTransform"
+				? (p["type"].map { "\($0)" } ?? "transform")
+				: data.tag == "animateMotion"
+					? "position along a path" : (p["attributeName"] ?? "a value")
+			var change = ""
+			if let values = p["values"] {
+				let list = values.split(separator: ";").map {
+					$0.trimmingCharacters(in: .whitespaces)
+				}
+				change = list.count > 1 ? " through \(list.joined(separator: " → "))" : ""
+			} else if let to = p["to"] {
+				change = p["from"].map { " from \($0) to \(to)" } ?? " to \(to)"
 			}
-			return parts.joined(separator: ", ") + "."
+			let timing = p["dur"].map { " over \($0)" } ?? ""
+			let repeats =
+				p["repeatCount"] == "indefinite"
+				? ", forever" : p["repeatCount"].map { ", \($0) times" } ?? ""
+			return
+				"Animates \(target)'s \(property)\(change)\(timing)\(repeats). The pictures show the start, middle and end of one pass."
+		case "g":
+			return
+				"A group: moves, hides and styles its contents together. The picture shows where it sits in the drawing."
+		default:
+			var parts = ["\(data.name): a \(InspectorView.elementName(for: data.tag).lowercased())"]
+			if let fill = p["fill"] { parts.append("filled with \(paint(fill))") }
+			if let stroke = p["stroke"], stroke != "none" {
+				parts.append("outlined in \(paint(stroke))")
+			}
+			return parts.joined(separator: ", ")
+				+ ". The picture shows where it sits in the drawing, the rest dimmed."
 		}
 	}
+
+	/// The definition's sentence, then usage and how to read the pictures.
+	private static func uses(_ data: GraphNodeData, _ sentence: String) -> String {
+		data.usedBy == 0
+			? sentence.replacingOccurrences(of: " nothing", with: " shapes")
+				+ " Nothing uses it yet: the picture shows it on a sample shape. Drag from its output to a shape's input to use it."
+			: sentence + " Left: without it. Right: with it — the dashed box marks the change."
+	}
+
+	private static func effect(_ part: GraphNodeData.Part) -> String {
+		let p = part.props
+		switch part.tag {
+		case "feGaussianBlur": return "blurs by \(p["stdDeviation"] ?? "0")"
+		case "feDropShadow":
+			return
+				"adds a shadow offset \(p["dx"] ?? "2"), \(p["dy"] ?? "2") with a \(p["stdDeviation"] ?? "2") blur"
+		case "feOffset": return "shifts by \(p["dx"] ?? "0"), \(p["dy"] ?? "0")"
+		case "feColorMatrix": return "changes colours (\(p["type"] ?? "matrix"))"
+		case "feMorphology":
+			return "\(p["operator"] == "dilate" ? "thickens" : "thins") by \(p["radius"] ?? "0")"
+		case "feTurbulence": return "adds noise"
+		case "feFlood": return "fills with \(ColourName.of(p["flood-color"] ?? "#000000"))"
+		default: return GraphNodeView.effectName(part.tag).lowercased()
+		}
+	}
+
+	private static func paint(_ value: String) -> String {
+		if let id = GraphNodeView.referencedID(value) { return id }
+		return "\(ColourName.of(value)) (\(value))"
+	}
+
+	/// "a", "a and b", "a, b and 2 more".
+	static func list(_ names: [String]) -> String {
+		switch names.count {
+		case 0: return "nothing"
+		case 1: return names[0]
+		case 2: return "\(names[0]) and \(names[1])"
+		case 3: return "\(names[0]), \(names[1]) and \(names[2])"
+		default: return "\(names[0]), \(names[1]) and \(names.count - 2) more"
+		}
+	}
+}
+
+/// Plain names for colours, for sentences: "pink", "dark blue".
+enum ColourName {
+	static func of(_ value: String) -> String {
+		let v = value.trimmingCharacters(in: .whitespaces).lowercased()
+		if v == "none" || v == "transparent" { return "nothing" }
+		guard let colour = CSSColor.parse(v),
+			let ns = NSColor(colour).usingColorSpace(.sRGB)
+		else { return v }
+		var h: CGFloat = 0
+		var s: CGFloat = 0
+		var b: CGFloat = 0
+		var a: CGFloat = 0
+		ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+		if b < 0.12 { return "black" }
+		if s < 0.12 {
+			return b > 0.9 ? "white" : b > 0.6 ? "light grey" : b > 0.3 ? "grey" : "dark grey"
+		}
+		let hue = h * 360
+		let name: String =
+			switch hue {
+			case ..<15, 345...: "red"
+			case ..<40: "orange"
+			case ..<65: "yellow"
+			case ..<160: "green"
+			case ..<195: "teal"
+			case ..<250: "blue"
+			case ..<290: "purple"
+			default: "pink"
+			}
+		if b < 0.4 { return "dark \(name)" }
+		if s < 0.4 && b > 0.8 { return "pale \(name)" }
+		return name
+	}
+}
+
+extension String {
+	fileprivate var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
 /// A soft backing behind previews, so light and transparent parts read.

@@ -43,7 +43,7 @@ struct GraphView: View {
 			outline: visibleItems, all: controller.outline, showsNesting: mode == .tree)
 		SwiftFlow(
 			nodes: graph.nodes(positions: positions, selected: selectedPath),
-			edges: graph.edges,
+			edges: Self.focused(graph.edges, on: focusPath, mode: mode),
 			onNodesChange: handleNodeChanges,
 			onEdgesChange: { changes in handleEdgeChanges(changes, graph: graph) },
 			onConnect: { connect($0, graph: graph) },
@@ -179,6 +179,43 @@ struct GraphView: View {
 				item.depth <= 1 || !item.references.isEmpty
 					|| item.elementID.map(referenced.contains) == true
 			}.prefix(Self.nodeLimit))
+	}
+
+	/// The node whose connections stand out: the previewed one, else the selection.
+	private var focusPath: String? {
+		if let order = controller.hoveredNode ?? controller.pinnedPreviewNode {
+			return controller.outline.first { $0.order == order }?.path
+		}
+		return selectedPath
+	}
+
+	/// Keeps busy graphs readable. In the tree, references (which cross the
+	/// hierarchy) show only for the focused node; its input rows still name
+	/// them. In both layouts, lines that don't touch the focused node fade.
+	static func focused(
+		_ edges: [FlowEdge<EmptyEdgeData>], on focus: String?, mode: GraphLayoutMode
+	) -> [FlowEdge<EmptyEdgeData>] {
+		edges.compactMap { edge in
+			let isReference = edge.id.hasPrefix("r:")
+			guard let focus else {
+				// Nothing focused: the tree hides references, the flow shows all.
+				return mode == .tree && isReference ? nil : edge
+			}
+			var e = edge
+			if edge.source == focus || edge.target == focus {
+				if isReference {
+					e.style = EdgeStyle(
+						strokeColor: edge.style?.strokeColor, strokeWidth: 2.5, opacity: 1)
+				}
+				return e
+			}
+			if mode == .tree && isReference { return nil }
+			e.style = EdgeStyle(
+				strokeColor: edge.style?.strokeColor, strokeWidth: edge.style?.strokeWidth,
+				opacity: (edge.style?.opacity ?? 1) * 0.25)
+			e.animated = false
+			return e
+		}
 	}
 
 	private var selectedPath: String? {

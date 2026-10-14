@@ -59,7 +59,11 @@ struct GradientEditor: View {
 					coordinates(["x1", "y1", "x2", "y2"])
 				}
 			} else {
-				coordinates(["cx", "cy", "r", "fx", "fy"])
+				// The focal point only when it's set; the handles move the centre.
+				coordinates(
+					["cx", "cy", "r"]
+						+ (gradient.prop("fx") != nil || gradient.prop("fy") != nil
+							? ["fx", "fy"] : []))
 			}
 			row("Spread") {
 				Picker("Spread", selection: spread) {
@@ -274,17 +278,37 @@ struct MaskEditor: View {
 					Image(systemName: InspectorView.symbol(for: shape.tag, isRoot: false))
 						.foregroundStyle(.secondary)
 						.frame(width: 18)
-					Text(shape.displayName).lineLimit(1)
-					Spacer()
+					Text(shape.displayName)
+						.lineLimit(1)
+						.truncationMode(.middle)
+						.layoutPriority(1)
+						.help(shape.displayName)
+					Spacer(minLength: 4)
 					if isMask {
-						Picker("Mask", selection: reveal(shape)) {
-							Text("Show").tag(true)
-							Text("Hide").tag(false)
+						// A swatch of the shape's mask colour: white shows, black hides.
+						let shows = reveal(shape)
+						Button {
+							shows.wrappedValue.toggle()
+						} label: {
+							HStack(spacing: 4) {
+								Circle()
+									.fill(shows.wrappedValue ? Color.white : Color.black)
+									.overlay { Circle().strokeBorder(.separator, lineWidth: 1) }
+									.frame(width: 12, height: 12)
+								Text(shows.wrappedValue ? "Shows" : "Hides")
+									.font(.caption)
+									.foregroundStyle(.secondary)
+							}
+							.padding(.horizontal, 6)
+							.padding(.vertical, 3)
+							.background(.quaternary, in: .capsule)
 						}
-						.pickerStyle(.segmented)
-						.labelsHidden()
-						.frame(width: 104)
-						.help("White shows what's under this shape; black hides it")
+						.buttonStyle(.plain)
+						.fixedSize()
+						.help(
+							shows.wrappedValue
+								? "White: shows what's under this shape. Click to hide it instead."
+								: "Black: hides what's under this shape. Click to show it instead.")
 					}
 					Button("Edit Shape", systemImage: "arrow.right.circle") {
 						controller.select(order: shape.order)

@@ -16,7 +16,7 @@ enum GraphLayoutMode: String, CaseIterable, Identifiable {
 	var help: String {
 		self == .flow
 			? "Flow: left to right by dependency; unconnected elements wait below"
-			: "Tree: the document's nesting, top-down, with references behind it"
+			: "Tree: the document’s nesting, top-down; select a node to see what it references"
 	}
 }
 
@@ -48,6 +48,8 @@ struct GraphNodeData: Equatable, Sendable {
 	var hasAnimations = false
 	/// How many elements point at this definition.
 	var usedBy = 0
+	/// Names of the elements using this definition, or that an animation animates.
+	var users: [String] = []
 	/// The names of the shapes inside a clip path or mask.
 	var contents: [String] = []
 
@@ -157,6 +159,8 @@ struct Graph {
 	private var partsByOrder: [Int: [GraphNodeData.Part]] = [:]
 	private var animated: Set<Int> = []
 	private var usage: [String: Int] = [:]
+	private var userNames: [String: [String]] = [:]
+	private var parentNames: [Int: String] = [:]
 	private var contentsByOrder: [Int: [String]] = [:]
 
 	var nodeIDs: [String] { items.map(\.path) }
@@ -179,7 +183,13 @@ struct Graph {
 		}
 		for item in all where AnimationTag.contains(item.tag) { animated.insert(item.parent) }
 		for item in all {
-			for ref in item.references { usage[ref.targetID, default: 0] += 1 }
+			for ref in item.references {
+				usage[ref.targetID, default: 0] += 1
+				userNames[ref.targetID, default: []].append(item.displayName)
+			}
+			if AnimationTag.contains(item.tag), let parent = byOrder[item.parent] {
+				parentNames[item.order] = parent.displayName
+			}
 			if let parent = byOrder[item.parent], parent.tag == "clipPath" || parent.tag == "mask" {
 				contentsByOrder[parent.order, default: []].append(item.displayName)
 			}
@@ -243,6 +253,9 @@ struct Graph {
 			props: item.props, parts: partsByOrder[item.order] ?? [],
 			hasAnimations: animated.contains(item.order),
 			usedBy: item.elementID.flatMap { usage[$0] } ?? 0,
+			users: AnimationTag.contains(item.tag)
+				? parentNames[item.order].map { [$0] } ?? []
+				: item.elementID.flatMap { userNames[$0] } ?? [],
 			contents: contentsByOrder[item.order] ?? []
 		)
 	}
