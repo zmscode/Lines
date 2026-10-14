@@ -44,7 +44,6 @@ let suffix = "\n"; // text after the root element
 let selected = null;
 // Off in preview mode: the drawing can be viewed, zoomed and played, not changed.
 let editable = true;
-let lastGood = null;
 let zoom = 1; // display scale; never written to the file
 let autoFit = true; // keep fitting to the window until someone zooms by hand
 const MIN_ZOOM = 0.05,
@@ -78,7 +77,6 @@ function setSVG(text) {
   host.replaceChildren(node);
   root = node;
   restoreAnimationState();
-  lastGood = text;
   if (autoFit) {
     applyZoom(fitScale(), null, null, true);
     centerContent();
@@ -88,9 +86,7 @@ function setSVG(text) {
     renderNow();
   }
   scheduleThumbnail();
-  // Behind the graph the page may be throttled; send the outline straight away.
-  if (canvasBehind) sendOutline();
-  else scheduleOutline();
+  scheduleOutline();
   post({ type: "ok" });
   const restored = oldPath ? byPath(oldPath) : null;
   select(restored && restored !== root ? restored : null, true);
@@ -159,7 +155,6 @@ function commit(action, coalesce) {
     return;
   }
   const svg = serialize();
-  lastGood = svg;
   scheduleThumbnail();
   scheduleOutline();
   post({ type: "changed", svg, action, coalesce: coalesce || null });
@@ -342,7 +337,7 @@ function visualRect(el, depth = 0) {
   let cs;
   try {
     cs = getComputedStyle(el);
-  } catch (e) {
+  } catch {
     return r;
   }
   if (!cs || !cs.stroke || cs.stroke === "none" || isHidden(el)) return r;
@@ -780,7 +775,7 @@ function editDefinitionOnCanvas(order) {
       try {
         const b = user.getBBox();
         m = m.translate(b.x, b.y).scale(b.width, b.height);
-      } catch (e) {}
+      } catch {}
     }
     group.setAttribute(
       "transform",
@@ -856,7 +851,7 @@ function gradientPoints(el, g) {
   if (bbox) {
     try {
       b = el.getBBox();
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -1079,7 +1074,8 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
-    selected ? selectParent() : select(null);
+    if (selected) selectParent();
+    else select(null);
     e.preventDefault();
     return;
   }
@@ -1119,7 +1115,7 @@ function setAttr(name, value, coalesce) {
   try {
     setAttrNS(el, name, value);
     for (const other of extras) if (root.contains(other)) setAttrNS(other, name, value);
-  } catch (e) {
+  } catch {
     return;
   }
   if (el === root) updateIntrinsicSize();
@@ -1149,7 +1145,7 @@ function paintOne(el, name, color, opacity) {
     try {
       const b = el.getBBox();
       el.setAttribute("stroke-width", round(Math.max(1, Math.hypot(b.width, b.height) / 80)));
-    } catch (e) {}
+    } catch {}
   }
   const opacityAttr = name + "-opacity";
   if (opacity == null || opacity >= 0.999) el.removeAttribute(opacityAttr);
@@ -1477,7 +1473,7 @@ function flipSelected(axis) {
     let b;
     try {
       b = el.getBBox();
-    } catch (e) {
+    } catch {
       continue;
     }
     const cx = round(b.x + b.width / 2),
@@ -1605,10 +1601,6 @@ function render() {
   }
   panOnly = false;
   updateMinimap();
-}
-function scheduleRender() {
-  panOnly = false;
-  if (!frame) frame = requestAnimationFrame(render);
 }
 // A render where only the pan changed.
 function schedulePan() {
@@ -2150,7 +2142,7 @@ function boundsOf(el) {
   let b;
   try {
     b = el.getBBox();
-  } catch (e) {
+  } catch {
     b = null;
   }
   if (hidden) {
@@ -2229,7 +2221,7 @@ function animatedBBox() {
     try {
       const b = root.getBBox();
       return b.width || b.height ? { x: b.x, y: b.y, r: b.x + b.width, b: b.y + b.height } : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   };
@@ -2241,10 +2233,10 @@ function animatedBBox() {
       dur = 0;
     try {
       start = a.getStartTime();
-    } catch (e) {}
+    } catch {}
     try {
       dur = a.getSimpleDuration();
-    } catch (e) {}
+    } catch {}
     end = Math.max(end, start + (isFinite(dur) ? dur : 0));
   }
   end = Math.min(end, 60);
@@ -2532,7 +2524,7 @@ function addDefinition(kind, applyOrder) {
     try {
       const b = target.getBBox();
       if (b.width || b.height) box = { x: b.x, y: b.y, w: b.width || 1, h: b.height || 1 };
-    } catch (e) {}
+    } catch {}
   }
   const make = (tag, attrs, children) => {
     const el = document.createElementNS(NS, tag);
@@ -2678,7 +2670,7 @@ function addDefinitionShape(order, kind) {
   try {
     const bb = def.getBBox && def.getBBox();
     if (bb && (bb.width || bb.height)) b = bb;
-  } catch (e) {}
+  } catch {}
   if (!b) {
     const vb = root.viewBox && root.viewBox.baseVal;
     const { w, h } = intrinsicSize();
@@ -3040,7 +3032,7 @@ function addAnimation(order, preset) {
   let b;
   try {
     b = el.getBBox();
-  } catch (e) {
+  } catch {
     b = { x: 0, y: 0, width: 0, height: 0 };
   }
   const cx = round(b.x + b.width / 2),
@@ -3244,13 +3236,6 @@ function setInspectorOpen(on) {
   inspectorOpen = !!on;
 }
 
-// Set while the graph covers the canvas.
-let canvasBehind = false;
-function setCanvasBehind(on) {
-  canvasBehind = !!on;
-  if (canvasBehind) sendOutline();
-}
-
 function scheduleOutline() {
   clearTimeout(outlineTimer);
   outlineTimer = setTimeout(sendOutline, 60);
@@ -3293,7 +3278,7 @@ function setAttrOn(order, name, value, coalesce) {
   try {
     if (value == null) el.removeAttribute(name);
     else setAttrNS(el, name, value);
-  } catch (e) {
+  } catch {
     return;
   }
   if (el === root) updateIntrinsicSize();
@@ -3320,7 +3305,7 @@ function cssAnimationsOf(el) {
   let list;
   try {
     list = el.getAnimations().filter((a) => a.animationName);
-  } catch (e) {
+  } catch {
     return null;
   }
   if (!list.length) return null;
@@ -3334,7 +3319,7 @@ function cssAnimationsOf(el) {
       for (const k of a.effect.getKeyframes())
         for (const p of Object.keys(k)) if (!skip.has(p)) keys.add(p);
       props = Array.from(keys);
-    } catch (e) {}
+    } catch {}
     return {
       name: a.animationName,
       props,
@@ -3353,7 +3338,7 @@ function cssAnimations() {
     return document
       .getAnimations()
       .filter((a) => a.effect && a.effect.target && root.contains(a.effect.target));
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -3365,7 +3350,7 @@ function syncCSSAnimations(seekTo) {
       if (seekTo != null) a.currentTime = seekTo * 1000;
       if (animPaused) a.pause();
       else a.play();
-    } catch (e) {}
+    } catch {}
   }
 }
 
@@ -3622,7 +3607,7 @@ function previewImage(order, size) {
           w: Math.max(...xs) - Math.min(...xs),
           h: Math.max(...ys) - Math.min(...ys),
         };
-      } catch (e) {}
+      } catch {}
       if (!box || !(box.w || box.h)) box = area;
       const pad = Math.max(box.w, box.h) * 0.08 || 1;
       clone.setAttribute(
@@ -3673,7 +3658,7 @@ function previewImage(order, size) {
         canvas.height = H * scale;
         canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL("image/png"));
-      } catch (e) {
+      } catch {
         resolve(null);
       }
     };
@@ -3812,7 +3797,7 @@ function renderClone(clone, box, size) {
         canvas.height = H * 2;
         canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
         resolve(canvas.toDataURL("image/png"));
-      } catch (e) {
+      } catch {
         resolve(null);
       }
     };
@@ -4019,7 +4004,7 @@ function exportPNG(scale) {
       canvas.height = Math.round(h * scale);
       canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
       post({ type: "png", data: canvas.toDataURL("image/png") });
-    } catch (e) {
+    } catch {
       post({ type: "pngFailed", scale });
     }
   };
@@ -4136,6 +4121,67 @@ host.addEventListener("click", (e) => {
 // Links show a pointer in preview mode while ⌘ is held.
 window.addEventListener("mousemove", (e) => {
   document.body.classList.toggle("over-link", !editable && e.metaKey && !!linkAt(e.target));
+});
+
+// The entry points the app calls by name (CanvasController.call), listed so
+// they read as used.
+Object.assign(globalThis, {
+  addAnimation,
+  addDefinition,
+  addDefinitionShape,
+  addImage,
+  addShape,
+  addStop,
+  animPlay,
+  animSetSpeed,
+  animStop,
+  copyByOrder,
+  copySelected,
+  deleteByOrder,
+  drawingSize,
+  duplicateSelected,
+  editDefinitionOnCanvas,
+  elementThumbnail,
+  exportPNG,
+  fitViewBoxToContent,
+  flipSelected,
+  groupSelected,
+  hoverOrder,
+  impactPreview,
+  invertMask,
+  moveElements,
+  moveRelative,
+  pasteMarkup,
+  rasterize,
+  removeAllReferences,
+  removeAttr,
+  removeReference,
+  removeUnusedDefinitions,
+  renameElement,
+  reorder,
+  selectByOrder,
+  setAccent,
+  setAttr,
+  setAttrOn,
+  setBackground,
+  setBounds,
+  setCornerRadii,
+  setEditable,
+  setInsets,
+  setInspectorOpen,
+  setMinimapShift,
+  setPaint,
+  setReference,
+  setRotation,
+  setSVG,
+  setText,
+  setTimelineActive,
+  setTimelineLoop,
+  showDocumentFrame,
+  toggleHidden,
+  ungroupSelected,
+  zoomBy,
+  zoomToFit,
 });
 
 post({ type: "ready" });
