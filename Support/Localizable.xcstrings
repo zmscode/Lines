@@ -289,7 +289,13 @@
     "Attribute value" : {
 
     },
+    "Back" : {
+
+    },
     "Back 0.1s" : {
+
+    },
+    "Back out of %@" : {
 
     },
     "Back to Start" : {
@@ -380,9 +386,6 @@
 
     },
     "Code panel width" : {
-
-    },
-    "Collapse" : {
 
     },
     "Collapsed" : {
@@ -476,7 +479,7 @@
     "Drag items into the toolbar, or out of it to remove them." : {
 
     },
-    "Drag onto a layer to apply it" : {
+    "Drag layers onto the breadcrumb to move them here." : {
 
     },
     "Drag to adjust %@" : {
@@ -492,6 +495,9 @@
 
     },
     "Draw (Stroke)" : {
+
+    },
+    "Drawing" : {
 
     },
     "Drop Images Here" : {
@@ -559,9 +565,6 @@
 
     },
     "Everything else is on the toolbar." : {
-
-    },
-    "Expand" : {
 
     },
     "Expanded" : {
@@ -722,6 +725,9 @@
 
     },
     "Hide Timeline (⌘4)" : {
+
+    },
+    "Hide resources" : {
 
     },
     "Hide the details column" : {
@@ -907,7 +913,7 @@
     "Nothing to Inspect" : {
 
     },
-    "Nothing uses it — drag it onto a layer" : {
+    "Nothing uses %@ — drag it onto a layer" : {
 
     },
     "Now" : {
@@ -923,6 +929,9 @@
 
     },
     "Opacity" : {
+
+    },
+    "Open" : {
 
     },
     "Open File…" : {
@@ -1156,6 +1165,9 @@
     "Show" : {
 
     },
+    "Show %@" : {
+
+    },
     "Show All" : {
 
     },
@@ -1207,6 +1219,9 @@
     "Show code alongside" : {
 
     },
+    "Show resources" : {
+
+    },
     "Show the shapes over the element, to move and resize them directly (Esc when done)" : {
 
     },
@@ -1216,7 +1231,10 @@
     "Show what applies to the selected layer, beside the layers" : {
 
     },
-    "Show what uses it" : {
+    "Show what's inside %@" : {
+
+    },
+    "Showing %@" : {
 
     },
     "Showing “%@” on the canvas" : {
@@ -1360,7 +1378,7 @@
     "Used By" : {
 
     },
-    "Used by %@" : {
+    "Used by %@ — drag onto a layer to apply" : {
 
     },
     "Using" : {

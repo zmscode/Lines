@@ -7,28 +7,33 @@ extension UTType {
 	static let linesLayer = UTType(exportedAs: "com.zms.lines.layer")
 }
 
-/// The drawing's element tree, topmost first like every layer list.
+/// The drawing's elements as stacked cards, topmost first, one level at a
+/// time: a group's card shows what's inside it, and opens to its own level,
+/// with a breadcrumb back out. Resources sit in a strip below.
 ///
-/// Drag a row to move it: a line above or below a row shows where it lands,
-/// and a highlighted group means "inside". Dragging a row into another app
-/// copies it as SVG, and SVG files dropped from the Finder are imported.
+/// Drag a card to move it: a line above or below shows where it lands, a
+/// highlighted group means "inside", and a breadcrumb means "into that
+/// level". Dragging a card into another app copies it as SVG, and SVG files
+/// dropped from the Finder are imported.
 struct LayersPanel: View {
 	var controller: CanvasController
 	/// The panel's width: wide enough, the details sit beside the layers.
 	@Binding var width: Double
 
-	static let narrowWidth: Double = 264
-	static let wideWidth: Double = 620
+	static let narrowWidth: Double = 300
+	static let wideWidth: Double = 680
 	/// From this width the details column shows.
-	static let detailsWidth: Double = 500
+	static let detailsWidth: Double = 520
 	private var isWide: Bool { width >= Self.detailsWidth }
 
-	@State private var expanded: Set<String> = []
+	/// The group whose contents are showing (its path); nil for the drawing.
+	@State private var level: String?
 	@State private var renaming: String?
 	@State private var dragging: String?
 	/// A resource being dragged onto a layer, to apply it.
 	@State private var draggingResource: ResourceInfo?
 	@State private var dropTarget: DropTarget?
+	@State private var crumbTarget: String?
 	@State private var filesTargeted = false
 	@State private var filter = LayerFilter()
 
@@ -38,16 +43,21 @@ struct LayersPanel: View {
 		var zone: Zone
 	}
 
-	/// One visible row of the flattened tree.
+	/// One card.
 	struct Row: Identifiable {
 		var node: LayerNode
-		var depth: Int
-		/// Shown only because something inside it matches the filter.
-		var isContext = false
+		/// Where it is, when the filter lists cards from every level.
+		var location: String?
 		var id: String { node.id }
+		var isGroup: Bool { !node.children.isEmpty || node.item.tag == "g" }
+		var height: CGFloat {
+			(isGroup && !node.children.isEmpty) || location != nil
+				? LayersPanel.tallCardHeight : LayersPanel.cardHeight
+		}
 	}
 
-	static let rowHeight: CGFloat = 32
+	static let cardHeight: CGFloat = 60
+	static let tallCardHeight: CGFloat = 80
 
 	var body: some View {
 		if isWide {
@@ -75,62 +85,63 @@ struct LayersPanel: View {
 		let tree = LayerNode.build(Self.layerItems(controller.outline))
 		let index = LayerIndex(tree)
 		let animated = Self.animatedOrders(controller.outline)
-		let rows = filter.isActive ? filtered(tree, animated: animated) : flatten(tree)
+		let current = level.flatMap { index.nodes[$0] }
+		let rows =
+			filter.isActive
+			? matching(tree, index: index, animated: animated)
+			: (current?.children ?? tree).map { Row(node: $0) }
 		VStack(spacing: 0) {
 			if !controller.outline.isEmpty {
-				LayerFilterBar(
-					filter: $filter, resources: ResourceInfo.all(in: controller.outline),
-					matchCount: rows.count(where: { !$0.isContext }))
+				HStack(spacing: 0) {
+					LayerFilterBar(
+						filter: $filter, resources: ResourceInfo.all(in: controller.outline),
+						matchCount: rows.count)
+					detailsToggle
+				}
+				if !filter.isActive && current != nil {
+					breadcrumb(current: current, index: index)
+				}
 			}
 			ScrollViewReader { proxy in
 				ScrollView {
-					// One column: the layers, then Resources below them.
-					VStack(spacing: 0) {
-						LazyVStack(spacing: 1) {
-							ForEach(rows) { row in
-								LayerRowView(
-									row: row, controller: controller,
-									isExpanded: filter.isActive || expanded.contains(row.id),
-									toggleExpanded: { toggle(row.id) }, renaming: $renaming,
-									dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
-									isAnimated: animated.contains(row.node.item.order),
-									showResourceUsers: { filter.resourceID = $0 }
-								)
-								.id(row.id)
-								.onDrag {
-									dragging = row.id
-									draggingResource = nil
-									return provider(for: row)
-								}
-								.onDrop(
-									of: [.linesLayer],
-									delegate: RowDropDelegate(
-										row: row, index: index, dragging: $dragging,
-										draggingResource: $draggingResource,
-										target: $dropTarget,
-										perform: perform,
-										apply: { resource in
-											guard let attribute = resource.kind.attribute else {
-												return
-											}
-											controller.setReference(
-												order: row.node.item.order, attribute: attribute,
-												targetOrder: resource.order)
-										})
-								)
+					LazyVStack(spacing: 6) {
+						ForEach(rows) { row in
+							LayerCard(
+								row: row, controller: controller, renaming: $renaming,
+								dropZone: dropTarget?.path == row.id ? dropTarget?.zone : nil,
+								isAnimated: animated.contains(row.node.item.order),
+								open: { open(row.node.id) },
+								showResourceUsers: { filter.resourceID = $0 }
+							)
+							.id(row.id)
+							.onDrag {
+								dragging = row.id
+								draggingResource = nil
+								return provider(for: row)
 							}
-						}
-						.padding(.horizontal, 6)
-						.padding(.vertical, 4)
-
-						if !filter.isActive {
-							ResourcesSection(
-								controller: controller, draggingResource: $draggingResource)
+							.onDrop(
+								of: [.linesLayer],
+								delegate: RowDropDelegate(
+									row: row, index: index, dragging: $dragging,
+									draggingResource: $draggingResource,
+									target: $dropTarget,
+									perform: perform,
+									apply: { resource in
+										guard let attribute = resource.kind.attribute else {
+											return
+										}
+										controller.setReference(
+											order: row.node.item.order, attribute: attribute,
+											targetOrder: resource.order)
+									})
+							)
 						}
 					}
+					.padding(.horizontal, 8)
+					.padding(.vertical, 6)
 				}
 				.onChange(of: controller.selection?.order) { _, order in
-					if let path = revealSelection(order) {
+					if let path = reveal(order, index: index) {
 						withAnimation { proxy.scrollTo(path, anchor: .center) }
 					}
 				}
@@ -146,6 +157,10 @@ struct LayersPanel: View {
 					} actions: {
 						Button("Clear Filter") { filter.clear() }
 					}
+				} else if rows.isEmpty {
+					ContentUnavailableView(
+						"Empty Group", systemImage: "folder",
+						description: Text("Drag layers onto the breadcrumb to move them here."))
 				}
 			}
 			.overlay {
@@ -162,7 +177,12 @@ struct LayersPanel: View {
 				filesTargeted = $0
 			}
 
-			bottomBar
+			if !controller.outline.isEmpty {
+				ResourceStrip(controller: controller, draggingResource: $draggingResource)
+			}
+			if !isWide {
+				bottomBar
+			}
 		}
 		.onHover { inside in if !inside { controller.hover(order: nil) } }
 		.onDeleteCommand {
@@ -170,10 +190,118 @@ struct LayersPanel: View {
 		}
 	}
 
+	private var detailsToggle: some View {
+		Button(isWide ? "Hide Details" : "Show Details", systemImage: "sidebar.right") {
+			withAnimation(.snappy(duration: 0.25)) {
+				width = isWide ? Self.narrowWidth : Self.wideWidth
+			}
+		}
+		.buttonStyle(.icon(size: 26, selected: isWide))
+		.padding(.trailing, 8)
+		.padding(.top, 4)
+		.help(
+			isWide
+				? "Hide the details column"
+				: "Show what applies to the selected layer, beside the layers")
+	}
+
+	// MARK: Levels
+
+	/// "Drawing › Leaves › Stem": click to go back out, or drop a card on one
+	/// to move it into that level (on top).
+	private func breadcrumb(current: LayerNode?, index: LayerIndex) -> some View {
+		let components = current?.id.split(separator: ".") ?? []
+		let parts: [LayerNode] = components.indices.compactMap {
+			index.nodes[components.prefix($0 + 1).joined(separator: ".")]
+		}
+		return ScrollView(.horizontal) {
+			HStack(spacing: 2) {
+				Button("Back", systemImage: "chevron.backward") {
+					withAnimation(.snappy(duration: 0.2)) {
+						level = parts.dropLast().last?.id
+					}
+				}
+				.buttonStyle(.icon(size: 22))
+				.help("Back out of \(current?.item.displayName ?? "this group")")
+				crumb(title: String(localized: "Drawing"), path: nil, order: 0, index: index)
+				ForEach(parts, id: \.id) { node in
+					Image(systemName: "chevron.forward")
+						.font(.caption2.weight(.semibold))
+						.foregroundStyle(.tertiary)
+					crumb(
+						title: node.item.displayName, path: node.id, order: node.item.order,
+						index: index)
+				}
+			}
+			.padding(.horizontal, 8)
+		}
+		.scrollIndicators(.never)
+		.frame(height: 30)
+	}
+
+	private func crumb(title: String, path: String?, order: Int, index: LayerIndex) -> some View {
+		let key = path ?? ""
+		return Button(title) {
+			withAnimation(.snappy(duration: 0.2)) { level = path }
+		}
+		.buttonStyle(.plain)
+		.font(.callout.weight(path == level ? .semibold : .regular))
+		.foregroundStyle(path == level ? .primary : .secondary)
+		.lineLimit(1)
+		.padding(.horizontal, 6)
+		.padding(.vertical, 3)
+		.background(
+			crumbTarget == key ? AnyShapeStyle(.tint.opacity(0.25)) : AnyShapeStyle(.clear),
+			in: .capsule
+		)
+		.help(path == level ? "Showing \(title)" : "Show \(title)")
+		.onDrop(
+			of: [.linesLayer],
+			isTargeted: Binding(
+				get: { crumbTarget == key },
+				set: { crumbTarget = $0 ? key : (crumbTarget == key ? nil : crumbTarget) }
+			)
+		) { _ in
+			defer { dragging = nil }
+			guard let dragging, let source = index.nodes[dragging]?.item.order,
+				dragging != path, !(path ?? "").hasPrefix(dragging + ".")
+			else { return false }
+			// On top: after the level's last child.
+			let siblings = path.flatMap { index.nodes[$0]?.children } ?? []
+			let top =
+				path == nil
+				? controller.outline.last(where: { $0.parent == 0 })?.order
+				: siblings.first?.item.order
+			controller.move(orders: [source], intoParent: order, after: top)
+			return true
+		}
+	}
+
+	private func open(_ path: String) {
+		withAnimation(.snappy(duration: 0.2)) {
+			filter.clear()
+			level = path
+		}
+	}
+
+	/// Shows the level holding the selected element; returns its card.
+	private func reveal(_ order: Int?, index: LayerIndex) -> String? {
+		guard !filter.isActive, let order,
+			let item = controller.outline.first(where: { $0.order == order }),
+			index.nodes[item.path] != nil
+		else { return nil }
+		let parent = item.path.split(separator: ".").dropLast().joined(separator: ".")
+		let target = parent.isEmpty ? nil : parent
+		if target != level {
+			withAnimation(.snappy(duration: 0.2)) { level = target }
+		}
+		return item.path
+	}
+
 	// MARK: Tree
 
 	/// The drawing's elements without <defs>, resources (which have their own
-	/// section) and what sits inside them.
+	/// strip) and what sits inside them.
 	static func layerItems(_ outline: [OutlineItem]) -> [OutlineItem] {
 		var hidden = Set<Int>()
 		for item in outline {
@@ -186,41 +314,24 @@ struct LayersPanel: View {
 		return outline.filter { !hidden.contains($0.order) }
 	}
 
-	private func flatten(_ nodes: [LayerNode], depth: Int = 0) -> [Row] {
-		nodes.flatMap { node -> [Row] in
-			let row = Row(node: node, depth: depth)
-			guard expanded.contains(node.id) else { return [row] }
-			return [row] + flatten(node.children, depth: depth + 1)
+	/// Every card the filter matches, from every level, with where each is.
+	private func matching(_ nodes: [LayerNode], index: LayerIndex, animated: Set<Int>) -> [Row] {
+		var rows: [Row] = []
+		func walk(_ nodes: [LayerNode], trail: [String]) {
+			for node in nodes {
+				if filter.matches(node.item, animated: animated) {
+					rows.append(
+						Row(
+							node: node,
+							location: trail.isEmpty
+								? String(localized: "Drawing")
+								: trail.joined(separator: " › ")))
+				}
+				walk(node.children, trail: trail + [node.item.displayName])
+			}
 		}
-	}
-
-	/// The rows that match the filter, inside the groups that hold them
-	/// (shown dimmed, and opened, for context).
-	private func filtered(_ nodes: [LayerNode], depth: Int = 0, animated: Set<Int>) -> [Row] {
-		nodes.flatMap { node -> [Row] in
-			let inner = filtered(node.children, depth: depth + 1, animated: animated)
-			let matches = filter.matches(node.item, animated: animated)
-			guard matches || !inner.isEmpty else { return [] }
-			return [Row(node: node, depth: depth, isContext: !matches)] + inner
-		}
-	}
-
-	private func toggle(_ path: String) {
-		withAnimation(.snappy(duration: 0.2)) {
-			if expanded.contains(path) { expanded.remove(path) } else { expanded.insert(path) }
-		}
-	}
-
-	/// Expands the groups containing the selected element; returns its row.
-	private func revealSelection(_ order: Int?) -> String? {
-		guard let order, let item = controller.outline.first(where: { $0.order == order }) else {
-			return nil
-		}
-		let parts = item.path.split(separator: ".")
-		for length in stride(from: 1, to: parts.count, by: 1) {
-			expanded.insert(parts.prefix(length).joined(separator: "."))
-		}
-		return item.path
+		walk(nodes, trail: [])
+		return rows
 	}
 
 	// MARK: Drag and drop
@@ -263,7 +374,6 @@ struct LayersPanel: View {
 		case .above: controller.move(orders: [source], relativeTo: destination, position: .after)
 		case .below: controller.move(orders: [source], relativeTo: destination, position: .before)
 		case .inside:
-			expanded.insert(target.path)
 			controller.move(orders: [source], relativeTo: destination, position: .inside)
 		}
 	}
@@ -278,30 +388,21 @@ struct LayersPanel: View {
 
 	// MARK: Bottom bar
 
+	/// Group, Duplicate and Delete, in the narrow panel; the wide one leaves
+	/// them to the context menu.
 	private var bottomBar: some View {
 		HStack(spacing: 2) {
 			Button("Group", systemImage: "square.on.square.dashed") { controller.groupSelection() }
-				.disabled(!controller.isEditing || !controller.hasElementSelection)
 				.help("Group the selected element (⌥⌘G)")
 			Button("Duplicate", systemImage: "plus.square.on.square") {
 				controller.duplicateSelection()
 			}
-			.disabled(!controller.isEditing || !controller.hasElementSelection)
 			.help("Duplicate (⌘D)")
 			Spacer()
 			Button("Delete", systemImage: "trash") { controller.deleteSelection() }
-				.disabled(!controller.isEditing || !controller.hasElementSelection)
 				.help("Delete the selected element")
-			Button(isWide ? "Hide Details" : "Show Details", systemImage: "sidebar.right") {
-				withAnimation(.snappy(duration: 0.25)) {
-					width = isWide ? Self.narrowWidth : Self.wideWidth
-				}
-			}
-			.help(
-				isWide
-					? "Hide the details column"
-					: "Show what applies to the selected layer, beside the layers")
 		}
+		.disabled(!controller.isEditing || !controller.hasElementSelection)
 		.buttonStyle(.icon(size: 28))
 		.padding(.horizontal, 8)
 		.padding(.vertical, 8)
@@ -379,7 +480,7 @@ private struct RowDropDelegate: DropDelegate {
 			if target != next { target = next }
 			return
 		}
-		let y = info.location.y / LayersPanel.rowHeight
+		let y = info.location.y / row.height
 		let zone: LayersPanel.DropTarget.Zone =
 			isGroup ? (y < 0.3 ? .above : y > 0.7 ? .below : .inside) : (y < 0.5 ? .above : .below)
 		let next = LayersPanel.DropTarget(path: row.id, zone: zone)
@@ -387,16 +488,16 @@ private struct RowDropDelegate: DropDelegate {
 	}
 }
 
-// MARK: - Row
+// MARK: - Card
 
-private struct LayerRowView: View {
+private struct LayerCard: View {
 	var row: LayersPanel.Row
 	var controller: CanvasController
-	var isExpanded: Bool
-	var toggleExpanded: () -> Void
 	@Binding var renaming: String?
 	var dropZone: LayersPanel.DropTarget.Zone?
 	var isAnimated = false
+	/// Shows the group's own level.
+	var open: () -> Void
 	/// Filters the panel to what uses a resource, by its id.
 	var showResourceUsers: (String) -> Void = { _ in }
 
@@ -405,37 +506,48 @@ private struct LayerRowView: View {
 	@FocusState private var nameFocused: Bool
 
 	private var item: OutlineItem { row.node.item }
-	private var isGroup: Bool { !row.node.children.isEmpty || item.tag == "g" }
+	private var isGroup: Bool { row.isGroup }
 	private var isSelected: Bool {
 		controller.hasElementSelection && controller.selection?.order == item.order
 	}
 	private var isRenaming: Bool { renaming == item.id }
 
+	private var kind: String {
+		let name = InspectorView.elementName(for: item.tag)
+		let count = row.node.children.count
+		if isGroup { return count == 1 ? "\(name) · 1 item" : "\(name) · \(count) items" }
+		if let box = item.box {
+			return
+				"\(name) · \(Double(box.width).formatted(.number.precision(.fractionLength(0)))) × \(Double(box.height).formatted(.number.precision(.fractionLength(0))))"
+		}
+		return name
+	}
+
 	var body: some View {
-		HStack(spacing: 4) {
-			Color.clear.frame(width: CGFloat(row.depth) * 14)
+		HStack(spacing: 10) {
+			LayerThumbnail(item: item, controller: controller, size: 44)
 
-			Button(action: toggleExpanded) {
-				Image(systemName: "chevron.right")
-					.font(.caption2.weight(.bold))
-					.rotationEffect(.degrees(isExpanded ? 90 : 0))
-					.foregroundStyle(.secondary)
-					.frame(width: 14, height: 20)
-					.contentShape(.rect)
+			VStack(alignment: .leading, spacing: 3) {
+				name
+				HStack(spacing: 6) {
+					Text(kind)
+						.font(.caption)
+						.foregroundStyle(.secondary)
+						.lineLimit(1)
+					LayerBadges(item: item, isAnimated: isAnimated, controller: controller)
+				}
+				if let location = row.location {
+					Label(location, systemImage: "folder")
+						.font(.caption2)
+						.foregroundStyle(.tertiary)
+						.lineLimit(1)
+						.truncationMode(.head)
+				} else if !row.node.children.isEmpty {
+					childStrip
+				}
 			}
-			.buttonStyle(.plain)
-			.opacity(row.node.children.isEmpty ? 0 : 1)
-			.disabled(row.node.children.isEmpty)
-			.help(isExpanded ? "Collapse" : "Expand")
-			.accessibilityLabel(isExpanded ? "Collapse" : "Expand")
-
-			LayerThumbnail(item: item, controller: controller)
-
-			name
 
 			Spacer(minLength: 4)
-
-			LayerBadges(item: item, isAnimated: isAnimated, controller: controller)
 
 			Button(
 				item.isHidden ? "Show" : "Hide", systemImage: item.isHidden ? "eye.slash" : "eye"
@@ -446,27 +558,37 @@ private struct LayerRowView: View {
 			.opacity((isHovered && controller.isEditing) || item.isHidden ? 1 : 0)
 			.disabled(!controller.isEditing)
 			.help(item.isHidden ? "Show Element" : "Hide Element")
+
+			if !row.node.children.isEmpty {
+				Button("Open", systemImage: "chevron.forward", action: open)
+					.buttonStyle(.icon(size: 22))
+					.help("Show what's inside \(item.displayName)")
+			}
 		}
-		.padding(.horizontal, 6)
-		.frame(height: LayersPanel.rowHeight)
+		.padding(.horizontal, 8)
+		.frame(height: row.height)
 		.background {
-			RoundedRectangle(cornerRadius: 7, style: .continuous)
-				.fill(rowFill)
+			RoundedRectangle(cornerRadius: 10, style: .continuous)
+				.fill(cardFill)
 		}
 		.overlay {
-			if dropZone == .inside {
-				RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(
-					.tint, lineWidth: 2)
-			}
+			RoundedRectangle(cornerRadius: 10, style: .continuous)
+				.strokeBorder(
+					dropZone == .inside
+						? AnyShapeStyle(.tint)
+						: isSelected
+							? AnyShapeStyle(.tint.opacity(0.7))
+							: AnyShapeStyle(.separator.opacity(0.5)),
+					lineWidth: dropZone == .inside ? 2 : 1)
 		}
 		.overlay(alignment: dropZone == .below ? .bottom : .top) {
 			if dropZone == .above || dropZone == .below {
 				Capsule().fill(.tint).frame(height: 3)
-					.padding(.leading, CGFloat(row.depth) * 14 + 24)
-					.offset(y: dropZone == .above ? -2 : 2)
+					.padding(.horizontal, 6)
+					.offset(y: dropZone == .above ? -4 : 4)
 			}
 		}
-		.opacity(row.isContext ? 0.45 : item.isHidden ? 0.6 : 1)
+		.opacity(item.isHidden ? 0.6 : 1)
 		.contentShape(.rect)
 		.onTapGesture { controller.select(order: item.order) }
 		.onHover { hovering in
@@ -475,7 +597,7 @@ private struct LayerRowView: View {
 		}
 		.contextMenu { menu.disabled(!controller.isEditing) }
 		.accessibilityElement(children: .combine)
-		.accessibilityLabel("\(item.displayName), \(InspectorView.elementName(for: item.tag))")
+		.accessibilityLabel("\(item.displayName), \(kind)")
 		.accessibilityValue(item.isHidden ? "Hidden" : "")
 		.accessibilityAddTraits(isSelected ? .isSelected : [])
 		.accessibilityAction { controller.select(order: item.order) }
@@ -483,6 +605,27 @@ private struct LayerRowView: View {
 			controller.toggleHidden(order: item.order)
 		}
 		.accessibilityAction(named: "Rename") { renaming = item.id }
+		.accessibilityAction(named: "Open") { if !row.node.children.isEmpty { open() } }
+	}
+
+	/// The group's contents, small; click to open it.
+	private var childStrip: some View {
+		let shown = row.node.children.prefix(6)
+		return Button(action: open) {
+			HStack(spacing: 3) {
+				ForEach(Array(shown), id: \.id) { child in
+					LayerThumbnail(item: child.item, controller: controller, size: 18)
+				}
+				if row.node.children.count > shown.count {
+					Text("+\(row.node.children.count - shown.count)")
+						.font(.caption2.monospacedDigit())
+						.foregroundStyle(.secondary)
+				}
+			}
+			.contentShape(.rect)
+		}
+		.buttonStyle(.plain)
+		.help("Show what's inside \(item.displayName)")
 	}
 
 	@ViewBuilder
@@ -501,9 +644,9 @@ private struct LayerRowView: View {
 				}
 		} else {
 			Text(item.displayName)
+				.font(.callout.weight(.medium))
 				.lineLimit(1)
 				.truncationMode(.middle)
-				.foregroundStyle(.primary)
 				.simultaneousGesture(
 					TapGesture(count: 2).onEnded {
 						if controller.isEditing { renaming = item.id }
@@ -513,10 +656,10 @@ private struct LayerRowView: View {
 		}
 	}
 
-	private var rowFill: AnyShapeStyle {
-		if isSelected { return AnyShapeStyle(.tint.opacity(0.2)) }
+	private var cardFill: AnyShapeStyle {
+		if isSelected { return AnyShapeStyle(.tint.opacity(0.16)) }
 		if isHovered { return AnyShapeStyle(.quaternary) }
-		return AnyShapeStyle(.clear)
+		return AnyShapeStyle(.quaternary.opacity(0.45))
 	}
 
 	@ViewBuilder
@@ -585,12 +728,4 @@ private struct LayerRowView: View {
 		renaming = nil
 	}
 
-	/// Tints the icon with the element's fill when it's a plain colour.
-	private var swatch: AnyShapeStyle {
-		if isSelected { return AnyShapeStyle(.tint) }
-		if let fill = item.fill, fill != "none", let colour = CSSColor.parse(fill) {
-			return AnyShapeStyle(colour)
-		}
-		return AnyShapeStyle(.secondary)
-	}
 }

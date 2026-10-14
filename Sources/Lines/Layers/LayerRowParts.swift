@@ -1,39 +1,40 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The element drawn on its own, small, at the start of its layer row.
+/// The element drawn on its own, small, on its layer card.
 struct LayerThumbnail: View {
 	var item: OutlineItem
 	var controller: CanvasController
+	var size: CGFloat = 24
 
 	@State private var image: NSImage?
 
 	var body: some View {
 		ZStack {
-			RoundedRectangle(cornerRadius: 5, style: .continuous)
+			RoundedRectangle(cornerRadius: size > 30 ? 8 : 5, style: .continuous)
 				.fill(.quaternary.opacity(0.6))
 			if let image {
 				Image(nsImage: image)
 					.resizable()
 					.interpolation(.high)
 					.aspectRatio(contentMode: .fit)
-					.padding(2)
+					.padding(size > 30 ? 4 : 2)
 			} else {
 				Image(systemName: InspectorView.symbol(for: item.tag, isRoot: false))
-					.font(.system(size: 11))
+					.font(.system(size: size * 0.45))
 					.foregroundStyle(.secondary)
 			}
 		}
-		.frame(width: 24, height: 24)
+		.frame(width: size, height: size)
 		.overlay {
-			RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(
+			RoundedRectangle(cornerRadius: size > 30 ? 8 : 5, style: .continuous).strokeBorder(
 				.separator, lineWidth: 0.5)
 		}
 		.task(id: "\(item.order)-\(controller.thumbnailGeneration)") {
 			// A short wait, so scrolling past rows doesn't render them all.
 			try? await Task.sleep(for: .milliseconds(120))
 			guard !Task.isCancelled else { return }
-			image = await controller.thumbnail(order: item.order)
+			image = await controller.thumbnail(order: item.order, size: max(64, Double(size) * 2))
 		}
 		.accessibilityHidden(true)
 	}
@@ -147,65 +148,61 @@ private struct ReferenceChip: View {
 
 // MARK: - Resources
 
-/// The Resources section of the Layers panel: everything defined once and
-/// used by reference, with who uses it. Drag one onto a layer to apply it;
-/// rest on one to preview how it changes the drawing.
-struct ResourcesSection: View {
+/// The resources strip under the layer cards: everything defined once and
+/// used by reference, as tiles. Drag one onto a card to apply it; rest on one
+/// to preview how it changes the drawing; click to select it.
+struct ResourceStrip: View {
 	var controller: CanvasController
 	@Binding var draggingResource: ResourceInfo?
 
 	@AppStorage("layers.showsResources") private var isOpen = true
-	@State private var expanded: Set<String> = []
 
 	var body: some View {
 		let resources = ResourceInfo.all(in: controller.outline)
-		VStack(alignment: .leading, spacing: 1) {
+		VStack(alignment: .leading, spacing: 4) {
 			header(resources)
 			if isOpen {
 				if resources.isEmpty {
 					Text("Gradients, masks, filters and other reusable pieces appear here.")
 						.font(.caption)
 						.foregroundStyle(.secondary)
-						.padding(.horizontal, 10)
-						.padding(.vertical, 6)
-				}
-				ForEach(resources) { resource in
-					ResourceRow(
-						resource: resource, controller: controller,
-						isExpanded: expanded.contains(resource.id),
-						toggle: {
-							withAnimation(.snappy(duration: 0.2)) {
-								if expanded.contains(resource.id) {
-									expanded.remove(resource.id)
-								} else {
-									expanded.insert(resource.id)
-								}
+						.padding(.horizontal, 12)
+						.padding(.bottom, 8)
+				} else {
+					ScrollView(.horizontal) {
+						HStack(spacing: 6) {
+							ForEach(resources) { resource in
+								ResourceTile(resource: resource, controller: controller)
+									.onDrag {
+										draggingResource = resource
+										let provider = NSItemProvider()
+										provider.registerDataRepresentation(
+											forTypeIdentifier: UTType.linesLayer.identifier,
+											visibility: .ownProcess
+										) { completion in
+											completion(Data("resource:\(resource.id)".utf8), nil)
+											return nil
+										}
+										return provider
+									} preview: {
+										Label(
+											resource.name,
+											systemImage: InspectorView.symbol(
+												for: resource.item.tag, isRoot: false)
+										)
+										.padding(6)
+										.background(.regularMaterial, in: .capsule)
+									}
 							}
 						}
-					)
-					.onDrag {
-						draggingResource = resource
-						let provider = NSItemProvider()
-						provider.registerDataRepresentation(
-							forTypeIdentifier: UTType.linesLayer.identifier, visibility: .ownProcess
-						) { completion in
-							completion(Data("resource:\(resource.id)".utf8), nil)
-							return nil
-						}
-						return provider
-					} preview: {
-						Label(
-							resource.name,
-							systemImage: InspectorView.symbol(for: resource.item.tag, isRoot: false)
-						)
-						.padding(6)
-						.background(.regularMaterial, in: .capsule)
+						.padding(.horizontal, 8)
+						.padding(.bottom, 8)
 					}
+					.scrollIndicators(.never)
 				}
 			}
 		}
-		.padding(.horizontal, 6)
-		.padding(.bottom, 8)
+		.overlay(alignment: .top) { Divider().opacity(0.6) }
 	}
 
 	private func header(_ resources: [ResourceInfo]) -> some View {
@@ -225,45 +222,46 @@ struct ResourcesSection: View {
 				.contentShape(.rect)
 			}
 			.buttonStyle(.plain)
+			.help(isOpen ? "Hide resources" : "Show resources")
 			Spacer()
-			Menu {
-				ForEach(CanvasController.Definition.allCases) { kind in
-					Button(kind.title, systemImage: kind.symbol) {
-						if let s = controller.selection, !s.isRoot {
-							controller.addDefinition(kind, applyingTo: s.order)
-						} else {
-							controller.addDefinition(kind)
+			Group {
+				Menu {
+					ForEach(CanvasController.Definition.allCases) { kind in
+						Button(kind.title, systemImage: kind.symbol) {
+							if let s = controller.selection, !s.isRoot {
+								controller.addDefinition(kind, applyingTo: s.order)
+							} else {
+								controller.addDefinition(kind)
+							}
 						}
 					}
+				} label: {
+					Label("Add Resource", systemImage: "plus")
 				}
-			} label: {
-				Label("Add Resource", systemImage: "plus")
+				.menuIndicator(.hidden)
+				.buttonStyle(.icon(size: 22))
+				.fixedSize()
+				.help(
+					"Add a gradient, pattern, clip, mask or filter (applied to the selection, if any)"
+				)
+				Button("Remove Unused", systemImage: "trash.slash") {
+					controller.removeUnusedDefinitions()
+				}
+				.buttonStyle(.icon(size: 22))
+				.disabled(!resources.contains(where: \.isUnused))
+				.help("Remove resources nothing uses")
 			}
-			.menuIndicator(.hidden)
-			.buttonStyle(.icon(size: 22))
-			.fixedSize()
-			.help(
-				"Add a gradient, pattern, clip, mask or filter (applied to the selection, if any)")
-			Button("Remove Unused", systemImage: "trash.slash") {
-				controller.removeUnusedDefinitions()
-			}
-			.buttonStyle(.icon(size: 22))
-			.disabled(!resources.contains(where: \.isUnused))
-			.help("Remove resources nothing uses")
+			.disabled(!controller.isEditing)
 		}
-		.disabled(!controller.isEditing)
-		.padding(.horizontal, 6)
-		.padding(.top, 10)
-		.padding(.bottom, 4)
-		.overlay(alignment: .top) { Divider().opacity(0.6) }
+		.padding(.horizontal, 10)
+		.padding(.top, 6)
 	}
 }
 
-private struct ResourceRow: View {
+/// One resource: a swatch in its kind's colour, its name, and how many use it.
+private struct ResourceTile: View {
 	var resource: ResourceInfo
 	var controller: CanvasController
-	var isExpanded: Bool
-	var toggle: () -> Void
 
 	@State private var isHovered = false
 	@State private var showsPreview = false
@@ -272,107 +270,57 @@ private struct ResourceRow: View {
 	private var isSelected: Bool { controller.selection?.order == resource.order }
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 1) {
-			HStack(spacing: 6) {
-				Button(action: toggle) {
-					Image(systemName: "chevron.right")
-						.font(.caption2.weight(.bold))
-						.rotationEffect(.degrees(isExpanded ? 90 : 0))
-						.foregroundStyle(.secondary)
-						.frame(width: 14, height: 20)
-						.contentShape(.rect)
-				}
-				.buttonStyle(.plain)
-				.help(isExpanded ? "Collapse" : "Show what uses it")
-				preview
-				VStack(alignment: .leading, spacing: 0) {
-					Text(resource.name).lineLimit(1).truncationMode(.middle)
-					Text(InspectorView.elementName(for: resource.item.tag))
-						.font(.caption2)
-						.foregroundStyle(.secondary)
-				}
-				Spacer(minLength: 4)
-				Text(resource.isUnused ? "unused" : "\(resource.users.count)×")
-					.font(.caption2.monospacedDigit())
-					.foregroundStyle(
-						resource.isUnused ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary)
-					)
-					.padding(.horizontal, 5)
-					.padding(.vertical, 1)
-					.background(.quaternary.opacity(0.6), in: .capsule)
-					.help(
-						resource.isUnused
-							? "Nothing uses it — drag it onto a layer"
-							: "Used by \(ResourceInfo.list(resource.users.map(\.displayName)))")
-			}
-			.padding(.horizontal, 6)
-			.frame(height: LayersPanel.rowHeight)
-			.background(
-				isSelected
-					? AnyShapeStyle(.tint.opacity(0.2))
-					: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear),
-				in: .rect(cornerRadius: 7, style: .continuous)
-			)
-			.opacity(resource.isUnused ? 0.7 : 1)
-			.contentShape(.rect)
-			.onTapGesture { controller.select(order: resource.order) }
-			.onHover(perform: hover)
-			.popover(isPresented: $showsPreview, arrowEdge: .trailing) {
-				ImpactPreviewCard(
-					order: resource.order, title: resource.name,
-					symbol: InspectorView.symbol(for: resource.item.tag, isRoot: false),
-					summary: resource.summary, controller: controller)
-			}
-			.help("Drag onto a layer to apply it")
-			.accessibilityElement(children: .combine)
-			.accessibilityHint(resource.summary)
-
-			if isExpanded {
-				if resource.kind == .clip || resource.kind == .mask {
-					detailHeader("Shapes")
-					ForEach(resource.contents) { shape in
-						detailRow(
-							shape, symbol: InspectorView.symbol(for: shape.tag, isRoot: false))
-					}
-				}
-				detailHeader(resource.isUnused ? "Not used yet" : "Used by")
-				ForEach(resource.users) { user in
-					detailRow(user, symbol: InspectorView.symbol(for: user.tag, isRoot: false))
-				}
-			}
+		VStack(spacing: 4) {
+			swatch
+			Text(resource.name)
+				.font(.caption2)
+				.lineLimit(1)
+				.truncationMode(.middle)
+			Text(resource.isUnused ? "unused" : "\(resource.users.count)×")
+				.font(.caption2.monospacedDigit())
+				.foregroundStyle(
+					resource.isUnused ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
 		}
-	}
-
-	private func detailHeader(_ title: String) -> some View {
-		Text(title)
-			.font(.caption2.weight(.semibold))
-			.foregroundStyle(.tertiary)
-			.padding(.leading, 40)
-			.padding(.top, 2)
-	}
-
-	private func detailRow(_ item: OutlineItem, symbol: String) -> some View {
-		Button {
-			controller.select(order: item.order)
-		} label: {
-			HStack(spacing: 6) {
-				Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 16)
-				Text(item.displayName).lineLimit(1)
-				Spacer()
-			}
-			.font(.callout)
-			.padding(.leading, 40)
-			.frame(height: 22)
-			.contentShape(.rect)
+		.frame(width: 64)
+		.padding(.vertical, 6)
+		.background(
+			isSelected
+				? AnyShapeStyle(.tint.opacity(0.16))
+				: isHovered ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quaternary.opacity(0.45)),
+			in: .rect(cornerRadius: 10, style: .continuous)
+		)
+		.overlay {
+			RoundedRectangle(cornerRadius: 10, style: .continuous)
+				.strokeBorder(
+					isSelected
+						? AnyShapeStyle(.tint.opacity(0.7))
+						: AnyShapeStyle(.separator.opacity(0.5)),
+					lineWidth: 1)
 		}
-		.buttonStyle(.plain)
-		.help("Select \(item.displayName)")
+		.opacity(resource.isUnused ? 0.7 : 1)
+		.contentShape(.rect)
+		.onTapGesture { controller.select(order: resource.order) }
+		.onHover(perform: hover)
+		.popover(isPresented: $showsPreview, arrowEdge: .top) {
+			ImpactPreviewCard(
+				order: resource.order, title: resource.name,
+				symbol: InspectorView.symbol(for: resource.item.tag, isRoot: false),
+				summary: resource.summary, controller: controller)
+		}
+		.help(
+			resource.isUnused
+				? "Nothing uses \(resource.name) — drag it onto a layer"
+				: "Used by \(ResourceInfo.list(resource.users.map(\.displayName))) — drag onto a layer to apply"
+		)
+		.accessibilityElement(children: .combine)
+		.accessibilityHint(resource.summary)
+		.accessibilityAddTraits(isSelected ? .isSelected : [])
 	}
 
-	/// A swatch of the resource: its gradient, or its kind's icon.
+	/// The gradient itself, or the kind's icon in its colour.
 	@ViewBuilder
-	private var preview: some View {
-		let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+	private var swatch: some View {
+		let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
 		if resource.kind == .gradient, !resource.parts.isEmpty {
 			let colours = resource.parts.map {
 				CSSColor.parse(ResourceInfo.stopColour($0)) ?? .black
@@ -382,20 +330,20 @@ private struct ResourceRow: View {
 					resource.item.tag == "radialGradient"
 						? AnyShapeStyle(
 							RadialGradient(
-								colors: colours, center: .center, startRadius: 0, endRadius: 14))
+								colors: colours, center: .center, startRadius: 0, endRadius: 18))
 						: AnyShapeStyle(
 							LinearGradient(
 								colors: colours, startPoint: .leading, endPoint: .trailing))
 				)
-				.frame(width: 24, height: 24)
+				.frame(width: 36, height: 36)
 				.overlay { shape.strokeBorder(.separator, lineWidth: 0.5) }
 		} else {
 			shape
 				.fill(resource.kind.tint.opacity(0.18))
-				.frame(width: 24, height: 24)
+				.frame(width: 36, height: 36)
 				.overlay {
 					Image(systemName: InspectorView.symbol(for: resource.item.tag, isRoot: false))
-						.font(.system(size: 11, weight: .semibold))
+						.font(.system(size: 15, weight: .semibold))
 						.foregroundStyle(resource.kind.tint)
 				}
 		}
