@@ -12,7 +12,8 @@ struct ContentView: View {
 	@State private var showsPreviewBadge = true
 	@SceneStorage("showInspector") private var savedShowsInspector = false
 	@SceneStorage("codeWidth") private var codeWidth: Double = 380
-	@SceneStorage("layersWidth") private var layersWidth: Double = LayersPanel.narrowWidth
+	/// The window's width, for the Layers panel's half.
+	@State private var windowWidth: CGFloat = 1000
 	@Environment(\.undoManager) private var undoManager
 	@Environment(\.dismissWindow) private var dismissWindow
 	@Environment(\.openDocument) private var openDocument
@@ -112,7 +113,7 @@ struct ContentView: View {
 				updateInsets()
 			}
 			.onChange(of: codeWidth) { _, _ in updateInsets() }
-			.onChange(of: layersWidth) { _, _ in updateInsets() }
+			.onChange(of: windowWidth) { _, _ in if controller.showsLayers { updateInsets() } }
 			.onChange(of: controller.showsTimeline, initial: true) { _, shows in
 				controller.setTimelineActive(shows)
 				// Opening the timeline stops at the start; Play starts it.
@@ -146,7 +147,13 @@ struct ContentView: View {
 	/// Room taken by the tools palette on the canvas's leading edge.
 	private var paletteSpace: CGFloat {
 		// Kept while locked too: the lock lives at the foot of this column.
-		ToolPalette.width + Self.panelMargin
+		// The Layers panel takes the tools' place.
+		controller.showsLayers ? 0 : ToolPalette.width + Self.panelMargin
+	}
+
+	/// The Layers panel and the canvas share the room beside the code half and half.
+	private var layersWidth: CGFloat {
+		max(280, (windowWidth - codeSpace) / 2 - Self.panelMargin * 2)
 	}
 
 	/// The document's extents and resize handles show while the inspector is
@@ -175,7 +182,8 @@ struct ContentView: View {
 			bottom: controller.showsTimeline
 				? TimelinePanel.height + m * 2 : 0)
 		// The minimap starts beside the lock when the palette isn't above it.
-		controller.setMinimapShift(paletteSpace > 0 ? 0 : ToolPalette.width + m)
+		controller.setMinimapShift(
+			paletteSpace > 0 || controller.showsLayers ? 0 : ToolPalette.width + m)
 	}
 
 	// MARK: Editor
@@ -185,6 +193,7 @@ struct ContentView: View {
 	private var editor: some View {
 		viewer
 			.frame(maxWidth: .infinity, maxHeight: .infinity)
+			.onGeometryChange(for: CGFloat.self, of: \.size.width) { windowWidth = $0 }
 			.overlay(alignment: .leading) {
 				if controller.showsCode {
 					CodePanel(
@@ -222,7 +231,7 @@ struct ContentView: View {
 					trailingPanelWidth > 0 ? trailingPanelWidth + Self.panelMargin : 0)
 		}
 		.overlay(alignment: .topLeading) {
-			if controller.isEditing {
+			if controller.isEditing && !controller.showsLayers {
 				ToolPalette(controller: controller)
 					.padding(Self.panelMargin)
 					.padding(.leading, codeSpace)
@@ -232,17 +241,9 @@ struct ContentView: View {
 		.overlay(alignment: .topLeading) {
 			if controller.showsLayers {
 				FloatingPanel(title: "Layers", close: { controller.showsLayers = false }) {
-					LayersPanel(controller: controller, width: $layersWidth)
+					LayersPanel(controller: controller, width: .constant(Double(layersWidth)))
 				}
 				.frame(width: layersWidth)
-				.overlay(alignment: .trailing) {
-					SplitDivider(
-						width: $layersWidth, range: 240...900, label: "Layers panel width",
-						showsLine: false
-					)
-					.padding(.vertical, 24)
-					.offset(x: 4)
-				}
 				.padding(Self.panelMargin)
 				.padding(.leading, paletteSpace + codeSpace)
 				.transition(.move(edge: .leading).combined(with: .opacity))
@@ -295,7 +296,7 @@ struct ContentView: View {
 		.overlay(alignment: .bottomLeading) {
 			// The lock, at the canvas's lower left (the minimap sits beside it);
 			// the timeline takes the bottom of the window when it's open.
-			if !controller.showsTimeline {
+			if !controller.showsTimeline && !controller.showsLayers {
 				FloatingStrip {
 					Button(
 						controller.isEditing ? "Lock" : "Unlock",
