@@ -10,11 +10,16 @@ struct InspectorView: View {
 		if let selection = controller.selection {
 			ScrollView {
 				VStack(alignment: .leading, spacing: 16) {
-					if selection.isRoot {
-						DocumentInspector(selection: selection, controller: controller)
-					} else {
-						ElementInspector(selection: selection, controller: controller)
+					// Preview mode shows the values without letting them change;
+					// expanding and collapsing still work.
+					Group {
+						if selection.isRoot {
+							DocumentInspector(selection: selection, controller: controller)
+						} else {
+							ElementInspector(selection: selection, controller: controller)
+						}
 					}
+					.disabled(!controller.isEditing)
 					AllAttributes(selection: selection, controller: controller)
 				}
 				.padding(.horizontal, 14)
@@ -570,6 +575,7 @@ private struct AllAttributes: View {
 
 			if expanded {
 				attributeList
+					.disabled(!controller.isEditing)
 					.transition(.opacity.combined(with: .move(edge: .top)))
 			}
 		}

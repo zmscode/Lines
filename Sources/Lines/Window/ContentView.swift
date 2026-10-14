@@ -232,7 +232,6 @@ struct ContentView: View {
 			if controller.showsLayers {
 				FloatingPanel(title: "Layers", close: { controller.showsLayers = false }) {
 					LayersPanel(controller: controller)
-						.disabled(!controller.isEditing)
 				}
 				.frame(width: Self.layersWidth)
 				.padding(Self.panelMargin)
@@ -244,7 +243,6 @@ struct ContentView: View {
 			if controller.showsInspector {
 				FloatingPanel(title: nil, close: { controller.showsInspector = false }) {
 					InspectorView(controller: controller)
-						.disabled(!controller.isEditing)
 				}
 				.frame(width: Self.inspectorWidth)
 				.padding(Self.panelMargin)

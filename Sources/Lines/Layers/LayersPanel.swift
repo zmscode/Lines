@@ -96,6 +96,7 @@ struct LayersPanel: View {
 			}
 
 			bottomBar
+				.disabled(!controller.isEditing)
 		}
 		.onHover { inside in if !inside { controller.hover(order: nil) } }
 		.onDeleteCommand {
@@ -321,7 +322,8 @@ private struct LayerRowView: View {
 				controller.toggleHidden(order: item.order)
 			}
 			.buttonStyle(.icon(size: 22))
-			.opacity(isHovered || item.isHidden ? 1 : 0)
+			.opacity((isHovered && controller.isEditing) || item.isHidden ? 1 : 0)
+			.disabled(!controller.isEditing)
 			.help(item.isHidden ? "Show Element" : "Hide Element")
 		}
 		.padding(.horizontal, 6)
@@ -350,7 +352,7 @@ private struct LayerRowView: View {
 			isHovered = hovering
 			controller.hover(order: hovering ? item.order : nil)
 		}
-		.contextMenu { menu }
+		.contextMenu { menu.disabled(!controller.isEditing) }
 		.accessibilityElement(children: .combine)
 		.accessibilityLabel("\(item.displayName), \(InspectorView.elementName(for: item.tag))")
 		.accessibilityValue(item.isHidden ? "Hidden" : "")
@@ -381,7 +383,11 @@ private struct LayerRowView: View {
 				.lineLimit(1)
 				.truncationMode(.middle)
 				.foregroundStyle(.primary)
-				.simultaneousGesture(TapGesture(count: 2).onEnded { renaming = item.id })
+				.simultaneousGesture(
+					TapGesture(count: 2).onEnded {
+						if controller.isEditing { renaming = item.id }
+					}
+				)
 				.help(item.displayName)
 		}
 	}
