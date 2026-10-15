@@ -1,6 +1,6 @@
 cask "lines" do
   version "1.0.0"
-  sha256 "d1f224dc53bd89e64751a46cfc9e0b2e8d561a7c8b0e40597ba2267f8ecb8627"
+  sha256 "b0742da3d2d8cc03912917b2b3cc821c117d61881a6fbe728ed3bf5397a87595"
 
   url "https://github.com/zmscode/Lines/releases/download/v#{version}/Lines-#{version}.zip"
   name "Lines"

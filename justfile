@@ -107,6 +107,9 @@ _bundle config: _icon
       -c "Set :CFBundleShortVersionString {{ version }}" \
       -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)" \
       "{{ app }}/Contents/Info.plist"
+    # Extended attributes would travel in the zip as ._ files inside the
+    # bundle, which Homebrew's unzip leaves there, breaking the signature.
+    xattr -cr "{{ app }}"
     # Signed with a Developer ID (and the hardened runtime notarization needs)
     # when LINES_SIGN_IDENTITY names one; otherwise ad hoc, to run on this Mac.
     if [ -n "${LINES_SIGN_IDENTITY:-}" ]; then
@@ -167,17 +170,22 @@ release:
     codesign --verify --strict --deep "{{ app }}"
     zip="build/Lines-{{ version }}.zip"
     rm -f "$zip"
-    ditto -c -k --keepParent "{{ app }}" "$zip"
+    ditto -c -k --norsrc --noextattr --noacl --keepParent "{{ app }}" "$zip"
     if [ -n "${LINES_NOTARY_PROFILE:-}" ]; then
       xcrun notarytool submit "$zip" --keychain-profile "$LINES_NOTARY_PROFILE" --wait
       xcrun stapler staple "{{ app }}"
       spctl --assess --type execute --verbose "{{ app }}"
       # Zip again, so the download carries the stapled ticket.
       rm -f "$zip"
-      ditto -c -k --keepParent "{{ app }}" "$zip"
+      ditto -c -k --norsrc --noextattr --noacl --keepParent "{{ app }}" "$zip"
     elif [ -n "${LINES_SIGN_IDENTITY:-}" ]; then
       echo "Not notarized: set LINES_NOTARY_PROFILE (see RELEASING.md)." >&2
     fi
+    # Unpack as Homebrew does (unzip, not ditto) and check the signature survives.
+    check="$(mktemp -d)"
+    unzip -q "$zip" -d "$check"
+    codesign --verify --strict "$check/Lines.app"
+    rm -rf "$check"
     sha="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
     sed -i '' -E \
       -e "s/^  version \".*\"/  version \"{{ version }}\"/" \
