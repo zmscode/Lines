@@ -18,10 +18,11 @@ just publish          # GitHub release + tap update
 ## Install
 
 ```sh
+brew trust --tap zmscode/lines
 brew install --cask zmscode/lines/lines
 ```
 
-Requires macOS 27 on Apple silicon. Releases are signed and notarized; see [RELEASING.md](RELEASING.md) for how they're made.
+Requires macOS 27 on Apple silicon. Homebrew asks you to trust third-party taps once (the first line). Releases aren't notarized yet, so approve Lines once on first launch: System Settings › Privacy & Security › Open Anyway, or `xattr -dr com.apple.quarantine /Applications/Lines.app`. See [RELEASING.md](RELEASING.md) for how releases are made.
 
 ## Features
 

@@ -59,6 +59,9 @@ brew upgrade --cask lines
   rises.
 - **Apple silicon only.** macOS 27 runs only on Apple silicon, and the cask
   requires it (`depends_on macos: :golden_gate`).
+- **Until notarized.** 1.0.0 shipped ad hoc–signed, with a caveat in the cask
+  and the README about approving it once. Remove both with the first notarized
+  release.
 - **Testing the pipeline.** `LINES_ALLOW_UNSIGNED=1 just release` builds an
   ad hoc–signed zip. Gatekeeper rejects it on other Macs, so don't publish it.
 - **The official homebrew/cask repository.** Once Lines is notable enough, the

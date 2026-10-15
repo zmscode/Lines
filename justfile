@@ -199,7 +199,7 @@ publish:
     cp Casks/lines.rb "$tapdir/Casks/lines.rb"
     git -C "$tapdir" add Casks/lines.rb
     git -C "$tapdir" commit -m "lines {{ version }}"
-    git -C "$tapdir" push
+    git -C "$tapdir" push origin HEAD
     rm -rf "$tapdir"
     echo "Published. Install with: brew install --cask {{ replace(tap, "homebrew-", "") }}/lines"
 
